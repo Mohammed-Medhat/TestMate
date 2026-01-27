@@ -1,0 +1,906 @@
+,Requirement,Name of Doc,Req/Not Req
+1269,"Any operation requiring the user to supply a file name shall allow the user either to select the files from a list derived from files in the currently open application or to key in a file name, a relative path name, or a complete path name.",hats.pdf,Req
+1270,"For any operation where the user is prompted to select from a list, the user shall be able to cancel the operation.",hats.pdf,Req
+1271,"When collecting generated output files from HATS-SML, the HATS-GUI shall overwrite any file whose name is generated automatically.",hats.pdf,Req
+1272,"For example, given a transformation language program X.tlp, the file X.tlp.parsed is generated when the parser is executed.",hats.pdf,Req
+1273,"If X.tlp.parsed existed prior to executing the parser, it shall be overwritten without prompting the user.",hats.pdf,Req
+1274,"When saving or copying files, the HATS-GUI shall use the following sequence of actions: The HATS-GUI shall prompt the user for a file name for the file to be saved, The HATS-GUI shall examine the contents of the application directory. If a file with the given name already exists, the HATS-GUI shall prompt the user to overwrite the existing file, if the user agrees to overwrite the file, the HATS-GUI shall: attempt to write the new file using a temporary name, o delete the previously existing, then rename the new file. If the user does not agree to overwrite the existing file or if system errors occur while writing or renaming the new file or deleting the previous file, the new file shall not be written and the previous file shall be left unchanged. In the case of an error, the HATS-GUI shall notify the user of the error. For example, the user shall be able to save an SDT generated during transformation program execution. If the user specifies the name of an existing file, the existing file is only overwritten after the user confirms that it is permissible to do so.",hats.pdf,Req
+1275,Output pretty-printed text files and SDTs shall only be displayed when the user requests.,hats.pdf,Req
+1276,The main interface shall be menu driven. ,hats.pdf,Req
+1277,A summary of the menus available is given below in Table 5.,hats.pdf,Req
+1278,Items in the first row of Table 5 are top-level menu items. Items in following rows are second-level menu items.,hats.pdf,Req
+1279,The File menu shall contain menu items related to manipulating individual files and for closing the HATS-GUI application.,hats.pdf,Req
+1280,The Application menu shall contain items related to manipulating entire applications.,hats.pdf,Req
+1281,The Configure menu shall contain items related to modifying the configuration of the application.,hats.pdf,Req
+1282,The Run menu shall contain items related to executing the HATS-SML programs.,hats.pdf,Req
+1283,The View menu shall contain items related to viewing HATS-SML output.,hats.pdf,Req
+1284,The File/Select menu item shall provide an interface for selecting files within the currently open application.,hats.pdf,Req
+1285,The File/Edit menu item shall provide an interface for starting an editor as an external process. ,hats.pdf,Req
+1286,The editor shall be started according to information in the application configuration.,hats.pdf,Req
+1287,The File/Save-as menu item shall provide an interface for saving a previously selected file under a different name.,hats.pdf,Req
+1288,The File/Delete menu item shall provide an interface for deleting a selected file. ,hats.pdf,Req
+1289,The HATS-GUI shall prompt the user to confirm deletion prior to completing this action.,hats.pdf,Req
+1290,The File/Exit menu item shall provide an interface for exiting the HATS-GUI.,hats.pdf,Req
+1291,The Application/Select menu item shall provide an interface for selecting and opening an application.,hats.pdf,Req
+1292,The Application/Close menu item shall provide an interface for closing an application.,hats.pdf,Req
+1293,The Application/Save menu item shall provide an interface for saving application configuration information.,hats.pdf,Req
+1294,The Application/Save-as menu item shall provide an interface for saving an application and its associated files under a different name.,hats.pdf,Req
+1295,The Application/Delete menu item shall provide an interface for deleting an application and all the files in the application directory. ,hats.pdf,Req
+1296,The HATS-GUI shall prompt the user to confirm deletion prior to completing this action.,hats.pdf,Req
+1297,The Configure/Editors menu item shall provide an interface for the user to enter editor configuration information. ,hats.pdf,Req
+1298,This information shall be used when editors are started as processes.,hats.pdf,Req
+1299,The Configure/Node Display menu item shall provide an interface for configuring the display of nodes.,hats.pdf,Req
+1300,The HATS-GUI shall allow the user to specify the number of levels of nodes to expand during SDT viewing.,hats.pdf,Req
+1301,The HATS-GUI shall allow the user to select the colors for types of displayed nodes in a displayed graph. ,hats.pdf,Req
+1302,"At a minimum, the system shall provide eight colors (red, yellow, white, black, green, blue, orange, and violet) for displayed nodes.",hats.pdf,Req
+1303,The HATS-GUI shall allow the user to select the shapes for types of displayed nodes in a displayed graph. ,hats.pdf,Req
+1304,"At a minimum, the system shall provide two shapes, rectangles and ellipses, for displayed nodes.",hats.pdf,Req
+1305,The Configure/File Associations menu item shall provide an interface for associating files in an application. File associations are shown in Table 6.,hats.pdf,Req
+1306,The Configure/HATS-SML menu item shall provide an interface for the user to enter implementation-dependent information for starting HATS-SML processes.,hats.pdf,Req
+1307,The Run/Generate Parser menu item shall provide an interface for generating a parser program.,hats.pdf,Req
+1308,The Run/Parse Target menu item shall provide an interface for selecting and parsing target programs.,hats.pdf,Req
+1309,The Run/Parse Program menu item shall provide an interface for selecting and parsing transformation language programs.,hats.pdf,Req
+1310,The Run/Execute Transforms menu item shall provide an interface for selecting and executing transformation language programs.,hats.pdf,Req
+1311,The Run/Pretty-print menu item shall provide an interface for selecting SDTs and pretty-print style files and formatting the SDT according to the style.,hats.pdf,Req
+1312,"The View/SDT menu item shall provide an interface for viewing, navigating through, and searching SDTs output from the execution of transformation programs.",hats.pdf,Req
+1313,The View/Text menu item shall provide an interface for viewing and searching pretty-printed text. ,hats.pdf,Req
+1314,[SRSreq 36] The View/Standard Error menu item shall provide an interface for viewing error strings collected from HATS-SML.,hats.pdf,Req
+1315,The View/Standard Output menu item shall provide an interface for viewing debugging information collected from HATS-SML.,hats.pdf,Req
+1316,The View/Select Text menu item shall provide an interface for selecting pretty-printed text or text strings associated with SDT displays.,hats.pdf,Req
+1317,The View/Copy Text menu item shall provide an interface for copying selected text into an operating system buffer.,hats.pdf,Req
+1318,"The HATS-GUI shall interface with HATS-SML (version 2.0) in order to parse transformation language programs, execute transformation language programs, and create output SDTs, error messages, pretty-printed text, and parsed transformation language programs. ",hats.pdf,Req
+1319,The interface shall consist of starting HATS-SML programs and passing command line arguments and capturing data written to the standard output and standard error streams of the HATS-SML processes.,hats.pdf,Req
+1320,The HATS-SML programs and their command line arguments are described in Appendix D.,hats.pdf,Req
+1321,"The GUI shall allow the user to create, modify, copy, or delete applications or files regardless of the current status of HATS-SML.",hats.pdf,Req
+1322,"If the HATS-GUI attempts to start a HATS-SML program and fails, the HATS-GUI shall notify the user by displaying the following message: “Unable to start HATS-SML.” ",hats.pdf,Req
+1323,The HATS-GUI shall provide any other details related to the failure that are available from the Host OS.,hats.pdf,Req
+1324,"Examples of information available from an operating system include indications that a specified file does ot exist, that a file cannot be opened due to file protection violations, or that errors occurred during I/O operations.",hats.pdf,Req
+1325,"The HATS-GUI shall be able to communicate with Sun Solaris, Linux, and Windows 2000.",hats.pdf,Req
+1326,Data sets shall be saved as files using file names with the appropriate extensions. See Table 3 for description of the files and extensions.,hats.pdf,Req
+1327,The user shall be able to initiate processes from an interface provided by the HATS-GUI. ,hats.pdf,Req
+1328,The HATS-GUI shall optionally pass command line arguments to the process.,hats.pdf,Req
+1329,Command sequences for initiating processes are part of the application configuration.,hats.pdf,Req
+1330,"After initiating processes for editing files, the HATS-GUI is not responsible for communications with the process other than passing command line arguments.",hats.pdf,Req
+1331,"The HATS-GUI shall interact with the HOST OS file services to perform the following tasks: create new files, delete existing files, open an existing file for read and/or write, read from an open file, write to an open file, close an open file.",hats.pdf,Req
+1332,The HATS-GUI shall interact with the HOST OS to find files in directories. (This capability is necessary for the HATS-GUI to display file lists.),hats.pdf,Req
+1333,The HATS-GUI shall interact with the HOST OS to compare time stamps for files. ,hats.pdf,Req
+1334,Time stamps indicate the date and time of the most recent update to a file.,hats.pdf,Req
+1335,These time stamps must be reported with a precision of one second or less.,hats.pdf,Req
+1336,"The HATS-GUI shall allow a user to create an application minimally consisting of a lexical specification file, a grammar file, a user-defined functions file, and application configuration information. The user shall be able to name this application.",hats.pdf,Req
+1337,All files associated with a given application shall be stored in one directory.,hats.pdf,Req
+1338,The directory in which application files are stored shall be named with the application name.,hats.pdf,Req
+1339,There shall be exactly one file describing the lexical specification of inputs associated with an application. It shall have the file extension .spec.,hats.pdf,Req
+1340,There shall be exactly one file describing the grammar of inputs associated with an application. It shall have the file extension .grm.,hats.pdf,Req
+1341,There shall be exactly one file describing the interpretation of function symbols associated with an application. ,hats.pdf,Req
+1342,This file shall be written in ML and have the file extension .lib.,hats.pdf,Req
+1343,The HATS-GUI shall suggest a file name for the user whenever it prompts the user to enter a file name.,hats.pdf,Req
+1344,The HATS-GUI shall suggest the same file name for files copied to a different directory.,hats.pdf,Req
+1345,"The HATS-GUI shall suggest a file name with a sequentially numbered extension for files copied to the same directory. For example, if NatLang.txt exists, a suggested file name would be NatLang.txt.2.",hats.pdf,Req
+1346,An application shall have associated with it an application configuration. The application configuration elements are given in Table 6.,hats.pdf,Req
+1347,The HATS-GUI shall display output written to the standard output and standard error streams in a tab-selectable window. ,hats.pdf,Req
+1348,"Text in this window shall be cleared prior to executing individual HATS- SML programs, unless the programs are contained in a program script.",hats.pdf,Req
+1349,"In the case of a script, the window contents shall be cleared prior to executing the script. Refer to section 3.2.3.2 for a discussion of the execution of script files.",hats.pdf,Req
+1350,The system shall open a new window when the user selects to display output.,hats.pdf,Req
+1351,Display windows opened by the system shall have buttons for closing the windows.,hats.pdf,Req
+1352,A navigation window shall be available. Navigation windows are discussed in section 3.2.3.3.4.,hats.pdf,Req
+1353,"Each active display window shall have a mouse cursor, which indicates the location of the pointing device in the window.",hats.pdf,Req
+1354,Each display window shall have a keyboard cursor to track the current location in the display.,hats.pdf,Req
+1355,The keyboard cursor shall be movable by the arrow keys.,hats.pdf,Req
+1356,The keyboard cursor shall be set to the location of the mouse cursor when the pointing device is clicked.,hats.pdf,Req
+1357,"When a user selects the File/Select menu item, the HATS-GUI shall provide the user with a list of files in the currently open application and allow the user to select a file. ",hats.pdf,Req
+1358,This file becomes the currently selected file.,hats.pdf,Req
+1359,"If no application is currently open, the HATS-GUI will prompt the user to select and open an application, then prompt the user to select a file.",hats.pdf,Req
+1360,"When a user selects the File/Save As menu item, the HATS-GUI shall prompt the user to enter a new name. ",hats.pdf,Req
+1361,A new file shall be created in the currently open application with the newly entered file name.,hats.pdf,Req
+1362,"The contents of the selected file shall be written into the new file, and the new file shall become the currently selected file.",hats.pdf,Req
+1363,"When a user selects the File/Delete menu item, the HATS-GUI shall prompt the user to confirm the deletion operation. ",hats.pdf,Req
+1364,"If the user confirms, the currently selected file shall be deleted.",hats.pdf,Req
+1365,No file shall be currently selected at the end of this operation.,hats.pdf,Req
+1366,"When a user selects the File/Edit menu item, the HATS-GUI shall request that the operating system start a process and load that process with the editor specified by the application configuration. ",hats.pdf,Req
+1367,The name of a selected file shall be passed to the editor as a command line argument.,hats.pdf,Req
+1368,"The editor started by the HATS-GUI shall be the editor associated with the file in the application configuration, or if there is no editor associated with the file, then the editor associated with the file type of the file in the application configuration. ",hats.pdf,Req
+1369,"If no editor is associated with either the file or the file type, then the default editor shall be used.",hats.pdf,Req
+1370,"If no default editor has been selected, then the HATS-GUI shall present a list of the configured editors and allow the user to select an editor.",hats.pdf,Req
+1371,"If no editors have been configured, then the HATS-GUI shall inform the user that an editor must be configured before starting an editor.",hats.pdf,Req
+1372,"When a user selects the File/Exit menu option, the HATS-GUI shall request the host operating system to kill all currently active HATS-SML processes started by the HATS-GUI and halt the HATS-GUI process.",hats.pdf,Req
+1373,"If changes have been made to the configuration but have not been saved, the user shall be prompted to save the configuration. If the user agrees, the configuration shall be saved.",hats.pdf,Req
+1374,"If the user does not agree, the configuration shall not be saved.",hats.pdf,Req
+1375,"When a user selects the Application/Select menu item, the HATS-GUI shall display a list of directory names in the current working directory, allow a user to navigate the directory structure, and allow a user to select a previously created application. ",hats.pdf,Req
+1376,This application becomes the currently selected application.,hats.pdf,Req
+1377,"When a user selects the Application/Close menu item, the HATS-GUI shall close the currently selected application. ",hats.pdf,Req
+1378,No application is currently selected at the end of this operation.,hats.pdf,Req
+1379,"If changes have been made to the configuration but have not been saved, the user shall be prompted to save the configuration. ",hats.pdf,Req
+1380,"If the user agrees, the configuration shall be saved. ",hats.pdf,Req
+1381,"If the user does not agree, the configuration shall not be saved.",hats.pdf,Req
+1382,"When a user selects the Application/Save menu item, the HATS-GUI shall save all application configuration information to nonvolatile storage.",hats.pdf,Req
+1383,"When a user selects the Application/Save As menu item, the HATS-GUI shall prompt the user for a new application name. ",hats.pdf,Req
+1384,The HATS-GUI shall create a new directory at the same level as the currently selected application.,hats.pdf,Req
+1385,"All files in the application directory, including all subdirectories, shall be copied to the new directory, and the new directory shall become the currently selected application.",hats.pdf,Req
+1386,"When a user selects the Application/Delete menu item, the HATS-GUI shall prompt the user to confirm the deletion operation. ",hats.pdf,Req
+1387,"If the user confirms, all files in the application directory shall be deleted and the application directory itself shall be deleted.",hats.pdf,Req
+1388,No application is currently selected at the end of this operation.,hats.pdf,Req
+1389,"When deleting an application directory, if the application directory contains a subdirectory, the system shall confirm the deletion of the subdirectory with the user before continuing. ",hats.pdf,Req
+1390,"If the user does not confirm the deletion of the subdirectory, the application director shall not be deleted.",hats.pdf,Req
+1391,"When a user selects the Configure menu options, the HATS-GUI shall provide a list of elements in the application configuration, allow the user to select an element, then prompt the user for a value for the configuration element. ",hats.pdf,Req
+1392,The application configuration elements are given in Section 3.2.1.1. This information becomes part of the application configuration.,hats.pdf,Req
+1393,"When a user selects the Run/Generate Parser menu option, the HATS-GUI shall generate the parser using the MakeParser HATS-SML program as described in Appendix D.",hats.pdf,Req
+1394,"When a user selects the Run/Parse Target menu option, the HATS-GUI shall parse the selected target program by using the ParseTarget HATS-SML programs as described in Appendix D. ",hats.pdf,Req
+1395,"If no target program is selected, the HATS-GUI shall first prompt the user to select a target program.",hats.pdf,Req
+1396,"When a user selects the Run/Parse Program menu option, the HATS-GUI shall parse the selected transformation language program by using the ParseTlp HATS-SML programs as described in Appendix D.",hats.pdf,Req
+1397,"If no target program is selected, the HATS-GUI shall first prompt the user to select a transformation language program.",hats.pdf,Req
+1398,"When a user selects the Run/Execute Transforms menu option, the HATS-GUI shall execute the ApplyTransformations HATS-SML programs as described in Appendix D. This process is further described in Section 3.2.3.",hats.pdf,Req
+1399,"When a user selects the Run/Pretty-print menu option, the HATS-GUI shall execute the Pretty- print HATS-SML programs as described in Appendix D. This process is further described in Section 3.2.3.",hats.pdf,Req
+1400,"When a user selects the View/SDT menu option, the HATS-GUI shall prompt the user to select an SDT file in the current application.",hats.pdf,Req
+1401,The file list shall include SDTs in the application. The viewing of outputs is detailed in Section 3.2.3.,hats.pdf,Req
+1402,"When a user selects the View/Text menu option, the HATS-GUI shall prompt a user to select a pretty-printed text file in the current application. The viewing of text outputs is detailed in Section 3.2.3.",hats.pdf,Req
+1403,"When a user selects the View/Standard Error menu option, the HATS-GUI shall display the standard error screen showing all outputs written to the standard error stream since the most recent clearing of this data. The viewing of errors is detailed in Section 3.2.3.",hats.pdf,Req
+1404,"When a user selects the View/Standard Output menu option, the HATS-GUI shall display the standard error screen showing all outputs written to the standard output stream since the most recent clearing of this data. The viewing of output is detailed in Section 3.2.3.",hats.pdf,Req
+1405,"When viewing an SDT, a single left mouse click on an expandable displayed node shall expand the node by displaying the node’s children or collapse the node by hiding the node’s children.",hats.pdf,Req
+1406,"When a displayed node is expanded, the number of levels of children added to the displayed graph shall be determined by the application configuration.",hats.pdf,Req
+1407,"When viewing an SDT, a single left mouse click on an already-expanded displayed node shall collapse the displayed node. ",hats.pdf,Req
+1408,"When a displayed node is collapsed, all descendants of the node are removed from the displayed graph.",hats.pdf,Req
+1409, The GUI shall allow the user to import a file into the selected application. ,hats.pdf,Req
+1410,Importing a file consists of copying the file into the application directory.,hats.pdf,Req
+1411,The HATS-GUI shall use the protocol and program signatures listed in Appendix D when executing HATS-SML programs.,hats.pdf,Req
+1412,"To perform a transformation in an application, the HATS-GUI shall execute the following sequence of actions: The HATS-GUI shall confirm that the transformation language program exists. (It is an error if the program does not exist.), The HATS-GUI shall check that the parser file is younger than the grammar and lexical specification files and that the parser file was generated from the grammar and lexical specification files; If this is not the case, the HATS-GUI shall generate a new parser file, The HATS-GUI shall check that a parsed version of the transformation language program exists and is younger than the parser file and the transformation language program file; If it is not, the HATS-GUI shall generate a new parsed version of the transformation language program, The HATS-GUI shall start the FindTarget program using the transformation language program as input, The HATS-GUI shall take the list of target program files generated by FindTarget, and for each file in the list it shall check that a parsed version of the target program exists and is younger than the target parser file and the target program file; If it is not, the HATS-GUI shall generate a new parsed version of the target program. The HATS-GUI shall start the ApplyTransformation program in HATS-SML and pass the parsed transformation language program file name, the user defined library file name, and the output file name to the ApplyTransformation program. The HATS-GUI shall redirect the standard output and standard error streams and capture any text written to those streams.",hats.pdf,Req
+1413,The HATS-GUI shall allow the user to continue working while transformations are taking place. ,hats.pdf,Req
+1414,"Thus a user shall be able to edit files, view output, and transmit other problems to HATS-SML while waiting for HATS-SML to generate output.",hats.pdf,Req
+1415,The HATS-GUI shall allow the user to execute a script file. ,hats.pdf,Req
+1416,A script file shall contain a linear sequence of HATS-SML programs.,hats.pdf,Req
+1417,The HATS-GUI shall begin with the first command and execute the commands sequentially until either an error occurs or all commands in the script file have been executed.,hats.pdf,Req
+1418,"Prior to starting the execution of a script file, the display screens for the standard error and the standard output shall be cleared.",hats.pdf,Req
+1419,The HATS-GUI shall allow a user to select output files in the application to display.,hats.pdf,Req
+1420,The HATS-GUI shall allow a user to display selected output files. The manner in which the output is displayed shall depend on the type of the output.,hats.pdf,Req
+1421,The user shall be able to select an arbitrary set of displayed nodes in a displayed graph. ,hats.pdf,Req
+1422,Selected displayed nodes shall be indicated visually.,hats.pdf,Req
+1423,The following methods shall be used to select displayed nodes.,hats.pdf,Req
+1424,A single node shall be selected by right-clicking the mouse cursor on the node.,hats.pdf,Req
+1425,A single node shall be selected by moving the keyboard cursor to the node (using the tab key) and pressing the enter key.,hats.pdf,Req
+1426,Clicking and dragging the pointing device selection rectangle around a set of displayed nodes shall select a set of adjacent nodes.,hats.pdf,Req
+1427,A set of nodes shall be selected by holding the shift key while selecting nodes using the methods specified previously in this section.,hats.pdf,Req
+1428,The user shall be able to deselect all selected displayed nodes by clicking either the right or left mouse buttons while the mouse cursor is not pointed at anyisplayed nodes and the shift key is not depressed; or by escape key,hats.pdf,Req
+1429,"When viewing an SDT, selecting nodes shall result in the highlight of all displayed nodes in the smallest well-formed tree of the selected nodes.",hats.pdf,Req
+1430,"When the system displays a navigation window, the user shall be able to select a current SDT location by clicking the mouse cursor in the navigation window. ",hats.pdf,Req
+1431,The center of the displayed graph will be the displayed node closest to the mouse cursor when the mouse is clicked.,hats.pdf,Req
+1432,"When both an SDT and a pretty-printed text display corresponding to a single transformed target file are open, highlighting and cursor location motion shall be mirrored in the two windows. ",hats.pdf,Req
+1433,"Thus, when a displayed node is selected in the SDT display, the corresponding text in the pretty- print window is highlighted. When the user scrolls to the end of the pretty-printed text display, the display of the SDT should also scroll to the corresponding displayed nodes.",hats.pdf,Req
+1434,"The user shall be able to resize windows dynamically. When displayed graph windows are resized, the HATS-GUI shall respond by utilizing the space available.",hats.pdf,Req
+1435,The display of an SDT shall also result in the display of text from leaf nodes in a text display area.,hats.pdf,Req
+1436,"The text displayed in the text display area shall correspond to the concatenation of the node labels (separated by spaces) of the leaf nodes of the displayed graph (in-order traversal, left to right).",hats.pdf,Req
+1437,"If a leaf displayed node corresponds to a non-terminal SDT node, the label in the text window shall be surrounded by pointed brackets (<>). For example, if a non-terminal TERM appears in a leaf node, its text representation shall be <TERM>. Appendix G gives an example of the display of text associated with an SDT.",hats.pdf,Req
+1438,The HATS-GUI shall provide for the copying of text from the text display area to a system buffer available for pasting into other applications (such as an editor).,hats.pdf,Req
+1439,The user shall be able to display more than one SDT at a time. Each SDT shall be displayed in a separate window.,hats.pdf,Req
+1440,The HATS-GUI shall provide for the manipulation and display of SDTs.,hats.pdf,Req
+1441,SDTs shall be displayed as directed acyclic graphs with nodes and edges. Nodes in the displayed graph correspond to nodes in the SDT. ,hats.pdf,Req
+1442,Edges in the displayed graph correspond to the parent- child relationship between nodes in the SDT.,hats.pdf,Req
+1443,"Initially, a displayed graph will have a single displayed node. That node will correspond to the root of the SDT.",hats.pdf,Req
+1444,"When a displayed node and its children are displayed simultaneously, the parent node shall be displayed higher than the children.",hats.pdf,Req
+1445,All displayed children of a single node shall appear at the same height.,hats.pdf,Req
+1446,The user shall be able to control the display by choosing the color and shapes of displayed nodes based on node type. ,hats.pdf,Req
+1447,The HATS-GUI shall use the shape and color of displayed node types stored in the application configuration to display nodes.,hats.pdf,Req
+1448,The user shall be able to expand displayed nodes (provided it is possible to expand the selected nodes). ,hats.pdf,Req
+1449,The HATS-GUI shall change the graph display by adding the descendant nodes to the displayed graph (thus changing the expandable nodes to internal nodes).,hats.pdf,Req
+1450,The user shall be able to collapse displayed nodes. ,hats.pdf,Req
+1451,The HATS-GUI shall change the displayed graph by removing all descendants of the selected displayed nodes (thus changing the internal nodes to non-expandable leaf nodes).,hats.pdf,Req
+1452,The user shall be able to hide a set of selected displayed nodes. ,hats.pdf,Req
+1453,"The HATS-GUI shall change the display by removing the selected nodes from the display and changing the parent and descendant nodes of the removed nodes to nodes with hidden descendants and parents, respectively.",hats.pdf,Req
+1454,The user shall be able to issue an unhide instruction that reverses the hide instruction for all displayed nodes.,hats.pdf,Req
+1455,"After issuing the unhide instruction, a user shall be able to issue a rehide instruction that reverses the unhide instruction. ",hats.pdf,Req
+1456,All displayed nodes hidden before the most recent unhide instruction shall become hidden.,hats.pdf,Req
+1457,The HATS-GUI shall allow the user to expand the SDT by a predetermined number of node levels. ,hats.pdf,Req
+1458,The number of levels expanded is set in the application configuration.,hats.pdf,Req
+1459,The HATS-GUI shall provide the function to fully expand a sub-tree regardless of the node expansion level in the application configuration.,hats.pdf,Req
+1460,The user shall be able to view multiple SDTs simultaneously.,hats.pdf,Req
+1461,"If a displayed graph or a text display is too large to fit inside its window, the windows shall have scroll bars attached to them. ",hats.pdf,Req
+1462,Dragging scrollbar buttons shall scroll the display. Pressing the arrow keys of the keyboard shall also scroll the display.,hats.pdf,Req
+1463,"For text windows, the keyboard cursor location shall move according the following rules: A left arrow key moves the cursor to the left one character, If the cursor is at the beginning of a line, the cursor is moved to the end of the previous line; If there is no previous line, the cursor does not move. A right arrow key moves the cursor to the right one character; If the cursor is at the end of a line, the cursor is moved to the first character of the next line. If there is no line after the current line, the cursor is not moved; An up arrow key moves the cursor up one line; If there is text in the same column, the column does not change; If there is no text in the column above the current cursor location, the cursor is moved to the end of the previous line. (A space is considered text.) A down arrow key moves the cursor down one line; If there is text in the same column, the column does not change. If there is no text in the column below the current cursor location, the cursor is moved to the end of the previous line. (A space is considered text.)",hats.pdf,Req
+1464,"For displayed graph windows, the keyboard cursor location shall move according the following rules: A left arrow key moves the cursor to the next unhidden node to the left; The node to the left does not need to be a sibling of the current node, but it does need to be at the same level as the current node; If there are no nodes to the left, the cursor does not move, A right arrow key moves the cursor to the next unhidden node to the right. The node to the right does not need to be a sibling of the current node, but it does need to be at the same level as the current node; If there are no nodes to the right, the cursor does not move. An up arrow key moves the cursor to the closest ancestor that is not hidden. If there is no such node, the cursor does not move. An down arrow key moves the cursor to the leftmost, nearest descendant that is not hidden; If there is no such node, the cursor does not move.",hats.pdf,Req
+1465,The pointing-device cursor shall track the motion of the pointing device. ,hats.pdf,Req
+1466,The keyboard cursor shall move to the text element or graph node closest to the pointing-device cursor when the pointing device is clicked.,hats.pdf,Req
+1467,"If the displayed graph of the entire SDT is too large for the window, a separate, small window with a compressed view of the SDT shall be displayed. ",hats.pdf,Req
+1468,"The compressed view is called the navigation window display. In this navigation window, a representation of the entire SDT will be drawn.",hats.pdf,Req
+1469,A small box will be displayed showing the part of the SDT currently displayed in the main tree display window.,hats.pdf,Req
+1470,The user shall be able to turn the navigation window on and off.,hats.pdf,Req
+1471,The HATS-GUI shall provide the user the capability to search SDTs. The search criteria are described in Appendix E. The user shall enter a search pattern (see Appendix E and the following requirement). ,hats.pdf,Req
+1472,The HATS-GUI shall search the SDT for a matching pattern.,hats.pdf,Req
+1473,"When a match is found, the HATS-GUI shall highlight the matching displayed nodes and center the display on the left-most, top-level displayed node in the matching pattern. ",hats.pdf,Req
+1474,"The keyboard cursor is set to this node. If no matches are found, the HATS-GUI shall display a message stating “No Match Found.”",hats.pdf,Req
+1475,"To initiate an SDT search, the user shall be able to use the following sequence of actions: The user selects a set of nodes using the mouse cursor, The user presses the Ctrl-Insert key combination, The user selects the tree search option, The HATS-GUI presents a prompt for entering the search pattern, The user presses the Ctrl-Shift-Insert key combination, The HATS-GUI fills the search pattern entry box with text concatenated from the nodes highlighted at the time of the Ctrl-Insert key press, The user selects initiation of search.",hats.pdf,Req
+1476,"When searching for SDT patterns, search begins at the SDT node corresponding to the node at the current keyboard cursor location. ",hats.pdf,Req
+1477,"This becomes the original starting location. Search continues top-to-bottom, left-to-right until the end of the SDT is encountered.",hats.pdf,Req
+1478,"When the end of the SDT is encountered, search will continue from the root of the SDT until arriving back at the starting location.",hats.pdf,Req
+1479,The HATS-GUI shall provide for repeating a search. ,hats.pdf,Req
+1480,Repeating a search shall find the next matching sub-tree starting from the current keyboard cursor location.,hats.pdf,Req
+1481,Search terminates when either a matching sub-tree is found or the search arrives at the original starting location.,hats.pdf,Req
+1482,The HATS-GUI shall provide for repeating a search in the reverse direction. ,hats.pdf,Req
+1483,"Searching in the reverse direction continues right-to-left, bottom-to-top.",hats.pdf,Req
+1484,Search terminates when either a matching sub-tree is found or the search arrives at the original starting location.,hats.pdf,Req
+1485,The HATS-GUI shall provide the user the capability to search the text display for text sub-strings. The search criteria are described in Appendix F. ,hats.pdf,Req
+1486,The user shall be prompted to enter a text string describing a string pattern.,hats.pdf,Req
+1487,The HATS-GUI shall search the text for a matching pattern. ,hats.pdf,Req
+1488,"When a match is found, the HATS-GUI shall highlight the matching text and center the display on the left-most element of the matching text.",hats.pdf,Req
+1489," If no matches are found, the HATS-GUI shall display a message stating “No Match Found.”",hats.pdf,Req
+1490,"When searching for text patterns, search begins at the current keyboard cursor location and continues left-to-right, top-to-bottom until the end of the text is encountered. ",hats.pdf,Req
+1491,"When the end of the text is encountered, search will continue from the start of the text until arriving back at the starting location.",hats.pdf,Req
+1492,The formatting of the displayed pretty-printed text shall be faithful to the formatting represented in the pretty-printed text file. ,hats.pdf,Req
+1493,"No additional white space shall be inserted, and a fixed width font shall be used to display the text.",hats.pdf,Req
+1494,The user shall be able to select pretty-printed text files to display.,hats.pdf,Req
+1495,Selected pretty-printed text shall be displayed in a separate window.,hats.pdf,Req
+1496,"Windows for pretty-printed text shall allow for scrolling left, right, up, and down if the text is too large to display in the window.",hats.pdf,Req
+1497,"When searching for text patterns, search begins at the location of the keyboard cursor and continues left-to-right, top-to-bottom until the end of the text is encountered.",hats.pdf,Req
+1498,"When the end of the text is encountered, search will continue from the start of the text until arriving back at the starting location.",hats.pdf,Req
+1499,The HATS-GUI shall not halt as a result of any error messages received from HATS-SML.,hats.pdf,Req
+1500,The HATS-GUI shall collect error messages from HATS-SML in a single display area. ,hats.pdf,Req
+1501,"This display area shall be initially clear, and shall contain all error messages generated by HATS-SML since the HATS-GUI was started.",hats.pdf,Req
+1502,The display area shall be a window accessible via a window tab. ,hats.pdf,Req
+1503,The display shall list all error received from HATS-SML in the order received.,hats.pdf,Req
+1504,Errors shall not be displayed until requested by the user.,hats.pdf,Req
+1505,The user shall be able to clear the error window without restarting the HATS-GUI.,hats.pdf,Req
+1506,"When both an SDT and a pretty-printed text display corresponding to a single transformed target file are open, navigation in the SDT window shall result in navigation in the pretty-printed text window. ",hats.pdf,Req
+1507,"Searching, selecting, and cursor location motion should be mirrored in the two windows.",hats.pdf,Req
+1508,"Specifically, when a node is selected in the displayed graph, the corresponding text in the pretty-print window is highlighted.",hats.pdf,Req
+1509,"For this purpose, the corresponding text is all the text that  corresponds to terminal nodes of the SDT that are descendants of the SDT nodes that correspond to the selected display nodes.",hats.pdf,Req
+1510,"When both an SDT and a pretty-printed text display corresponding to a single transformed target file are open, navigation in the pretty-printed text window shall result in navigation in the SDT display. ",hats.pdf,Req
+1511,"Selecting, and cursor location motion should be mirrored in the two windows.",hats.pdf,Req
+1512,"Specifically, when text is selected in the text window, the displayed nodes corresponding nodes in the SDT are highlighted.",hats.pdf,Req
+1513,"The HATS-GUI shall display and SDT with 10,000 nodes in five seconds or less.",hats.pdf,Req
+1514,"The HATS-GUI shall display 1,000,000 node SDTs in the same amount of time, plus or minus two seconds, as it takes to display a 10,000 node SDT.",hats.pdf,Req
+1515,The HATS-GUI shall allow a user to request transformations while HATS-SML is performing transformations or parsing.,hats.pdf,Req
+1516,"The HATS-GUI shall allow a user to navigate through the display of an SDT with 10,000 nodes so that scrolling a screen width with any portion of the SDT displayed takes less than 3 seconds.",hats.pdf,Req
+1517,The complexity of the text search algorithm shall not exceed O(n2) for n nodes.,hats.pdf,Req
+1518,The complexity of the tree search algorithm shall not exceed O(n2) for n nodes.,hats.pdf,Req
+1519,The complexity of the scrolling algorithms for text and displayed graphs shall not exceed O(n2) for n displayed nodes.,hats.pdf,Req
+1520,The user shall not be required to log in or authenticate his/her identity when using the system.,hats.pdf,Req
+1521,"The GUI shall run on Windows 2000, Sun Solaris 8, and Linux operating systems without modification of the Java code.",hats.pdf,Req
+1522,The system shall be implemented in the Java 1.3 programming language.,hats.pdf,Req
+1523,"One algorithm for displaying an SDT has been implemented and found to be unacceptable: Draw SDT into large virtual window with a smaller viewing area, Zoom in on portions of the tree.",hats.pdf,Req
+5148,"The purpose of the Software Requirements Specification (SRS) is to clearly and precisely describe the requirements of the software system being developed, hereafter referred to as the HATS-GUI. ",hats.pdf,Not_Req
+5149,The HATS-GUI is a Graphical User Interface (GUI) for the High Assurance Transformation System (HATS). ,hats.pdf,Not_Req
+5150,"This document shall serve as a reference guide to the developer for software design, implementation, and maintenance.",hats.pdf,Not_Req
+5151,"The SRS divides the system requirements into two major sections, behavioral requirements and non-behavioral requirements. ",hats.pdf,Not_Req
+5152,Behavioral requirements describe the interaction between the system and its environment.,hats.pdf,Not_Req
+5153,Non- behavioral requirements are the ones that relate to the definition of the attributes of the product as it performs its functions.,hats.pdf,Not_Req
+5154,"The intended audience of this document is Dr. Winter, the Guidance Team, and the software development team. ",hats.pdf,Not_Req
+5155,The SRS is an agreement on requirements between these parties regarding the software to be developed.,hats.pdf,Not_Req
+5156,Text give in gray highlight refers to changes since the previous version of this document.,hats.pdf,Not_Req
+5157,The High Integrity Software (HIS) program at Sandia National Laboratories developed HATS in order to utilize transformation-based software development. ,hats.pdf,Not_Req
+5158,Transformations are a well-known formal method for developing software.,hats.pdf,Not_Req
+5159,The intent of HATS is to develop software via high assurance transformations that have been proven to preserve the semantics of the transformed programs. ,hats.pdf,Not_Req
+5160,Such a system benefits the high assurance software community by providing a tool with which to develop software.,hats.pdf,Not_Req
+5161,The HIS program has requested the implementation of a platform-independent GUI to simplify user interaction with HATS. ,hats.pdf,Not_Req
+5162,"The system shall provide to the user the ability to prepare applications, utilize HATS to apply transformations, and display and manipulate the output resulting from execution of transformations. ",hats.pdf,Not_Req
+5163,The development of a platform-independent GUI will give the members of the transformation and research community a chance to experiment using HATS. ,hats.pdf,Not_Req
+5164,This will increase the use of HATS and will provide the HIS program with feedback from the members of the transformation and research communities that will aid in the development of this tool.,hats.pdf,Not_Req
+5165,"A prototype of this system has been developed, but is inadequate due to its lack of portability and its inability to display outputs adequately. ",hats.pdf,Not_Req
+5166,"The goal of developing the HATS-GUI is to make the system more user-friendly, make the user interface platform independent, and to increase the use of the HATS system.",hats.pdf,Not_Req
+5167,Table 1 below lists the definitions used in this document with respect to the HATS-GUI. ,hats.pdf,Not_Req
+5168,The definitions given below are specific to this document and may not be identical to definitions of these terms in common use. ,hats.pdf,Not_Req
+5169,The purpose of this section is to assist the user in understanding the requirements for the system.,hats.pdf,Not_Req
+5170,The window in a graphical user environment that is currently accepting keyboard and mouse input.,hats.pdf,Not_Req
+5171,The ancestor nodes of a node N is the set of nodes N* such that every element of N* is either the parent of N or the parent of some node in N*.,hats.pdf,Not_Req
+5172,"A set of files describing a problem domain and a (possibly empty) set of transformation language programs, target files, and output files. ",hats.pdf,Not_Req
+5173,An application is a stand-alone entity and contains all the data sets required to perform and view transformations. ,hats.pdf,Not_Req
+5174,A set of associations and user-selected configurations is also part of the application.,hats.pdf,Not_Req
+5175,Relations between files in an application. ,hats.pdf,Not_Req
+5176,"For example, a file may be mapped to the file used to generate this file or a file (or program) used to edit the file.",hats.pdf,Not_Req
+5177,A node that has a parent node. ,hats.pdf,Not_Req
+5178,The child relationship is the inverse of the parent relationship. (See Edge.),hats.pdf,Not_Req
+5179,To hide the descendants of a displayed node.,hats.pdf,Not_Req
+5180,The selected colors and shapes used to represent different types of displayed nodes in a displayed graph of a syntax derivation tree.,hats.pdf,Not_Req
+5181,The set of characteristics related to an application that controls the behavior of the HATS-GUI. Table 6 lists the elements of a configuration.,hats.pdf,Not_Req
+5182,An operation that allows a user to copy text from one process into another process. ,hats.pdf,Not_Req
+5183,"Typically, copy-and-paste operations transfer data to and from an active process into an operating system buffer.",hats.pdf,Not_Req
+5184,"A set of files consisting of one lexical specification file, one grammar file, and zero or one user-defined libraries.",hats.pdf,Not_Req
+5185,A display element in a graphical user environment that marks a location in a window or buffer.,hats.pdf,Not_Req
+5186,The descendant nodes of a node N is the set of nodes N* such every element of N* is either a child of N or the child of some node in N*.,hats.pdf,Not_Req
+5187,A special file in a hierarchical file system that contains either files or other directories. ,hats.pdf,Not_Req
+5188,Directory is synonymous with folder.,hats.pdf,Not_Req
+5189,The visual representation of an SDT or a part of an SDT. ,hats.pdf,Not_Req
+5190,A displayed graph is a set of displayed nodes and the arcs connecting those nodes.,hats.pdf,Not_Req
+5191,"The visual, graphical display of a node. Every displayed node has a corresponding SDT node. ",hats.pdf,Not_Req
+5192,Not every SDT node has a corresponding displayed node.,hats.pdf,Not_Req
+5193,Language over which transformations take place. The domain is defined by the files in the core (see core).,hats.pdf,Not_Req
+5194,An operation using a mouse or other pointing device where the user presses the pointing device button and moves the pointing device while the button is pressed.,hats.pdf,Not_Req
+5195,A directed relation between two nodes in a tree. ,hats.pdf,Not_Req
+5196,"If edge e is a relation from node N1 to node N2, we write e(N1,N2). ",hats.pdf,Not_Req
+5197,N1 is the parent of N2. N2 is the child of N1.,hats.pdf,Not_Req
+5198,A leaf node of a displayed graph whose corresponding tree node has immediate descendants.,hats.pdf,Not_Req
+5199,Any editor available on the host OS that can be started as a separate process by the HATS-GUI.,hats.pdf,Not_Req
+5200,The name of a file in a file system. ,hats.pdf,Not_Req
+5201,A file name consists of a path name and a unique file name. ,hats.pdf,Not_Req
+5202,The root name of a file name is a file name without a path name and without a file extension.,hats.pdf,Not_Req
+5203,A set of characters in a file name including and following the right-most period of the file name.,hats.pdf,Not_Req
+5204,A file representing a set of rules that define the language of the domain over which transformations are defined.,hats.pdf,Not_Req
+5205,The transformation system developed by HIS at Sandia. ,hats.pdf,Not_Req
+5206,The system includes both the HATS-SML programs and a user interface. ,hats.pdf,Not_Req
+5207,"Together, these provide services that allow parsing and running transformation language programs.",hats.pdf,Not_Req
+5208,"A set of service programs that provide the parsing, transforming, and pretty-printing functions of HATS.",hats.pdf,Not_Req
+5209,The operating system under which HATS-SML and the HATS-GUI are running.,hats.pdf,Not_Req
+5210,An abstract computing machine that is responsible for the hardware and operating system independence of the Java platform.,hats.pdf,Not_Req
+5211,The cursor associated with the keyboard. ,hats.pdf,Not_Req
+5212,"This cursor may be moved by using keystrokes such as the arrow keys, the tab key, or the enter key.",hats.pdf,Not_Req
+5213,A node in a displayed graph that does not have any displayed descendant nodes.,hats.pdf,Not_Req
+5214,The number of edges that must be traversed in order to reach a node in a tree starting from the root.,hats.pdf,Not_Req
+5215,A file defining the tokens to be recognized by a transformation language.,hats.pdf,Not_Req
+5216,"The operating system Linux, a Unix-like operating system available on most platforms.",hats.pdf,Not_Req
+5217,Rectangle drawn around a sub-tree in a navigation window indicating the sub-tree displayed in the SDT display window relative to the entire SDT.,hats.pdf,Not_Req
+5218,The cursor associated with a pointing device such as a mouse. ,hats.pdf,Not_Req
+5219,This cursor may be moved by moving the pointing device.,hats.pdf,Not_Req
+5220,A displayed window containing an abstract representation of an entire SDT. ,hats.pdf,Not_Req
+5221,The intent of the navigation window display is to facilitate navigation of large SDTs.,hats.pdf,Not_Req
+5222,A node that has at least one child node. ,hats.pdf,Not_Req
+5223,The parent relation is the inverse of the child relation. (See Edge.),hats.pdf,Not_Req
+5224,To generate an SDT from a non-SDT (i.e. string) input file such as a transformation language program or a target.,hats.pdf,Not_Req
+5225,A program that parses either transformation language programs or target programs. ,hats.pdf,Not_Req
+5226,The SDT representation of a transformation language program. ,hats.pdf,Not_Req
+5227,This is the form used by HATS. ,hats.pdf,Not_Req
+5228,A parsed transformation language program is said to be parsed.,hats.pdf,Not_Req
+5229,A text string that represents the sequence of directory names and a file name that uniquely specifies the location of a file in a file system.,hats.pdf,Not_Req
+5230,The combination of hardware and operating system software that comprise a computing system.,hats.pdf,Not_Req
+5231,The input file that specifies how to display the pretty-print format of the target language.,hats.pdf,Not_Req
+5232,A text string output by HATS representing the formatted result from applying a transformation language program to a target file. ,hats.pdf,Not_Req
+5233,Formatting is done according to the pretty-print style.,hats.pdf,Not_Req
+5234,An SDT generated by parsing a transformation language program.,hats.pdf,Not_Req
+5235,A tree T1 is a proper sub-tree of a tree T2 if T1 is a sub-tree of T2 and T1 has fewer nodes than T2.,hats.pdf,Not_Req
+5236,A path that starts at a directory other than the root directory.,hats.pdf,Not_Req
+5237,The first and initial element in a tree represented by nodes.,hats.pdf,Not_Req
+5238,To move information across a display screen as if unrolling a scroll.,hats.pdf,Not_Req
+5239,An element of a tree or a displayed graph. ,hats.pdf,Not_Req
+5240,Nodes in SDTs contain text tokens derived from parsing input strings and applying transformations. ,hats.pdf,Not_Req
+5241,Nodes in displayed graphs (displayed nodes) are visual representations of nodes in SDTs. ,hats.pdf,Not_Req
+5242,Nodes in SDTs should not be confused with displayed nodes.,hats.pdf,Not_Req
+5243,"Given a tree T and a set of nodes N in T, the smallest well-formed tree of N in T is a tree S such that S is a sub-tree of T, every element of N is in S, every descendant of the root of S in T is also an element of S, and S has no proper sub-trees that are smallest well-formed trees of N in S.",hats.pdf,Not_Req
+5244,A tree where nodes represent either the left-hand side of grammar productions used to parse a string or terminal symbols in the grammar. ,hats.pdf,Not_Req
+5245,The children of nodes represent the right-hand side of the production used to parse the node.,hats.pdf,Not_Req
+5246,The program to which the High Assurance Transformation System applies a transformation.,hats.pdf,Not_Req
+5247,A target file that contains a computer program.,hats.pdf,Not_Req
+5248,An SDT generated by parsing a target file.,hats.pdf,Not_Req
+5249,A node in a tree that has no descendants.,hats.pdf,Not_Req
+5250,The date and time of the most recent modification of a file. It is assumed that the Host OS keeps the time stamp for each file.,hats.pdf,Not_Req
+5251,See parsed transformation language program.,hats.pdf,Not_Req
+5252,"A text string used as a single unit, for example, a word. ",hats.pdf,Not_Req
+5253,Tokens are described by the lexical specification.,hats.pdf,Not_Req
+5254,A rule that specifies the translation of one string into another string. ,hats.pdf,Not_Req
+5255,HATS applies transformations to target files.,hats.pdf,Not_Req
+5256,A target file in an application.,hats.pdf,Not_Req
+5257,A sequence of transformations along with constructs to control the application of the transformations.,hats.pdf,Not_Req
+5258,The program that results from applying a transformation language program to a target file.,hats.pdf,Not_Req
+5259,The Unix operating system developed by AT&T.,hats.pdf,Not_Req
+5260,A file that defines the semantics of some function symbols in the language of the domain.,hats.pdf,Not_Req
+5261,An element of a graphical user environment that contains at a minimum a border and a viewing area.,hats.pdf,Not_Req
+5262,The Windows operating system developed by Microsoft.,hats.pdf,Not_Req
+5263,"A tree T<N,E> is an abstract data type composed of a set of nodes N and a set of directed edges E:NxN. ",hats.pdf,Not_Req
+5264,An edge E1 from node N1 to node N2 associates the parent node (N1) with the child (or immediate descendant) node N2. ,hats.pdf,Not_Req
+5265,Each child node has exactly one parent. ,hats.pdf,Not_Req
+5266,"Each tree has exactly one distinguished node, the root node, which has no parent. ",hats.pdf,Not_Req
+5267,The descendant nodes of a node are found by computing the transitive closure of the child relationship. No node may be a descendant of itself.,hats.pdf,Not_Req
+5268,Table 2 lists the acronyms and their associated definitions used in this document.,hats.pdf,Not_Req
+5269,"The SRS is divided into four major sections: Introduction, General Description, Specific Requirements, and Appendices.",hats.pdf,Not_Req
+5270,"Section 2, the general description, describes the product, its functionality, and its structure. ",hats.pdf,Not_Req
+5271,"It contains: (1) Product Features, which describes from a high-level point of view the main features of the software; (2) User Characteristics, which identifies the different types of system users, and describes their individual interaction with the system. Use-cases are used to define the user characteristics; a description of the actors, use-cases, and scenarios are included in this section; (3) General Constraints of the system; and (4) Assumptions and Dependencies of the system.",hats.pdf,Not_Req
+5272,Section 3 describes specific requirements. ,hats.pdf,Not_Req
+5273,"It consists of (1) External Interface Requirements, which describes the requirements for user, hardware, software, and communications interfaces; (2) Behavioral Requirements, which divides behavioral requirements into the following categories: related real-world objects, stimulus, related features, and functional requirements; (3) Non-Behavioral Requirements, which includes performance requirements, qualitative requirements, and design and implementation constraints; and (4) Other Requirements, which will list all other requirements not included in the previous sections.",hats.pdf,Not_Req
+5274,Appendix A contains the object model for the HATS-GUI.,hats.pdf,Not_Req
+5275,Appendix B contains the data flow diagrams for the system.,hats.pdf,Not_Req
+5276,Appendix C contains state descriptions of the HATS-GUI.,hats.pdf,Not_Req
+5277,Appendix D describes communications between HATS and the HATS-GUI. Appendix E and F describe searching outputs strings and trees.,hats.pdf,Not_Req
+5278,Appendix G gives an example Syntax Derivation Tree (SDT) display.,hats.pdf,Not_Req
+5279,HATS was developed to explore transformation-based software development. ,hats.pdf,Not_Req
+5280,Transformations are a well- known formal method for developing software. ,hats.pdf,Not_Req
+5281,The HATS-GUI is intended to provide HATS users with an intuitive graphical interface to the HATS system. ,hats.pdf,Not_Req
+5282,"HATS is publicly available, and the HATS-GUI will be delivered with HATS.",hats.pdf,Not_Req
+5283,The purpose of HATS is to perform program transformations in a provably correct fashion. ,hats.pdf,Not_Req
+5284,"This enables users to construct software by transforming a target program, or simply a target, written in an abstract language to a transformed output program written in a more concrete language. ",hats.pdf,Not_Req
+5285,"By demonstrating that the transformations preserve the semantics of the target program, the user has assurance that the transformed program is correct. ",hats.pdf,Not_Req
+5286,An overview of the HATS architecture is given in Figure 1 below. HATS applies a sequence of transformations to a target program by following instructions in a transformation language program. A transformation language program consists of sequences of transformation instructions and constructs to control the application of transformations.,hats.pdf,Not_Req
+5287,HATS provides a set of services that execute transformation language programs.,hats.pdf,Not_Req
+5288,"It is written in the language ML, which has been ported to most common computer platforms. ",hats.pdf,Not_Req
+5289,HATS services are invoked by executing ML programs. ,hats.pdf,Not_Req
+5290,There is one ML program for each function that HATS provides. ,hats.pdf,Not_Req
+5291,The collection of programs is referred to in this document at HATS-SML and is described in Appendix D.1 HATS-SML executes transformation language programs written in a particular problem domain. ,hats.pdf,Not_Req
+5292,"The core of a problem domain describes the language over which transformations may occur. It consists of three elements, each of which is stored in a separate file: a description of tokens in a language, a description of a context-free grammar for a language, and a library of user-defined functions that evaluate some of the function symbols in the language.",hats.pdf,Not_Req
+5293,"An application consists of a domain, rules for transforming input strings to output strings, and sets of inputs and outputs. ",hats.pdf,Not_Req
+5294,"These rules are applied to a target program. The result of applying a sequence of transformations to a target program may be an SDT, a pretty-printed text string, or both. ",hats.pdf,Not_Req
+5295,The pretty-printed text string is generated by applying pretty-print rules to an SDT. ,hats.pdf,Not_Req
+5296,The pretty-print rules are contained in a pretty-print style file. ,hats.pdf,Not_Req
+5297,"There may be any number of pretty-print style files, target programs, transformation language programs, or output files in a given application. ",hats.pdf,Not_Req
+5298,"Additionally, there may be a parsed version of a transformation language program. ",hats.pdf,Not_Req
+5299,"A summary of the files, file extensions, and names is given in Table 3.",hats.pdf,Not_Req
+5300,1 The term HATS-SML refers to the set of services provided by the ML programs for applying transformations to targets.,hats.pdf,Not_Req
+5301,Definition of the language over which transformations take place. ,hats.pdf,Not_Req
+5302,"This is part of the core, and exactly one is required for each problem domain.",hats.pdf,Not_Req
+5303,Descriptions of tokens in the language over which transformations take place. ,hats.pdf,Not_Req
+5304,"This is part of the core, and exactly one is required for each",hats.pdf,Not_Req
+5305,Function definitions written in ML that define semantics for evaluating function symbols in the language. ,hats.pdf,Not_Req
+5306,"These functions are evaluated semantically, not just syntactically. ",hats.pdf,Not_Req
+5307,"This is part of the core, and exactly one file is required for each problem domain.",hats.pdf,Not_Req
+5308,Input program to be transformed. ,hats.pdf,Not_Req
+5309,There may be any number of target files in an application.,hats.pdf,Not_Req
+5310,SDT corresponding to a parsed target file. ,hats.pdf,Not_Req
+5311,There may be zero or one.,hats.pdf,Not_Req
+5312,Sequence of transformations to be applied to a target file. ,hats.pdf,Not_Req
+5313,There may be any number of transformation language program files in an application.,hats.pdf,Not_Req
+5314,Directives that control the formatting of a transformed target file. ,hats.pdf,Not_Req
+5315,Any number of pretty-print files may appear in an application.,hats.pdf,Not_Req
+5316,Formatted output obtained by applying a transformation language program to a target file.,hats.pdf,Not_Req
+5317,Syntax derivation tree obtained by applying a transformation language program to a target file.,hats.pdf,Not_Req
+5318,A parser program generated from the grammar and lexical specifications to parse transformation language program files and target files.,hats.pdf,Not_Req
+5319,A file containing a sequence of HATS-SML programs to be executed in order with minimal user intervention.,hats.pdf,Not_Req
+5320,SDT corresponding to a parsed transformation language program.,hats.pdf,Not_Req
+5321,There may be zero or one parsed transformation language programs for each transformation language program.,hats.pdf,Not_Req
+5322,The HATS-GUI is a system that will provide a user with an intuitive interface to HATS-SML.,hats.pdf,Not_Req
+5323,"This system will facilitate the creation, storage, retrieval, and modification of the files in an application. ",hats.pdf,Not_Req
+5324,"The HATS-GUI will also facilitate the parsing and execution of sequences of transformation language programs, display error messages generated by HATS-SML, and facilitate the display and exploration of transformation outputs in the form of SDTs and pretty-printed text. ",hats.pdf,Not_Req
+5325,"It is the expectation of the client that by making the interface portable, the number of users of HATS will increase, and that the reliability of HATS-SML will increase due to the increased exercising of its capabilities resulting in error detection and correction.",hats.pdf,Not_Req
+5326,The HATS-GUI shall provide a user with the ability to construct and use transformations. ,hats.pdf,Not_Req
+5327,The HATS-GUI shall facilitate the following activities: management of applications; parsing of transformation language programs and target programs; execution of transformation language programs; and examination of SDT and pretty-printed output from transformations.,hats.pdf,Not_Req
+5328,The subsections that follow provide an overview of each of the mentioned features.,hats.pdf,Not_Req
+5329,The flow of data between these functions is illustrated in the Data Flow Diagrams (DFD) given in Appendix B.,hats.pdf,Not_Req
+5330,The transition of states that the system will be in is illustrated in the State Transition Diagram given in Appendix C.,hats.pdf,Not_Req
+5331,"The HATS-GUI shall facilitate the creation, deletion, and modification of the files related to an application. ",hats.pdf,Not_Req
+5332,"As a practical matter, all files related to an application shall be stored in the same directory or folder. ",hats.pdf,Not_Req
+5333,"In addition, the HATS-GUI shall manage file associations within an application. File associations are relationships between files. ",hats.pdf,Not_Req
+5334,"For example, target files will be associated with the most recently used pretty-print style files. ",hats.pdf,Not_Req
+5335,The HATS- GUI shall allow the user to examine and modify these associations.,hats.pdf,Not_Req
+5336,The HATS-GUI shall orchestrate the parsing of transformation language programs and target files. ,hats.pdf,Not_Req
+5337,Parsing entails translating a human-readable text file into a syntax derivation tree. ,hats.pdf,Not_Req
+5338,"Parsing can be a time-consuming operation, particularly for multiple look-ahead grammars. In order to expedite execution of transformations, parsed versions of files can be saved.",hats.pdf,Not_Req
+5339,Two types of files must be parsed. ,hats.pdf,Not_Req
+5340,A transformation language program is a text file describing a set of transformations to be applied to a target file. ,hats.pdf,Not_Req
+5341,A target program is a text file containing the input string to be transformed. ,hats.pdf,Not_Req
+5342,"Parsing is done through the use of a parser program, which HATS-SML generates.",hats.pdf,Not_Req
+5343,Parser generation requires the lexical specification and the grammar as input.,hats.pdf,Not_Req
+5344,The HATS-GUI shall orchestrate the execution of transformation language programs. ,hats.pdf,Not_Req
+5345,"In order for HATS-SML to execute a transformation program, the program must be parsed and saved as an SDT. ",hats.pdf,Not_Req
+5346,The transformation language program specifies which target programs will be transformed. ,hats.pdf,Not_Req
+5347,The user creating the transformation language program is responsible for correctly identifying the target program. ,hats.pdf,Not_Req
+5348,Input file names are embedded in the transformation language program.,hats.pdf,Not_Req
+5349,"During execution of a transformation language program, HATS-SML creates SDTs as output. ",hats.pdf,Not_Req
+5350,These SDTs contain a parsed version of the transformed (output) string suitable for use as input to another transformation or as input to the pretty-print service. ,hats.pdf,Not_Req
+5351,(The pretty-print service transforms a target SDT into a text string according to formatting rules contained in a pretty-print style file.) ,hats.pdf,Not_Req
+5352,"In addition to the output file, the transformation language program may specify that debugging and error outputs. ",hats.pdf,Not_Req
+5353,The HATS-GUI shall capture data written to these streams and make that data available to the user.,hats.pdf,Not_Req
+5354,The HATS-GUI shall facilitate the display of transformation output and error messages received from HATS- SML in response to parsing or transformation. ,hats.pdf,Not_Req
+5355,There are several types of output that can be received from HATS-SML. ,hats.pdf,Not_Req
+5356,"During a given session, data sets may be created, saved as files, used as inputs, or deleted. ",hats.pdf,Not_Req
+5357,The HATS-GUI will associate saved files with the application. ,hats.pdf,Not_Req
+5358,The HATS-GUI will make a list of these files available to the user and allow the user to select files for display. ,hats.pdf,Not_Req
+5359,The display of SDTs and pretty-printed text shall allow the user to manipulate the display by choosing portions of the tree to display and by allowing the user to search for text strings and sub-trees.,hats.pdf,Not_Req
+5360,"There are three actors in this system: a user, HATS-SML, and the host O. S. ",hats.pdf,Not_Req
+5361,The user will access the HATS- GUI primarily to apply transformations to target files. ,hats.pdf,Not_Req
+5362,A user may set up an application for another user. ,hats.pdf,Not_Req
+5363,"Before applying a transformation to a target file, a user must first prepare the application. ",hats.pdf,Not_Req
+5364,A user may also choose to view output from a previous transformation. ,hats.pdf,Not_Req
+5365,These actors and use cases are discussed below.,hats.pdf,Not_Req
+5366,User: A user is someone who interacts with the HATS-GUI in order to prepare and execute program transformations. ,hats.pdf,Not_Req
+5367,Users of the HATS-GUI will be experts in a given domain and have a high level of understanding of transformations as a tool for constructing software. ,hats.pdf,Not_Req
+5368,"These users are expected to be computer savvy, possessing experience with the operation of editors and software tools, hierarchical file systems, and menu navigation. ",hats.pdf,Not_Req
+5369,A limited amount of direction and assistance will be necessary.,hats.pdf,Not_Req
+5370,"HATS-SML: HATS-SML provides the following services: make a parser file, parse a target file, parse a transformation language program, apply a transformation language program to a target file, and pretty-print an",hats.pdf,Not_Req
+5371,"HATS-SML may generate parsed transformation language programs, SDTs, pretty-printed text, or error messages as output. ",hats.pdf,Not_Req
+5372,The protocol for the use of HATS-SML is detailed in Appendix D.,hats.pdf,Not_Req
+5373,Host OS: This is the operating system under which the HATS-GUI and HATS-SML run. ,hats.pdf,Not_Req
+5374,The host OS is expected to provide file services and provide a buffer for copy-and-paste operations between applications.,hats.pdf,Not_Req
+5375,"The following use cases describe possible interactions between the HATS-GUI, the user, HATS-SML, and the host operating system.",hats.pdf,Not_Req
+5376,"They do not describe every possible interaction. In the descriptions that follow, steps in a scenario are numbered sequentially.",hats.pdf,Not_Req
+5377,Alternatives to a particular step are suggested by the flag “ALT <n>” where <n> is an alternative listed below the scenario. ,hats.pdf,Not_Req
+5378,Steps in the alternative replace steps in the main scenario. ,hats.pdf,Not_Req
+5379,The step numbers in the alternative indicate what steps in the main scenario are being replaced. ,hats.pdf,Not_Req
+5380,"For example, the step number “A1-2A” indicates this step is in the alternative numbered 1 (A1) and this step is the first step replacing step 2 in the main scenario. ",hats.pdf,Not_Req
+5381,"If more than one alternative is listed, either alternative may be taken.",hats.pdf,Not_Req
+5382,Use Case Summary: The user requests the parsing of a transformation language program or a target file.,hats.pdf,Not_Req
+5383,The file to be parsed and the parser file are inputs to HATS-SML. HATS-SML generates an SDT. ,hats.pdf,Not_Req
+5384,The output is saved in the application.,hats.pdf,Not_Req
+5385,Used by: Execute Transformation Preconditions:,hats.pdf,Not_Req
+5386,An application has been selected (Refer to Use Case 3).,hats.pdf,Not_Req
+5387,The transformation language program and core domain files have been created (Refer to Use Case 5).,hats.pdf,Not_Req
+5388,Scenario 1: User selects the option to parse a transformation language program from currently open application (ALT 1).,hats.pdf,Not_Req
+5389,User selects a transformation language program file (.tlp) to parse (Refer to Use Case 4) (ALT 2).,hats.pdf,Not_Req
+5390,The HATS-GUI compares the time stamps on the lexical specification and grammar files to the time stamp on the application’s parser file. ,hats.pdf,Not_Req
+5391,"The parser file is the youngest of the three files (ALT 3, ALT 6).",hats.pdf,Not_Req
+5392,"The HATS-GUI sends a message to the Host OS to start either the ParseTarget or the ParseProgram program and sends the names of the target file or program file, the output file, and the parser file to the",hats.pdf,Not_Req
+5393,HATS-SML parses the input file (ALT 7) and writes the output to the output file.,hats.pdf,Not_Req
+5394,ALT 1: The user selects the option to parse a target file instead of a transformation language program. ,hats.pdf,Not_Req
+5395,A1-2A: The user selects a target file to parse (Refer to Use Case 4) (ALT 2).,hats.pdf,Not_Req
+5396,A1-2B: Use case continues with step 3.,hats.pdf,Not_Req
+5397,ALT 2: A file is already selected. A2-2A: Step 2 is skipped.,hats.pdf,Not_Req
+5398,A2-2B: Use case continues with step 3.,hats.pdf,Not_Req
+5399,A3-3A: The HATS-GUI sends a message to the Host OS to start the MakeParser program and sends the lexical specification and grammar file names and the parser file name.,hats.pdf,Not_Req
+5400,A3-3B The Host OS starts the MakeParser program.,hats.pdf,Not_Req
+5401,A3-3C: MakeParser writes the output parser file (ALT 5).,hats.pdf,Not_Req
+5402,A3-3D: Use case continues with step 4.,hats.pdf,Not_Req
+5403,ALT 5: Error on creation of parser file.,hats.pdf,Not_Req
+5404,A5-3A: HATS-SML encounters an error creating the parser file. The HATS-GUI writes the error message to the error window.,hats.pdf,Not_Req
+5405,ALT 6: Parser file is not youngest.,hats.pdf,Not_Req
+5406,A6-3A: Use case continues with step A3-3A.,hats.pdf,Not_Req
+5407,A7-5A: HATS-SML encounters an error parsing the input file. ,hats.pdf,Not_Req
+5408,The HATS-GUI writes the error message to the error window.,hats.pdf,Not_Req
+5409,Use Case Summary: The user requests the application of a transformation language program to a target file. ,hats.pdf,Not_Req
+5410,HATS-SML applies the transformation language program to the target.,hats.pdf,Not_Req
+5411,Target and transformation language programs have been prepared.,hats.pdf,Not_Req
+5412,An application has been selected (Refer to Use Case 3).,hats.pdf,Not_Req
+5413,Scenario 1: User selects the option to execute a transformation language program from the currently selected application.,hats.pdf,Not_Req
+5414,User selects a transformation language program file (Refer to Use Case 4) (ALT 1).,hats.pdf,Not_Req
+5415,"The HATS-GUI compares the time stamp of the parsed program file and the parser, the transformation language program, and the user-defined library files. ",hats.pdf,Not_Req
+5416,"The parsed program file is younger than any of these files (ALT 4, ALT 5).",hats.pdf,Not_Req
+5417,The HATS-GUI clears the displays for the standard error and standard output.,hats.pdf,Not_Req
+5418,The HATS-GUI sends a message to the Host OS to start the ApplyTransformations program and sends the names of the parsed program file and the user-defined library file to the Host OS. ,hats.pdf,Not_Req
+5419,The HATS-GUI redirects the standard error and standard output streams of the ApplyTransformation process and collects data written to these streams for later display.,hats.pdf,Not_Req
+5420,ALT 1: A transformation language program file has already been selected. A1-2A: Step 2 is skipped.,hats.pdf,Not_Req
+5421,A1-2B: Use case continues with step 3.,hats.pdf,Not_Req
+5422,A2-3A: The HATS-GUI creates a program parser file (Refer to Use Case 1). A2-3B: Use case continues with step 4.,hats.pdf,Not_Req
+5423,ALT 3: The parser file is not younger. A3-3A: Use case continues with step A2-3A.,hats.pdf,Not_Req
+5424,ALT 4: No program.parsed file exists.,hats.pdf,Not_Req
+5425,A4-4A: The HATS-GUI creates a parsed program file (Refer to Use Case 1). A4-4B: Use case continues with step 5.,hats.pdf,Not_Req
+5426,ALT 5: Program.parsed file is not younger.,hats.pdf,Not_Req
+5427,3. The HATS-GUI compares the time stamp on the lexical specification and grammar files to the time stamp on the parser file.,hats.pdf,Not_Req
+5428,"The parser file is younger (ALT 2, ALT 3).",hats.pdf,Not_Req
+5429,7. The HATS-SML ApplyTransformation program writes output SDTs to files named in the transformation language program. (The transformation language program contains all references to input and output files. The HATS-GUI does not handle file input and file output for ApplyTransformaion.),hats.pdf,Not_Req
+5430,A5-4A: Use case continues with step A4-4A.,hats.pdf,Not_Req
+5431,"Use Case Summary: The user selects an application. Actors: User, Host OS",hats.pdf,Not_Req
+5432,Used by: Parse Transformation Language Program (Refer to Use Case 1).,hats.pdf,Not_Req
+5433,Display Pretty-printed text Transformation Output (Refer to Use Case 6).,hats.pdf,Not_Req
+5434,Preconditions: Desired application exists (Refer to Use Case 5). Scenario 1:,hats.pdf,Not_Req
+5435,System requests from Host OS a list of existing applications within current directory.,hats.pdf,Not_Req
+5436,Host OS returns list of files within current directory.,hats.pdf,Not_Req
+5437,"System displays list of existing applications within current directory (ALT 1, ALT 2).",hats.pdf,Not_Req
+5438,User selects an application within the list (ALT 2).,hats.pdf,Not_Req
+5439,System sets selected application as the current application.,hats.pdf,Not_Req
+5440,ALT 1: No applications exist in current directory.,hats.pdf,Not_Req
+5441,A1-3A: User cannot select any application to perform operations on it. A1-3B: End of use case.,hats.pdf,Not_Req
+5442,ALT 2: User chooses to move up or down a directory level. ,hats.pdf,Not_Req
+5443,A2-3A: User selects a subdirectory or the parent directory. ,hats.pdf,Not_Req
+5444,A2-3B: System changes current directory.,hats.pdf,Not_Req
+5445,A2-3C: Use case continues with step 1.,hats.pdf,Not_Req
+5446,"Use Case Summary: The user wants to perform some operation, and the system requests a filename. ",hats.pdf,Not_Req
+5447,A list of file names in the currently selected application is presented. ,hats.pdf,Not_Req
+5448,The user selects one file name in the application. ,hats.pdf,Not_Req
+5449,Used by: Parse Transformation Language Program (Refer to Use Case 1).,hats.pdf,Not_Req
+5450,Display SDT Transformation Output (Refer to Use Case 5).,hats.pdf,Not_Req
+5451,Display Pretty-printed text Transformation Output (Refer to Use Case 6).,hats.pdf,Not_Req
+5452,Preconditions: An application has been selected (Refer to Use case 3). Scenario 1:,hats.pdf,Not_Req
+5453,System requests from Host OS a list of files in the current directory.,hats.pdf,Not_Req
+5454,Host OS only returns list of files in the current directory.,hats.pdf,Not_Req
+5455,"System displays this list of files (ALT 1, ALT 2).",hats.pdf,Not_Req
+5456,"User selects a file within the list (ALT 2, ALT 3).",hats.pdf,Not_Req
+5457,System sets selected file as the current file.,hats.pdf,Not_Req
+5458,ALT 1: No files exist in current directory.,hats.pdf,Not_Req
+5459,A1-3A: User cannot select any application to perform operations on it. ,hats.pdf,Not_Req
+5460,A1-3B: End of use case.,hats.pdf,Not_Req
+5461,ALT 2: User chooses to move up or down a directory level. ,hats.pdf,Not_Req
+5462,A2-3A: User selects a subdirectory or the parent directory. ,hats.pdf,Not_Req
+5463,A2-3B: System changes current directory.,hats.pdf,Not_Req
+5464,A2-3C: Use case continues with step 1.,hats.pdf,Not_Req
+5465,ALT 3: User enters path of file instead of selecting from list.,hats.pdf,Not_Req
+5466,A3-4A: User types path and file name.,hats.pdf,Not_Req
+5467,A3-4B: System/OS accesses file using path (ALT 4).,hats.pdf,Not_Req
+5468,A3-4C: System prompts user to accept copying file into current application. User has option to confirm or cancel.,hats.pdf,Not_Req
+5469,A3-4D: User confirms (ALT 5).,hats.pdf,Not_Req
+5470,A3-4E: System copies file into current application. ,hats.pdf,Not_Req
+5471,A3-4F: Use case continues with step 5.,hats.pdf,Not_Req
+5472,ALT 4: User-entered file not available.,hats.pdf,Not_Req
+5473,A4-4A: System presents user with error “file not found.” ,hats.pdf,Not_Req
+5474,ALT 5: User does not confirm.,hats.pdf,Not_Req
+5475,A5-A3-4A: System does not copy file into current application. ,hats.pdf,Not_Req
+5476,A5-A3-4B: Use case continues with A3-4F.,hats.pdf,Not_Req
+5477,Use Case Summary: The user wants to perform some operation on a selected application. ,hats.pdf,Not_Req
+5478,"These operations include open, close, save, save as, create new, edit files within application, and configure the application. Actors: User, Host OS",hats.pdf,Not_Req
+5479,Preconditions: Application has been selected (Refer to Use Case 3).,hats.pdf,Not_Req
+5480,User selects option to close the currently selected application.,hats.pdf,Not_Req
+5481,System asks for confirmation from user to close application.,hats.pdf,Not_Req
+5482,User confirms to close application (ALT 1).,hats.pdf,Not_Req
+5483,System checks that the changes to currently selected application’s configuration have been saved (ALT 2).,hats.pdf,Not_Req
+5484,System sets currently selected application to ‘none’.,hats.pdf,Not_Req
+5485,ALT 1: User cancels operation A1-3: User selects cancel option.,hats.pdf,Not_Req
+5486,A1-4: System cancels the operation. ,hats.pdf,Not_Req
+5487,ALT 2: Changes to currently selected application have not been saved.,hats.pdf,Not_Req
+5488,A2-4A: System asks user to confirm save application.,hats.pdf,Not_Req
+5489,A2-4B: User chooses to save application (ALT 3).,hats.pdf,Not_Req
+5490,A2-4C: System saves the changes made to the application configuration before closing (Scenario 2). ,hats.pdf,Not_Req
+5491,ALT 3: User chooses not to save application.,hats.pdf,Not_Req
+5492,A3-4: System closes the application without saving the changes made to the application. ,hats.pdf,Not_Req
+5493,Preconditions: Application has been selected (Refer to Use Case 3).,hats.pdf,Not_Req
+5494,User selects option to save currently selected application.,hats.pdf,Not_Req
+5495,System requests Host OS to save configuration file for the selected application.,hats.pdf,Not_Req
+5496,Host OS saves the configuration file for the selected application into a non-volatile storage (ALT 1).,hats.pdf,Not_Req
+5497,System informs user that application has been saved.,hats.pdf,Not_Req
+5498,ALT 1: Host OS operating system was unable to save the current application. A1-3A: System informs that application has not been saved.,hats.pdf,Not_Req
+5499,User selects to save a currently open application using a different directory name.,hats.pdf,Not_Req
+5500,System requests user for a name to save the open application.,hats.pdf,Not_Req
+5501,User enters or selects a name for the application to be saved (ALT 1).,hats.pdf,Not_Req
+5502,System confirms that application name is unique (ALT 2).,hats.pdf,Not_Req
+5503,System requests Host OS to create new directory with the given name.,hats.pdf,Not_Req
+5504,Host OS creates new application with the entered name (ALT 3).,hats.pdf,Not_Req
+5505,"System requests Host OS to copy core files, configuration files, and .tlp files to the new directory.",hats.pdf,Not_Req
+5506,Host OS copies all files from selected application to created application (ALT 3).,hats.pdf,Not_Req
+5507,System informs user that application has been saved with entered name.,hats.pdf,Not_Req
+5508,ALT 1: User chooses to cancel operation,hats.pdf,Not_Req
+5509,A1-3: User selects cancel option.,hats.pdf,Not_Req
+5510,A1-4A: System cancels the operation and the application is not saved. ,hats.pdf,Not_Req
+5511,ALT 2: Application already exists.,hats.pdf,Not_Req
+5512,A2-4A: System informs user that an application already exists with this name. A2-4B: End of use case.,hats.pdf,Not_Req
+5513,ALT 3: Host OS experiences file system error. A3: End of use case.,hats.pdf,Not_Req
+5514,Scenario 4: Edit Files in an Application,hats.pdf,Not_Req
+5515,Preconditions: Application has been selected (Refer to Use Case 3).,hats.pdf,Not_Req
+5516,User selects option to edit a file within the currently selected application.,hats.pdf,Not_Req
+5517,User selects file to edit (Use Case 4).,hats.pdf,Not_Req
+5518,System checks application to determine if editor is associated with this file. ,hats.pdf,Not_Req
+5519,An editor is associated with the file if the configuration explicitly associates this file with an editor or an editor is associated with files of this type. ,hats.pdf,Not_Req
+5520,An editor is associated with this file (ALT 1).,hats.pdf,Not_Req
+5521,The HATS-GUI sends message to Host OS to start the preferred editor in new process and passes file name to editor.,hats.pdf,Not_Req
+5522,"Host OS initiates process, puts editor in process, sends the filename as argument.",hats.pdf,Not_Req
+5523,ALT 1: No editor is associated with this file.,hats.pdf,Not_Req
+5524,A1-3A: The HATS-GUI prompts the user to select a configured editor.,hats.pdf,Not_Req
+5525,A1-3B: The user selects a configured editor.,hats.pdf,Not_Req
+5526,A1-3C: The HATS-GUI prompts the user to associate the editor with the file or the file type.,hats.pdf,Not_Req
+5527,"A1-3D: The user selects associating the editor with the file type (ALT 2, ALT 3).",hats.pdf,Not_Req
+5528,A1-3E: The HATS-GUI associates the editor with the file type by updating the application configuration. ,hats.pdf,Not_Req
+5529,A1-3F: The selected editor becomes the preferred editor.,hats.pdf,Not_Req
+5530,A1-3G: Use case continues with step 4.,hats.pdf,Not_Req
+5531,ALT 2: User selects associating editor with specific file.,hats.pdf,Not_Req
+5532,A2-3E: The HATS-GUI associates the editor with the specific file by updating the application configuration.,hats.pdf,Not_Req
+5533,A2-3F: Use case continues with step A1-3F.,hats.pdf,Not_Req
+5534,Scenario 5: Create New Application Preconditions: None.,hats.pdf,Not_Req
+5535,User selects option to create a new application.,hats.pdf,Not_Req
+5536,Close existing application if one is selected (Refer to Use Case 5 – Scenario 1).,hats.pdf,Not_Req
+5537,System asks user to enter a name and location for new application.,hats.pdf,Not_Req
+5538,User enters name and location for new application (ALT 1).,hats.pdf,Not_Req
+5539,System requests Host OS to create new application.,hats.pdf,Not_Req
+5540,Host OS creates new application (ALT 2).,hats.pdf,Not_Req
+5541,System informs user that new application has been created.,hats.pdf,Not_Req
+5542,ALT 1: User selects to cancel operation.,hats.pdf,Not_Req
+5543,A1-4A: System cancels operation. No application is created. A1-4B: End of use case.,hats.pdf,Not_Req
+5544,ALT 2: An application with the same name already exists.,hats.pdf,Not_Req
+5545,A2-6A: System presents error message “Application already exists.” ,hats.pdf,Not_Req
+5546,Use Case Summary: The user selects an application. ,hats.pdf,Not_Req
+5547,The user configures the settings of the selected application. ,hats.pdf,Not_Req
+5548,"The settings of an application include, available editors, SDT display colors, SDT display shapes, default number of levels to expand, file associations between files and editors, and file associations between target files and transformation language program.",hats.pdf,Not_Req
+5549,Preconditions: Application has been selected (Refer to Use Case 3). Scenario 1: Configure Editor List.,hats.pdf,Not_Req
+5550,User selects option to configure editors.,hats.pdf,Not_Req
+5551,The system prompts for editor name and configuration information. ,hats.pdf,Not_Req
+5552,Editor configuration information must be sufficient to start the editor on the Host OS.,hats.pdf,Not_Req
+5553,User enters editor name and parameters (ALT 1).,hats.pdf,Not_Req
+5554,System saves editor configuration in application configuration.,hats.pdf,Not_Req
+5555,User selects option to configure the colors and shapes of the graphical representation of an SDT.,hats.pdf,Not_Req
+5556,System displays a list containing types of displayed nodes and their corresponding current configured colors. ,hats.pdf,Not_Req
+5557,The types of displayed nodes are given in Table 4.,hats.pdf,Not_Req
+5558,User selects a type of node from list. (ALT 1).,hats.pdf,Not_Req
+5559,System displays a list of supported colors and shapes.,hats.pdf,Not_Req
+5560,User selects a color and a shape from the list for the selected type of displayed node (ALT 2).,hats.pdf,Not_Req
+5561,System sets the selected values as the color and shape for the type of displayed node selected.,hats.pdf,Not_Req
+5562,ALT 1: User cancels the ‘configure display’ operation.,hats.pdf,Not_Req
+5563,A1-3A: System cancels operation. No changes in the default colors of are made. A1-3B: End of use case.,hats.pdf,Not_Req
+5564,ALT 2: User cancels operation for a particular type of displayed node selected.,hats.pdf,Not_Req
+5565,A2-5A: System cancels operation. No change to the default color for a particular type of displayed node is made.,hats.pdf,Not_Req
+5566,A2-5B: Use case continues with step 2.,hats.pdf,Not_Req
+5567,Displayed node corresponding to the root node of the SDT.,hats.pdf,Not_Req
+5568,"Displayed node corresponding to a terminal node in an SDT. The terminal node has no children in the SDT, and the displayed node cannot be expanded.",hats.pdf,Not_Req
+5569,"A non-expandable displayed node D that corresponds to an SDT node N where N has a parent node P, but there is no display node corresponding to P. (Although not technically correct, one can consider this the case where the parent of D is not displayed.)",hats.pdf,Not_Req
+5570,"An expandable displayed node D that corresponds to an SDT node N where N has a parent node P, but there is no display node corresponding to P. (Although not technically correct, one can consider this the case where the parent of D is not displayed.)",hats.pdf,Not_Req
+5571,Displayed node drawn as a leaf node (no displayed descendants) but whose corresponding SDT node is non-terminal.,hats.pdf,Not_Req
+5572,A displayed node drawn with a parent and descendants.,hats.pdf,Not_Req
+5573,User selects option to configure the default number of levels to expand in response to a single mouse click.,hats.pdf,Not_Req
+5574,System asks user to select or enter a number of levels to expand.,hats.pdf,Not_Req
+5575,User enters or selects a number of levels to expand. ,hats.pdf,Not_Req
+5576,Number entered is a natural number.,hats.pdf,Not_Req
+5577,System sets the entered or selected number of levels as the default number of levels to expand.,hats.pdf,Not_Req
+5578,User selects option to associate file types with editors (ALT 1).,hats.pdf,Not_Req
+5579,System displays a list of configured editors. (Refer to Use Case 6.),hats.pdf,Not_Req
+5580,System displays a list of file types.,hats.pdf,Not_Req
+5581,User selects a file type from list (ALT 2).,hats.pdf,Not_Req
+5582,User selects an editor from list (ALT 2).,hats.pdf,Not_Req
+5583,"System associates the selected file type with the selected editor. When the user tries to edit a file of the type selected, the system will request the Host OS to initiate a process with the associated editor.",hats.pdf,Not_Req
+5584,ALT 1: User selects option to associate a particular file with an editor.,hats.pdf,Not_Req
+5585,A1-1A: System displays a list of configured editors. (Refer to Use Case 6.),hats.pdf,Not_Req
+5586,A1-1B: System displays the list of files in the currently selected application (ALT 3).,hats.pdf,Not_Req
+5587,A1-1C: User selects a file from list (ALT 2).,hats.pdf,Not_Req
+5588,A1-1D: User selects an editor from list (ALT 2).,hats.pdf,Not_Req
+5589,A1-1E: System associates the selected file with the selected editor. ,hats.pdf,Not_Req
+5590,"When the user tries to edit the selected file, the system will request the Host OS to initiate a process with the associated editor. (Refer to Use Case 5.)",hats.pdf,Not_Req
+5591,A2-1B: System cancels operation. ,hats.pdf,Not_Req
+5592,No changes in the associations are made.,hats.pdf,Not_Req
+5593,A3-1: Use case continues with step A1-1D.,hats.pdf,Not_Req
+5594,User selects option to save configuration.,hats.pdf,Not_Req
+5595,System saves configuration with the application.,hats.pdf,Not_Req
+5596,Use Case Summary: The user wants to display and manipulate a graphical representation of an SDT.,hats.pdf,Not_Req
+5597,"Manipulation of a graphical representation of an SDT includes selecting and unselecting displayed nodes, navigation through the display using a navigation window and scrolling, expanding and collapsing displayed nodes, hiding displayed nodes, searching for SDT sub-trees, and finding smallest well-formed trees.",hats.pdf,Not_Req
+5598,Preconditions: Transformation of a target file was successful and transformation output has been stored and associated with the application.,hats.pdf,Not_Req
+5599,User selects option to view and manipulate a graphical representation of an SDT.,hats.pdf,Not_Req
+5600,User selects SDT to view and manipulate (Refer to Use Case 4).,hats.pdf,Not_Req
+5601,System displays a graphical representation of the selected SDT in an on-screen work area.,hats.pdf,Not_Req
+5602,The work area of the SDT display contains the following elements:,hats.pdf,Not_Req
+5603,a) A window that displays the displayed graph representation of the SDT.,hats.pdf,Not_Req
+5604,b) A text window that displays the labels of the leaf nodes in the currently displayed graph.,hats.pdf,Not_Req
+5605,"c) If either window is too small to contain all the information to be presented, the windows will have scroll bars to facilitate scrolling. ",hats.pdf,Not_Req
+5606,The system will respond to dragging of scroll buttons (or pressing arrow keys) by shifting the display in the appropriate direction.,hats.pdf,Not_Req
+5607,"d) If the SDT is too large for the window, a separate, small window with a compressed view of the SDT will be displayed. ",hats.pdf,Not_Req
+5608,"In this window, a displayed graph of the entire SDT will be drawn. ",hats.pdf,Not_Req
+5609,The nodes of this displayed graph will be smaller than the displayed nodes in the SDT display work area. ,hats.pdf,Not_Req
+5610,It is not necessary that the user be able to read node labels. ,hats.pdf,Not_Req
+5611,It is only necessary that the user be able to see the high-level structure of the SDT.,hats.pdf,Not_Req
+5612,A small box named the locator box will be displayed showing the part of the SDT currently displayed in the main SDT display window.,hats.pdf,Not_Req
+5613,4. User is able to manipulate the displayed graph representation of the SDT. (See the remaining scenarios.),hats.pdf,Not_Req
+5614,User selects one or more displayed nodes. ,hats.pdf,Not_Req
+5615,Displayed node selection methods are described here.,hats.pdf,Not_Req
+5616,A single node can be selected by a right mouse click on the node.,hats.pdf,Not_Req
+5617,A single node can be selected via the keyboard by moving the keyboard cursor to a node and pressing the enter key. ,hats.pdf,Not_Req
+5618,The keyboard cursor is moved between nodes using the tab key.,hats.pdf,Not_Req
+5619,Several nodes can be selected by drawing a mouse box around the desired nodes.,hats.pdf,Not_Req
+5620,Several nodes can be selected by holding the shift key down and selecting individual displayed nodes.,hats.pdf,Not_Req
+5621,"When a user selects a set of nodes using these operations (and the shift key is not held down), the previously selected set of nodes (if any) is unselected.",hats.pdf,Not_Req
+5622,System highlights the smallest well-formed tree of the selected nodes in the displayed graph.,hats.pdf,Not_Req
+5623,System finds corresponding portion of leaf text of the selected nodes in the displayed graph.,hats.pdf,Not_Req
+5624,System highlights the corresponding portion of leaf text.,hats.pdf,Not_Req
+5625,"If both SDT and Pretty-printed text are displayed, the system will find the corresponding pretty-printed text and highlight that text in the Pretty-print text window.",hats.pdf,Not_Req
+5626,The user clicks the mouse in the navigation window SDT display.,hats.pdf,Not_Req
+5627,The system determines the node in the displayed graph closest to the mouse cursor and redraws the displayed graph with this node in the center of the main display.,hats.pdf,Not_Req
+5628,The system updates the locator box in the navigation window display.,hats.pdf,Not_Req
+5629,User points the mouse cursor at a node and clicks the left mouse button (ALT 1).,hats.pdf,Not_Req
+5630,System displays the tree by expanding descendants of the node in the displayed graph. ,hats.pdf,Not_Req
+5631,The number of levels to expand is given by the application configuration.,hats.pdf,Not_Req
+5632,"If fewer than this number of levels exist, then all descendants of the chosen node are displayed",hats.pdf,Not_Req
+5633,System changes the shape and color of selected node as specified in the application configuration to indicate that it has become an expanded node.,hats.pdf,Not_Req
+5634,ALT 1: User selects to expand selected nodes.,hats.pdf,Not_Req
+5635,A1-1A: User selects a set of nodes (Refer to Scenario 2). A1-1B: User selects to expand selected nodes.,hats.pdf,Not_Req
+5636,A1-1C: Use case continues with step 2.,hats.pdf,Not_Req
+5637,User points the mouse cursor at a node and clicks the left mouse button.,hats.pdf,Not_Req
+5638,System removes all descendants of the selected node from the displayed graph.,hats.pdf,Not_Req
+5639,System changes the shape and color of selected node as specified in the application configuration to indicate that it has become a collapsed node.,hats.pdf,Not_Req
+5640,User selects one or more displayed nodes. (Refer to Use Case 7.),hats.pdf,Not_Req
+5641,User selects option to hide selected displayed nodes.,hats.pdf,Not_Req
+5642,System removes the selected nodes from the displayed graph.,hats.pdf,Not_Req
+5643,System changes the types of the displayed nodes remaining on the screen to indicate that there are hidden nodes in the displayed graph.,hats.pdf,Not_Req
+5644,User selects option to search SDT for a desired sub-tree.,hats.pdf,Not_Req
+5645,System asks user for the criteria to search nodes. Search criteria for SDTs are presented in Appendix E.,hats.pdf,Not_Req
+5646,System finds the first matching sub-tree in the SDT starting at the current keyboard cursor location (ALT 1).,hats.pdf,Not_Req
+5647,System creates a displayed graph for the sub-tree matching the search criteria. ,hats.pdf,Not_Req
+5648,The displayed nodes of the matching sub-tree are highlighted.,hats.pdf,Not_Req
+5649,"If no nodes match the search criteria, none are highlighted.",hats.pdf,Not_Req
+5650,"If both SDT and Pretty-printed text are displayed, the pretty-printed text corresponding to the highlighted nodes of the SDT is highlighted.",hats.pdf,Not_Req
+5651,ALT1: Failed search.,hats.pdf,Not_Req
+5652,A1-4: The system displays a message indicating that the search has failed. ,hats.pdf,Not_Req
+5653,User selects option to repeat a search SDT for a desired sub-tree.,hats.pdf,Not_Req
+5654,System finds the next matching sub-tree in the SDT starting at the current keyboard cursor location.,hats.pdf,Not_Req
+5655,System creates a displayed graph for the sub-tree matching the search criteria. ,hats.pdf,Not_Req
+5656,The displayed nodes of the matching sub-tree are highlighted.,hats.pdf,Not_Req
+5657,"If no nodes match the search criteria, none are highlighted.",hats.pdf,Not_Req
+5658,"If both SDT and Pretty-printed text are displayed, the pretty-printed text corresponding to the highlighted nodes of the SDT is highlighted.",hats.pdf,Not_Req
+5659,System displays text of leaf nodes in currently displayed graph in a text window.,hats.pdf,Not_Req
+5660,User selects a portion of displayed text.,hats.pdf,Not_Req
+5661,System highlights selected portion of text in the text window.,hats.pdf,Not_Req
+5662,"User selects option to copy selected text. Minimally, the system will copy selected text in response to the Ctrl-Insert key combination.",hats.pdf,Not_Req
+5663,System puts the selected and copied text in the Host OS copy/paste buffer.,hats.pdf,Not_Req
+5664,Precondition: The system is displaying an SDT generated by a transformation program. The transformation program is executed while the SDT is being displayed. The SDT file is overwritten by the ApplyTransformation program.,hats.pdf,Not_Req
+5665,The user selects the option to refresh the display of the SDT.,hats.pdf,Not_Req
+5666,The system disposes of the currently displayed SDT.,hats.pdf,Not_Req
+5667,The system reads the SDT file and displays the newly generated SDT. The display of the SDT contains approximately the same number of nodes as the previously displayed SDT.,hats.pdf,Not_Req
+5668,Use Case Summary: The user wants to display and manipulate a text representation of the result of applying a transformation language program to a target file. ,hats.pdf,Not_Req
+5669,Manipulation of text includes selecting text and searching for sub-strings.,hats.pdf,Not_Req
+5670,"Actors: User, Host OS.",hats.pdf,Not_Req
+5671,Preconditions: Transformation of a target file was successful and transformation output has been stored and associated with the application.,hats.pdf,Not_Req
+5672,Scenario 1: Display Pretty-Printed Text,hats.pdf,Not_Req
+5673,User selects option to view and manipulate a pretty-printed text from a particular successful transformation.,hats.pdf,Not_Req
+5674,User selects pretty-printed text to view and manipulate. (Refer to Use Case 4.),hats.pdf,Not_Req
+5675,System displays the pretty-printed text in a work window.,hats.pdf,Not_Req
+5676,a) The work area of the display of pretty-printed text contains a text window that displays the text.,hats.pdf,Not_Req
+5677,"b) If the window is too small to contain all the information to be presented, the windows will have scroll bars to facilitate scrolling. ",hats.pdf,Not_Req
+5678,The system will respond to dragging of scroll buttons (or pressing arrow keys) by shifting the display in the appropriate direction.,hats.pdf,Not_Req
+5679,User is able to manipulate the pretty-printed text. (See the remainder of the scenarios.),hats.pdf,Not_Req
+5680,User selects a portion of the displayed pretty-printed text. ,hats.pdf,Not_Req
+5681,Text selection methods are described here.,hats.pdf,Not_Req
+5682,Text can be selected by clicking and dragging the mouse across an area of text.,hats.pdf,Not_Req
+5683,Text can be selected by holding the shift key and moving the keyboard cursor using the arrow keys.,hats.pdf,Not_Req
+5684,"When a user selects text using these operations, the previously selected text (if any) is unselected.",hats.pdf,Not_Req
+5685,System highlights selected portion of the displayed pretty-printed text.,hats.pdf,Not_Req
+5686,"If both pretty-printed text and graphical representation of SDT are displayed, the system finds the corresponding displayed nodes of the SDT of the selected portion of pretty-printed text and highlights the corresponding displayed nodes of the SDT.",hats.pdf,Not_Req
+5687,User selects option to search pretty-printed text for desired text.,hats.pdf,Not_Req
+5688,System asks user for the criteria to search text. ,hats.pdf,Not_Req
+5689,Text search criteria are given in Appendix F.,hats.pdf,Not_Req
+5690,User enters or selects criteria to search text.,hats.pdf,Not_Req
+5691,System finds those portions of pretty-printed text that match the search criteria and highlights those portions of the text that match (ALT 1).,hats.pdf,Not_Req
+5692,"If both the pretty-printed text and the graphical representation of an SDT are displayed, the system finds the corresponding nodes of the SDT of the selected portion of pretty-printed text and highlights the corresponding nodes of the SDT.",hats.pdf,Not_Req
+5693,A1-4: The system displays a message indicating that the search has failed. A1-5: End of use case.,hats.pdf,Not_Req
+5694,Use Case Summary: The user requests the application of a pretty-print style file to a target SDT. ,hats.pdf,Not_Req
+5695,"The necessary file names are passed to HATS-SML, HATS-SML applies the pretty-print style to the SDT, and a formatted text file is generated.",hats.pdf,Not_Req
+5696,A target SDT file has been generated and a pretty-print style file exists.,hats.pdf,Not_Req
+5697,An application has been selected. (Refer to Use Case 3.),hats.pdf,Not_Req
+5698,Scenario 1: User selects the option to pretty-print a target from the currently selected application.,hats.pdf,Not_Req
+5699,User selects a target SDT (Refer to Use Case 4) (ALT 1).,hats.pdf,Not_Req
+5700,No pretty-print style file is associated with the target file. The HATS-GUI prompts the user to select a pretty-print style file.,hats.pdf,Not_Req
+5701,User selects a pretty-print style file (Refer to Use Case 4) (ALT 2).,hats.pdf,Not_Req
+5702,HATS-GUI generates a file name by appending “.txt” to the target SDT root name.,hats.pdf,Not_Req
+5703,The HATS-GUI verifies that no file with this name exists in the current directory. ,hats.pdf,Not_Req
+5704,This file becomes the output file name (ALT 3).,hats.pdf,Not_Req
+5705,"The HATS-GUI sends a message to the Host OS to start the Pretty-print program and sends the target SDT file name, the pretty-print style file name, and the output file name to Pretty-print as command line arguments.",hats.pdf,Not_Req
+5706,HATS-SML applies the style file to the target SDT and writes the output to the output file specified on the command line (ALT 6).,hats.pdf,Not_Req
+5707,ALT 1: A target SDT has already been selected. A1-2A: Step 2 is skipped.,hats.pdf,Not_Req
+5708,A1-2B: Use case continues with step 3.,hats.pdf,Not_Req
+5709,ALT 2: A pretty-print style file is associated with the target file. ,hats.pdf,Not_Req
+5710,A2-1: Use case continues with step 5.,hats.pdf,Not_Req
+5711,ALT 3: A file already exists with the output file name.,hats.pdf,Not_Req
+5712,A3-6A: HATS-GUI prompts the user to save the output under a new name. ,hats.pdf,Not_Req
+5713,"The prompt includes a text window containing the current output file name, a cancel option, and an OK option.",hats.pdf,Not_Req
+5714,"A3-6B: The user enters a new name and selects OK (ALT 4, ALT 5). x",hats.pdf,Not_Req
+5715,"The prompt includes a text window containing the current output file name, a cancel option, and an OK option.",hats.pdf,Not_Req
+5716,ALT 4: User selects the Cancel option. A4-1: End of use case.,hats.pdf,Not_Req
+5717,ALT 5: User selects OK option without changing file name.,hats.pdf,Not_Req
+5718,A5-6A: The output file name remains unchanged.,hats.pdf,Not_Req
+5719,The existing file will be overwritten. ,hats.pdf,Not_Req
+5720,A5-6B: Use case continues with step 7.,hats.pdf,Not_Req
+5721,ALT 6: The Pretty-print encounters an error.,hats.pdf,Not_Req
+5722,A6-8A: No text file is generated. The HATS-GUI displays an error message. A6-8B: End of use case.,hats.pdf,Not_Req
+5723,The general constraints on the development of the system are as follows:,hats.pdf,Not_Req
+5724,The system shall be platform independent and function properly on any operating system. ,hats.pdf,Not_Req
+5725,"Specifically, the system shall be tested under Sun Solaris, Windows 2000, and Linux. ",hats.pdf,Not_Req
+5726,It is intended for the system to run under any variation of the Microsoft Windows operating system later than Windows 95.,hats.pdf,Not_Req
+5727,The system shall be designed in such a way as to minimize the number of windows opened by the application. ,hats.pdf,Not_Req
+5728,"For example, it is not acceptable to open a new window for every output file generated by HATS-SML at the time each file is received by the HATS-GUI.",hats.pdf,Not_Req
+5729,The system shall be developed using the Java programming language.,hats.pdf,Not_Req
+5730,The system shall be completed by December 2001.,hats.pdf,Not_Req
+5731,The following assumptions are made with respect to the HATS-GUI:,hats.pdf,Not_Req
+5732,A JVM shall have been installed on the system under which the HATS-GUI is running.,hats.pdf,Not_Req
+5733,An ML interpreter shall have been installed on the system under which the HATS-GUI is running.,hats.pdf,Not_Req
+5734,HATS shall run on the same system on which the HATS-GUI is running.,hats.pdf,Not_Req
+5735,HATS shall support only one user at a time.,hats.pdf,Not_Req
+5736,Users shall have a high level of sophistication and shall not need guidance in the form of extensive help messages.,hats.pdf,Not_Req
+5737,"The Host OS shall support a hierarchical, tree-structured file system.",hats.pdf,Not_Req
+5738,The development team shall use this SRS to implement the system.,hats.pdf,Not_Req
+5739,"HATS-SML version 2.0 shall be available by October, 2001.",hats.pdf,Not_Req
+5740,HATS-SML is a collection of programs that are invoked with command line arguments. ,hats.pdf,Not_Req
+5741,"Collectively, they provide the functionality of HATS. ",hats.pdf,Not_Req
+5742,"Table 7 below lists the programs, their arguments, and a description of each program. ",hats.pdf,Not_Req
+5743,"The arguments to each program are positional, and specify input and output file names for each program.",hats.pdf,Not_Req
+5744,A file name may be a complete path name. ,hats.pdf,Not_Req
+5745,A description of each file is given following Table 7.,hats.pdf,Not_Req
+5746,Table 7: Summary of HATS-SML Programs,hats.pdf,Not_Req
+5747,MakeParser Generates a parser for transformation language programs and target programs in a given language. ,hats.pdf,Not_Req
+5748,MakeParser generates a parser file for translation language programs that is written to the file path specified by the third argument (parser-program). ,hats.pdf,Not_Req
+5749,MakeParser returns 0 if the parser-program file generation is successful.,hats.pdf,Not_Req
+5750,ParseTarget <parser-program> <target> <targetSDT> Generates a parsed target file from a target-parser file and a target. ,hats.pdf,Not_Req
+5751,The parser-program file must have been generated previously by MakeParser.,hats.pdf,Not_Req
+5752,ParseTarget generates an SDT file representing the target. ,hats.pdf,Not_Req
+5753,This file is written to the path specified by the third argument (targetSDT). ,hats.pdf,Not_Req
+5754,This program returns 0 if the targetSDT file generation is successful.,hats.pdf,Not_Req
+5755,ParseTLP Generates a parsed transformation language program file from a translation language program parser (parser-program) and a transformation language program (program). ,hats.pdf,Not_Req
+5756,The tlp-parser file must have been generated previously by MakeParser. ,hats.pdf,Not_Req
+5757,ParseTLP generates an SDT file representing the translation program. ,hats.pdf,Not_Req
+5758,This file is written to the path specified by the third argument (programSDT). ,hats.pdf,Not_Req
+5759,This program returns 0 if the programSDT file generation is successful,hats.pdf,Not_Req
+5760,FindTargets Generate a list of target files that are used as inputs for a transformation language program. ,hats.pdf,Not_Req
+5761,"The target file names are listed in the file <program> and are written, one file name per line, to the file <targetlist>.",hats.pdf,Not_Req
+5762,ApplyTransformations Executes a transformation language program. ,hats.pdf,Not_Req
+5763,The inputs are a user defined functions file (functions) and a program SDT (generated by ParseTLP). ,hats.pdf,Not_Req
+5764,The output files are written according to path names embedded in the program. ,hats.pdf,Not_Req
+5765,This program returns 0 if the transformation program executes successfully.,hats.pdf,Not_Req
+5766,PrettyPrint Generates a formatted output file from an SDT. ,hats.pdf,Not_Req
+5767,The inputs are a pretty-print style file (style) and a target SDT (targetSDT) generated by ApplyTransformations or ParseTarget. ,hats.pdf,Not_Req
+5768,The output is a formatted text string written to the path specified by the third argument (pretty-print).,hats.pdf,Not_Req
+5769,The sequence of actions to invoke HATS-SML actions is similar for all HATS-SML actions. ,hats.pdf,Not_Req
+5770,The sequence is depicted below. ,hats.pdf,Not_Req
+5771,The host operating system initiates a HATS-SML process on behalf of the HATS-GUI at the request of the HATS-GUI. ,hats.pdf,Not_Req
+5772,The HATS-GUI provides the path names of input and output files (as command line arguments when the request is passed to the host operating system).,hats.pdf,Not_Req
+5773,"The HATS-SML process reads the input files, processes, then writes the output files (assuming there are no errors). ",hats.pdf,Not_Req
+5774,"The HATS-SML process terminates, sending a process return code to the host operating system, which forwards the return code to the HATS-GUI.",hats.pdf,Not_Req
+5775,"Error messages, if they are generated by the HATS-SML process, are written to the standard error stream for the process.",hats.pdf,Not_Req
+5776,The HATS-GUI shall support searching the SDTs for matching sub-trees. ,hats.pdf,Not_Req
+5777,This appendix describes searching SDTs for sub-trees. ,hats.pdf,Not_Req
+5778,Search in SDTs is done on tokenized strings. ,hats.pdf,Not_Req
+5779,The smallest unit of search is a token (as opposed to a character in most text editor searches). ,hats.pdf,Not_Req
+5780,"Tokens are language specific, and thus SDT searches depend on the lexical specification and grammar of the language of the SDT.",hats.pdf,Not_Req
+5781,"SDT searching is a function performed by the GUI in which a selected SDT is searched for occurrences of a specified ""pattern"". ",hats.pdf,Not_Req
+5782,"Some facility should be provided for ""first match"", ""next match"", and so on. ",hats.pdf,Not_Req
+5783,The location in the SDT where a match occurs should be brought into view and highlighted in the SDT display window. ,hats.pdf,Not_Req
+5784,"Also, the corresponding text should be highlighted in the text window that is associated with the SDT display window.",hats.pdf,Not_Req
+5785,"Given a node N, the well-formed SDT strings of N are defined recursively by the following.",hats.pdf,Not_Req
+5786,The node label of N is a well-formed SDT string of N. (Note that node labels have pointed brackets around them if the node is non-terminal.),hats.pdf,Not_Req
+5787,The left-to-right ordered concatenation of the labels of all of the children nodes of N is a well-formed SDT string of N.,hats.pdf,Not_Req
+5788,The left-to-right ordered concatenation of the well-formed SDT strings of the children nodes of N is a well-formed SDT string of N.,hats.pdf,Not_Req
+5789,Let β denote a non-terminal in the target grammar. β derives a string α if there is some finite sequence of transformations that convert β to α.,hats.pdf,Not_Req
+5790,Assume that a target program contains a non-terminal β and the string α has been derived from β. The SDT for the transformed target program will contain β. The string α will be a well-formed SDT string of β. We say that α is derived from β.,hats.pdf,Not_Req
+5791,A search pattern is a string w such that w is a sub-string of a string α and α is a string derived from some non- terminal β in the target grammar.,hats.pdf,Not_Req
+5792,"Given a search pattern ω, the GUI should highlight the smallest derivation string α containing ω. ",hats.pdf,Not_Req
+5793,"That is, find the smallest string α, and corresponding non-terminal β, such that ω is a sub-string of α, and β derives α.",hats.pdf,Not_Req
+5794,"Note that α is smallest iff there does not exist a β ' and α ' such (1) that α ' is a sub-string of α, (2) ω is a sub- string of α ', and (3) β ' derives α '.",hats.pdf,Not_Req
+5795,"Intuitively, what we are looking for is the smallest well-formed SDT that contains ω as leaf elements. Also, note that ω may contain non-terminal symbols.",hats.pdf,Not_Req
+5796,"For example, assume we have the following grammar describing simple expressions.",hats.pdf,Not_Req
+5797,A syntax derivation tree for this expression given this grammar (where all the tokens are single characters) is given below. The nodes are numbered with a subscript to assist in identification for this example.,hats.pdf,Not_Req

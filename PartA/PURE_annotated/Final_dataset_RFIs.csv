@@ -1,0 +1,387 @@
+Requirement,Name of Doc,Req/Not Req,Req/Not Req
+The tool should be robust and ease of use.  (Takes little time to manage the tool). ,Tool Requirements,1,yes
+Generate document (process guide) from process diagrams in a customizable format.  ,Tool Requirements,1,yes
+"Both images and data
+Standard process role names should be populated in a drop down menu to maintain name consistency across processes.  ",Tool Requirements,1,yes
+"So when a role name changes in one process, it will change the name if it appears in other processes.",Tool Requirements,1,yes
+"The tool should provide import/export/integration capabilities to common Microsoft tools (i.e. Excel, Word, SharePoint, etc.)",Tool Requirements,1,yes
+"The solution shall provide the capability to develop interactive process maps (flows) that link to task descriptions, enablers and best practice examples of deliverables",Tool Requirements,1,yes
+The tool should show multiple options for modelling and should conform to multiple modelling standards that can be customized to fit our need,Tool Requirements,1,yes
+"Maintain consistency of relationships while drilling up or down depending on what level you are at, without having to rebuild any of the pieces.",Tool Requirements,1,yes
+The tool should have drill down capabilities,Tool Requirements,1,yes
+The software needs to be configurable to meet our needs. ,Tool Requirements,1,yes
+The solution shall provide both guided and comprehensive free text search capabilities,Tool Requirements,1,yes
+"There should be a feature to send warnings for missing integration links between defined processes ""(i.e. as we tie models together and there is a missing link, it  would provide a warning)",Tool Requirements,1,yes
+The tool should identify/keep track of relationships between processes so that consistency in process integration touch points can be maintained.  ,Tool Requirements,1,yes
+The tool should provide Spell check,Tool Requirements,1,yes
+The tool should provide a means of generating RACI charts. ,Tool Requirements,1,yes
+"The tool should provide a means of linking to documents outside of tool (i. e. SharePoint, etc.)",Tool Requirements,1,yes
+The tool should allow for identifying/managing standardized KPI's,Tool Requirements,1,yes
+"The solution shall provide a single source for access for all IT practioners to all sanctioned IT Services methods, covering guidance on processes, the roles that undertake those processes, process interactions, and enablers",Tool Requirements,1,yes
+The tool should have the ability to create a centralized repository,Tool Requirements,1,yes
+"The tool should be able to create libraries for Org, KPI, Activities, tools, roles, information, dat",Tool Requirements,1,yes
+The tool should be able to interface out to artefacts and embed artefacts,Tool Requirements,1,yes
+The tools should have the ability to elicit requirements The tool should have the ability to generate process reports,Tool Requirements,1,yes
+The tool should have the ability to create simulation processes and reports. ,Tool Requirements,1,yes
+"The solutions will provide a robust, sandpit area for Process analyst to work i",Tool Requirements,1,yes
+"The tool should have the ability to create workspace areas e.g. – WIP,Quality Review, Go Live, Live",Tool Requirements,1,yes
+"The solution should allow the Process Analyst to be able to model at different levels 
+The tools should have the ability to view the models for different studies.",Tool Requirements,1,yes
+The tool should have the ability to integrate models,Tool Requirements,1,yes
+The solution will allow the Process Analyst process integration abilities.,Tool Requirements,1,yes
+The tool should have the ability to present complex models in different layouts for different stakeholders,Tool Requirements,1,yes
+"The tool should have the ability to send users a link that will take them to specific documents within the repository: Ability to have one enabler used multiple times across different processes, Ability to track changes/version control, Integration with Active Directory, Single Sign On, Role based access, Data analytics capabilities.",Tool Requirements,1,yes
+"The solution shall provide the capability to migrate current processes content (process maps, documents, enablers, etc.) from the current, interim solution.",Tool Requirements,1,yes
+The tool should provide sufficient character space for titles or names,Tool Requirements,1,yes
+"The tool needs to support any naming or numbering formats
+",Tool Requirements,1,yes
+Personalised navigation – ability to View 'Processes I own’ along with favourites to help you personalise your use.,Tool Requirements,1,yes
+"Considering the challenges facing the ACME Group through the increasing competitive pressure, with increasing customer and regulatory requirements, we need to continuously increase our efficiency in the Product Development Process in order to stay competitive",RFI_SE ver1.0 final,0,no
+"Looking at our current engineering practices, that are very much hardware component driven, we want to be more pro-active (up-front system design). ",RFI_SE ver1.0 final,0,no
+"Furthermore, the ever increasing complexity of our products makes it necessary to always improve our current engineering practices where needed, for instance to have better control of our Product Families.",RFI_SE ver1.0 final,0,no
+"Since we have a commitment to efficiently develop and offer superior products exceeding our customers’ expectations, upfront development and Systems Engineering is a key mechanism, see Figure 1.",RFI_SE ver1.0 final,0,no
+"In this RFI, the following fields of Systems Engineering expertise will be in focus: Stakeholder Requirements Management, Requirements Management, Systems Architecture and Design (MBSE), Requirements driven Verification and Validation. ",RFI_SE ver1.0 final,0,no
+"However, surrounding fields of expertise, e.g. Systems Analysis and general support processes (e.g. report & measurements, Configuration Management), is also of interest.",RFI_SE ver1.0 final,0,no
+"The next step for ACME is to start practicing Model Based Systems Engineering, MBSE.",RFI_SE ver1.0 final,0,no
+"Systems Engineering within ACME is today very requirements driven but now it is time to start looking at MBSE with support of standard general-purpose modeling language (e.g. SysML, UML and IDEF).",RFI_SE ver1.0 final,0,no
+When describing our capabilities we have used a definition “work item”. ,RFI_SE ver1.0 final,0,no
+A work item is a single unit or object in the tool that all can build up structures or contain structures. ,RFI_SE ver1.0 final,0,no
+"The different types of work items can be e.g. requirements, system elements, system structures, test cases, documents, etc.",RFI_SE ver1.0 final,0,no
+The ACME Group has initiated a project to evaluate Systems Engineering tool sets in order to make a proposal to replace the current scattered tool environment used within the ACME Group. ,RFI_SE ver1.0 final,0,no
+"The new tool set shall be used, in long term, as a global solution for the ACME Group. ",RFI_SE ver1.0 final,1,yes
+The ACME Group hereby invites your company to give a proposal on a Systems Engineering tool environment according to this RFI. ,RFI_SE ver1.0 final,0,no
+Thank you for your time and diligence.,RFI_SE ver1.0 final,0,no
+"In order to propose your System Engineering tool set and to participate in our evaluation, please respond to this RFI by January 15th - 2011 at 6 pm CET. ",RFI_SE ver1.0 final,1,yes
+You will then be informed whether or not you are invited to participate in following detailed evaluations. ,RFI_SE ver1.0 final,0,no
+Only responses that are 100% complete will be considered,RFI_SE ver1.0 final,0,no
+IT Purchasing is responsible for the commercial relations towards Suppliers. ,RFI_SE ver1.0 final,0,no
+As such ACME Group Global IT Purchasing holds the Purchasing power and mandates for authorization to reach Commercial Agreements. ,RFI_SE ver1.0 final,0,no
+IT Purchasing function is serving all ACME Group Business Areas / Units.,RFI_SE ver1.0 final,0,no
+"A working group, with members from all Business Areas/Business Units involved, has been set up to investigate available solutions on the market and recommend a tool set for SE. ",RFI_SE ver1.0 final,0,no
+Hence we are now starting this evaluation process by issuing this RFI.,RFI_SE ver1.0 final,0,no
+IT Purchasing’s commission is to execute a Master/ Frame Agreement with one or more vendors and applications from their portfolios possible to use for The ACME Group. ,RFI_SE ver1.0 final,0,no
+Supplier’s proposal will be of vital importance for working out a common platform strategy,RFI_SE ver1.0 final,1,yes
+In this RFI document you will find necessary data and information. ,RFI_SE ver1.0 final,0,no
+"You are welcome to post any questions via e-mail or telephone, to the contact persons stated in this RFI, we will respond to the entire Supplier group.",RFI_SE ver1.0 final,0,no
+All information in this RFI is confidential as well as all documentation received by ACME Global IT Purchasing. ,RFI_SE ver1.0 final,0,no
+This RFI will be distributed to a selection of potential suppliers. ,RFI_SE ver1.0 final,0,no
+"All RFI responses, received up to and including the Closing Date, will be considered valid. ",RFI_SE ver1.0 final,0,no
+"ACME reserves the right to exclude, from the evaluation process, any RFI response received after the stated Closing Date as set in the table below",RFI_SE ver1.0 final,0,no
+ACME reserves the right to discontinue the RFI process at any time without liability.,RFI_SE ver1.0 final,0,no
+"In addition, ACME makes no commitments, expressed, implied or otherwise, that this RFI process will result in a business continuance with one or more suppliers",RFI_SE ver1.0 final,0,no
+"All RFI responses, once received, will become the property of ACME. ",RFI_SE ver1.0 final,0,no
+"The response shall be submitted in English, original to be sent by mail and a copy by e-mail. ",RFI_SE ver1.0 final,0,no
+"The Supplier submitting the RFI response must clearly and with no ambiguity, identify the legally registered company name and address of the said company as well as signed and dated",RFI_SE ver1.0 final,0,no
+"According to the RFI responses, questions can be raised by ACME. ",RFI_SE ver1.0 final,0,no
+Therefore the suppliers are requested to submit a list of references for this purpose and to be available to liaise for relevant interviews,RFI_SE ver1.0 final,0,no
+Receivers of this RFI are asked to confirm the receipt of this RFI by written acknowledgement no later than the date specified in Time Table. ,RFI_SE ver1.0 final,0,no
+In order to discuss answers and clarify ambiguities ACME will contact supplier and invite to a telephone conference.,RFI_SE ver1.0 final,0,no
+ACME shall not be held liable for any costs whatsoever incurred by the Supplier in order to prepare information relevant to the participation in this RFI. ,RFI_SE ver1.0 final,0,no
+No documents or CD / DVDs will be returned,RFI_SE ver1.0 final,0,no
+"This RFI requires that all products and/or functionality expressed in the responses to this RFI, are generally available from the Supplier (or his subcontractors) for a period of at least six months. ",RFI_SE ver1.0 final,0,no
+"If the Supplier wishes to set forth a product and/or function that does not match this description (product under development, for example) this has to be clearly expressed in the responses, including an explanation why it is considered to have a better potential for ACME.",RFI_SE ver1.0 final,0,no
+"The following general categories within the RFI process will be examined and evaluated: Strategic capabilities, for example:
+The Supplier’s financial situation, The Supplier’s company structure, The Market presence and reputation, The Service and quality of service, The Supplier’s acceptance of ACME’s Terms and Conditions, The Supplier’s flexibility to react to urgent needs and requirements, Strategic Partnerships.",RFI_SE ver1.0 final,1,yes
+"Suppliers ability to support needed Systems Engineering capabilities, for example: Stakeholder Requirements Management, Requirements Management, System Architecture and Design (MBSE), Develop alternatives / robust concept selection, Requirements Verification and Validation, Configuration / Change Management of work items, Support for project management & metrics, Support for Product Family engineering, Global operation, Compliance to IS/IT Solution Architectural criteria. for exmple: System Requirement, Client/web access, Database solutions, Functional capabilities of tool environments, for example: The Supplier’s ability to deliver according to our requirements, The Technological and functional capacity to implement and fulfill any given requirements,No specific adaptions, out of the box solution, Total Cost of ownership, for example: Investment and Running Cost",RFI_SE ver1.0 final,1,yes
+"During the evaluation process, the above categories may be further subdivided and individually weighted",RFI_SE ver1.0 final,0,no
+"Suppliers selected, after screening RFI responses, will have the possibility to make one presentation of their proposal/system, including demo.",RFI_SE ver1.0 final,1,yes
+The Supplier will provide all material used to produce the presentation.,RFI_SE ver1.0 final,1,yes
+Each supplier’s presentation will be held separately and attended by Supplier and ACME’s project team.,RFI_SE ver1.0 final,0,no
+"Once the presentation is done, all backup material shall become ACME ´s property.",RFI_SE ver1.0 final,0,no
+"Submitted information that is found to be inaccurate, miss-guiding or delivered later than the date specified in Time Table, will lead to a disqualification in the evaluation process.",RFI_SE ver1.0 final,1,yes
+This project will not only look for a single vendor/tool solution. ,RFI_SE ver1.0 final,0,no
+The preferred solution can include several integrated tools and even vendors.,RFI_SE ver1.0 final,1,yes
+"To facilitate and expedite a fair evaluation process, all correspondence and queries pertaining to this RFI and any associated response shall be submitted in English, directly and only to the contact persons as specified below.",RFI_SE ver1.0 final,0,no
+"The executive summary, in Appendix A, shall serve ACME Information Technology with the key elements and unique features of the proposal and shall contain the following. ",RFI_SE ver1.0 final,0,no
+For the evaluation process we request you to supply us with relevant information about your company or the relevant business area of your company and if applicable your partners,RFI_SE ver1.0 final,0,no
+"The questionnaire, in Appendix B, contains sub sections to provide information about vendor company contacts, give a brief presentation of the company and the marketplace and to inform about available products and services. ",RFI_SE ver1.0 final,0,no
+Text entries within << >> signs are examples that should be replaced with vendor specific information,RFI_SE ver1.0 final,0,no
+"The high level requirements, in Appendix C, contain requirements needed to support Systems Engineering within AB ACME.",RFI_SE ver1.0 final,0,no
+Please make sure to minimize the amount of attached documents and presentations and only provide material relevant for assessing requested information,RFI_SE ver1.0 final,0,no
+These recommendations are intended to enable the supplier to provide a deployable solution in ACME infrastructure. ,RFI MBSW IT Technical requirements V1.0,0,no
+These recommendations include a questionnaire to which the supplier must answer.,RFI MBSW IT Technical requirements V1.1,0,no
+Particular attention will be given to the study of the responses providers by solution vendors. ,RFI MBSW IT Technical requirements V1.2,0,no
+Any non-complete response shall be deemed not answered. ,RFI MBSW IT Technical requirements V1.3,0,no
+"If the provider has already implemented even partially components for ACME, response to RFI should not only reference documents related to this implementation. ",RFI MBSW IT Technical requirements V1.4,0,no
+The supplier must fully detail his answer in the deliverables.,RFI MBSW IT Technical requirements V1.5,0,no
+Supported hardware Server components must run on hardware supported by the ACME platform. ,RFI MBSW IT Technical requirements V1.6,1,yes
+"Recommended platforms are Linux RedHat 6.5, Windows 2012 R2. ",RFI MBSW IT Technical requirements V1.7,1,yes
+"Alternatives but not recommended are HP Itanium, Solaris 10 or Windows 7. ",RFI MBSW IT Technical requirements V1.8,1,yes
+The supplier shall detail the supported hardware platform per component.,RFI MBSW IT Technical requirements V1.9,0,no
+"If the solution does not have a proprietary database it shall support one the following databases, Oracle, MySQL, Postgres (preferred) possibly SQL Server.",RFI MBSW IT Technical requirements V1.10,1,yes
+ACME versions are: MySQL 5.5. ,RFI MBSW IT Technical requirements V1.11,1,yes
+Detail whether alternative versions are required. ,RFI MBSW IT Technical requirements V1.12,0,no
+MySQL runs on RedHat Linux 5.6.,RFI MBSW IT Technical requirements V1.13,1,yes
+Recommended ACME versions are: Oracle Standard Edition 11gr2 or 10.2.0.4. ,RFI MBSW IT Technical requirements V1.14,1,yes
+Detail whether alternative versions are required. ,RFI MBSW IT Technical requirements V1.15,0,no
+Oracle runs on RedHat Linux 6.x.,RFI MBSW IT Technical requirements V1.16,1,yes
+"Supported SQL Server databases Recommended ACME versions are: SQL Server 2012, R2 Edition standard or Enterprise. ",RFI MBSW IT Technical requirements V1.17,1,yes
+Detail whether alternative versions are required. ,RFI MBSW IT Technical requirements V1.18,0,no
+"If the provider uses its own database technology, hardware requirements must be specified. ",RFI MBSW IT Technical requirements V1.19,0,no
+It will run on the hardware platform supported at ACME. ,RFI MBSW IT Technical requirements V1.20,1,yes
+ACME runs VMWare 5.1U1 (today) or 5.1U3. ,RFI MBSW IT Technical requirements V1.21,1,yes
+"For its emulation CITRIX, ACME uses XenApp 6 or 7.6 server running Windows 2008 R2 or Windows 2012 R2 to emulate Windows 7. ",RFI MBSW IT Technical requirements V1.22,1,yes
+The solution must ensure that it is possible to have multiple concurrent client instances with different users connected on the same Windows server. ,RFI MBSW IT Technical requirements V1.23,1,yes
+"The provider must specify whether its fat clients are Citrix solution and the number of simultaneous sessions per core as possible, Citrix Citrix server supports. ",RFI MBSW IT Technical requirements V1.24,1,yes
+Specify the CPU core power sized.,RFI MBSW IT Technical requirements V1.25,0,no
+"If the server components are running on an application server, detail the technology and components. ",RFI MBSW IT Technical requirements V1.26,0,no
+"The application platform is JBoss ACME running RedHat Linux 5.6, JBoss 6.2 or 6.3 running Linux 6.4 ",RFI MBSW IT Technical requirements V1.27,1,yes
+"If an alternative technology is used, the provider must describe in detail. ",RFI MBSW IT Technical requirements V1.28,0,no
+"At best, the solution provider must be fully compatible with an authorized ACME combination of J2EE application server, database and the associated operating system. Ex: Server J2EE JBoss5.1 under REDHAT 5.6 with MSQL data base in REDHAT 5.1 5.6 ",RFI MBSW IT Technical requirements V1.29,1,yes
+At least the solution provider must be installed on one proposed by ACME operating systems. ,RFI MBSW IT Technical requirements V1.30,1,yes
+These operating systems have been optimized to meet the security requirements for access DMZ. ,RFI MBSW IT Technical requirements V1.31,1,yes
+"If compatibility is limited to that of the operating system, the solution provider will be considered ""black box"" Maintaining J2EE components of the solution should be provided by the supplier. ",RFI MBSW IT Technical requirements V1.32,1,yes
+The supplier shall specify if it offers this level of support.,RFI MBSW IT Technical requirements V1.33,1,yes
+ACME recommends a Windows 7 64-bit platform. ,RFI MBSW IT Technical requirements V1.34,1,yes
+The version number may change when the project is deployed. ,RFI MBSW IT Technical requirements V1.35,1,yes
+"The supplier must detail the recommended configuration (RAM, hard drive size, processor speed). ",RFI MBSW IT Technical requirements V1.36,1,yes
+The solution will run on ACME extensions called ACE 1 and ACE 3D with Windows Seven. ,RFI MBSW IT Technical requirements V1.37,1,yes
+These positions are based on 64-bit Windows 7 and Office 2010 pack ,RFI MBSW IT Technical requirements V1.38,0,no
+"In case of asynchronous messaging with ACME application, the solution should be able to send or receive messages MQ Series. ",RFI MBSW IT Technical requirements V1.39,1,yes
+Supported by the ACME version is 7.0.,RFI MBSW IT Technical requirements V1.40,1,yes
+The solution should be able to call one described by a WSDL file supplied by ACME Web service.,RFI MBSW IT Technical requirements V1.41,1,yes
+Summon a secure Web Service ,RFI MBSW IT Technical requirements V1.42,0,no
+The solution should be able to call a Web service protected by a certificate of authentication client or basic authentication. ,RFI MBSW IT Technical requirements V1.43,1,yes
+The certificate used to authenticate the client call can be provided by a public key infrastructure managed by ACME.,RFI MBSW IT Technical requirements V1.44,1,yes
+"If the solution offers web services, it needs to describe them.",RFI MBSW IT Technical requirements V1.45,1,yes
+If the integrity solution RESTful services. These services should be described.,RFI MBSW IT Technical requirements V1.46,1,yes
+Format for Describing Web Services provided The Solution Provider shall indicate whether the web service provided a description file in WSDL format.,RFI MBSW IT Technical requirements V1.48,1,yes
+"Securing Web services provided The Solution Provider shall indicate whether the Web services provided can be authenticated signed, encrypted. ",RFI MBSW IT Technical requirements V1.49,1,yes
+"For authentication to the web service, the provider must indicate the authentication mechanisms available (basic authentication, user of a server certificate, joint use of a server certificate and a client certificate etc). ",RFI MBSW IT Technical requirements V1.50,1,yes
+"If encryption or signature web service messages, the provider must specify the encryption mechanism available especially if the WS-Security standard is supported.",RFI MBSW IT Technical requirements V1.51,1,yes
+The Solution Provider must support the Axway CFT solution. ,RFI MBSW IT Technical requirements V1.52,1,yes
+"We ask vendors to summarize in no more than 5 sentences the recovery process for each of the following scenarios though of course these scenarios correspond to when using the product: Server database, Application server, Error Full Text Indexing, Web Server, Interruption of the application server, Fault on the file server, Error in contents of the database, Error in full Text Indexing file",RFI MBSW IT Technical requirements V1.53,1,yes
+"The response time access to data streams (3D content, 2D) must be uniform throughout the world.",RFI MBSW IT Technical requirements V1.54,1,yes
+"If, to achieve this objective, the solution should include mechanisms for replication streams on multiple sites (ACME like Romania or Brazil) the solution should be detailed.",RFI MBSW IT Technical requirements V1.55,1,yes
+"Element solution to specify: When replication is initiated (on demand or anticipated), Can it be filtered according to the location of the site, content criteria or by access-related profile, If content criteria, the nature of the content criteria: attributes, location inside the organization database.",RFI MBSW IT Technical requirements V1.56,1,yes
+The Solution Provider must ensure its compatibility with the technologies of data transfer (CFT and MQ) and detail a technical solution for the integration of two technologies The publisher must detail its solution elements in the answer.,RFI MBSW IT Technical requirements V1.57,1,yes
+The Solution Provider must ensure that there is no degradation of response time caused by internal batch processing to the solution (full text indexing) or external (data transfer with other ACME IT systems).,RFI MBSW IT Technical requirements V1.58,1,yes
+The supplier must detail whether data integrity check and repair tools are available and what are the features offered by these tools,RFI MBSW IT Technical requirements V1.59,1,yes
+The Supplier shall indicate whether command-line tools are available to start and stop each server application component.,RFI MBSW IT Technical requirements V1.60,1,yes
+"The provider must specify the data to be stored (databases, full text indexing, RSS replicated if more data to be stored), the order of safeguards to ensure a consistent backup, possible additional backup steps to ensure the entire backup. ",RFI MBSW IT Technical requirements V1.61,1,yes
+The provider must specify whether the backup can be performed while the application is stopped. ,RFI MBSW IT Technical requirements V1.62,1,yes
+"The provider must specify the data to be restored (database, full-text index, RSS replicated if other data should be saved), the order of restoration ensuring consistency of food, possible additional steps to safeguard guarantee the complete restoration",RFI MBSW IT Technical requirements V1.63,1,yes
+"In case of a major outage, an event should be traced. ",RFI MBSW IT Technical requirements V1.64,1,yes
+At least logs must be written in an easily identifiable location.,RFI MBSW IT Technical requirements V1.65,1,yes
+"When using Windows Server technology, whether the Windows event system will be used",RFI MBSW IT Technical requirements V1.67,1,yes
+"The log should be stored in an easily identifiable and parseable format .Optionally, the format should be configurable. ",RFI MBSW IT Technical requirements V1.69,1,yes
+Log management should be consistent between the different components.,RFI MBSW IT Technical requirements V1.70,1,yes
+"In the best case, the supplier uses SNMP to send an alert and provide access to indicators on the activity of the components. ",RFI MBSW IT Technical requirements V1.73,1,yes
+"At a minimum, key alerts on the availability of the solution are written to a log file in a readily parsable format. ",RFI MBSW IT Technical requirements V1.74,1,yes
+"The format of the log should contain: Critical Level Message, Message ID, Message text.",RFI MBSW IT Technical requirements V1.75,1,yes
+The provider must specify indicators reassembled by its monitoring tools. ,RFI MBSW IT Technical requirements V1.78,1,yes
+Does the application has a management console and / or administration? ,RFI MBSW IT Technical requirements V1.79,0,no
+"Level of functionality offered: Ability to check if the software components are available (""ping application""), Monitoring of system activities and components Access indicators of system activity (number of active sessions, memory usage, etc....)",RFI MBSW IT Technical requirements V1.80,0,no
+Does the application uses a license server for these server components? ,RFI MBSW IT Technical requirements V1.84,0,no
+Does the software uses a standard technology (eg FlexLM) or a proprietary technology?? ,RFI MBSW IT Technical requirements V1.86,0,no
+Does the batch processing are managed with an internal scheduler or can it use an external scheduler like Autosys.,RFI MBSW IT Technical requirements V1.88,0,no
+Are the password and user ID encrypted into exploitation tools?,RFI MBSW IT Technical requirements V1.90,0,no
+Supplier must indicate if tools are available to import / export content or configuration between environments (eg change the configuration to test production environments). ,RFI MBSW IT Technical requirements V1.91,1,yes
+"For each tool, the supplier must specify what data is imported or exported, the filtering level (all data, filtered data), format (XML-based file-based, multi file or single file) and the procedure associated.",RFI MBSW IT Technical requirements V1.92,1,yes
+Server component should run on ACME hardware supported platform. ,RFI MBSW IT Technical requirements V1.93,1,yes
+ACME recommended platform are RedHat Linux 6.5 (preferably) or Windows 2012 R2. ,RFI MBSW IT Technical requirements V1.94,1,yes
+Alternative but not recommended hardware are Solaris 10 or HP Itanium or Windows 7. ,RFI MBSW IT Technical requirements V1.95,1,yes
+Supplier must detail supported hardware platform per component. ,RFI MBSW IT Technical requirements V1.96,1,yes
+Server graphical card requirements. ,RFI MBSW IT Technical requirements V1.97,0,no
+"ACME is using blade installation in its datacenter, thus Windows 2008 or 7 server with no graphic card, Open GL being supported by Software emulation. ",RFI MBSW IT Technical requirements V1.98,1,yes
+"Thus, if supplier is requiring for some server component (3D converter for instance) a specific graphic card with a hardware OpenGL support, the required graphic card must be detailed. ",RFI MBSW IT Technical requirements V1.99,1,yes
+ACME strongly encourage vendor to get rid of this hardware requirement. ,RFI MBSW IT Technical requirements V1.100,1,yes
+Client hardware support for ACME Intranet Access. ,RFI MBSW IT Technical requirements V1.101,0,no
+Clients component should run on ACME hardware supported platform. ,RFI MBSW IT Technical requirements V1.102,1,yes
+ACME recommended platform are Windows 7 64 bits version. ,RFI MBSW IT Technical requirements V1.103,1,yes
+Current supported version is XX. ,RFI MBSW IT Technical requirements V1.104,1,yes
+Version number may evolve when project will be deployed. ,RFI MBSW IT Technical requirements V1.105,1,yes
+"Supplier should detail recommended configuration (RAM, hard disk size, CPU frequency). ",RFI MBSW IT Technical requirements V1.106,1,yes
+Please detail recommended Client desktop RAM memory size.,RFI MBSW IT Technical requirements V1.107,1,yes
+Please detail recommended Client desktop hard disk size.,RFI MBSW IT Technical requirements V1.108,1,yes
+Please detail recommended Client desktop recommended CPU (frequency). ,RFI MBSW IT Technical requirements V1.109,1,yes
+"In case of ACME Intranet Web access, ACME Intranet user will run on Internet Explorer 11.0. ",RFI MBSW IT Technical requirements V1.110,1,yes
+"Please indicate minimum version for supported web navigator (Internet Explorer, Firefox etc...). ",RFI MBSW IT Technical requirements V1.111,1,yes
+List of additional software to be installed on the client workstation. ,RFI MBSW IT Technical requirements V1.112,0,no
+"For each additional software, detail version number. ",RFI MBSW IT Technical requirements V1.113,1,yes
+"For instance, Java Runtime environment, MSXML. ",RFI MBSW IT Technical requirements V1.114,0,no
+dotNet may be included in such additional software. ,RFI MBSW IT Technical requirements V1.115,1,yes
+"Is solution is requiring no proprietary database, it should support Oracle, PostGres (preferably), possibly but not recommended SQL Server. ",RFI MBSW IT Technical requirements V1.116,1,yes
+Recommended version at ACME are: Oracle 11.1.0.7.0 or 10.2.0.4. ,RFI MBSW IT Technical requirements V1.117,1,yes
+Supplier should detail supported database technology. ,RFI MBSW IT Technical requirements V1.118,1,yes
+Recommended version at ACME are: MySQL 5.5. ,RFI MBSW IT Technical requirements V1.119,1,yes
+Please detail if alternative versions are required. ,RFI MBSW IT Technical requirements V1.120,1,yes
+MySQL will run on RedHatLinux 6.x. ,RFI MBSW IT Technical requirements V1.121,1,yes
+Recommended version at ACME are: Oracle standard edition 11.1.0.7.0 or 10.2.0.4. ,RFI MBSW IT Technical requirements V1.122,1,yes
+Please detail if alternative versions are required. ,RFI MBSW IT Technical requirements V1.123,1,yes
+MySQL will run on RedHat Linux 6.x. ,RFI MBSW IT Technical requirements V1.124,1,yes
+Recommended version at ACME are: SQL Server 2012 standard Edition R2. ,RFI MBSW IT Technical requirements V1.125,1,yes
+Please detail if alternative versions are required. ,RFI MBSW IT Technical requirements V1.126,1,yes
+"If supplier is using its own database technology, detail hardware requirements. ",RFI MBSW IT Technical requirements V1.127,1,yes
+It should run on supported ACME Hardware platform. ,RFI MBSW IT Technical requirements V1.128,1,yes
+"If server components can be virtualized, please detail. ",RFI MBSW IT Technical requirements V1.129,1,yes
+ACME is currently virtualizing using VMWare ESX 5.1U1 (today or 5.1U3 (one year target).,RFI MBSW IT Technical requirements V1.130,1,yes
+Thick clients’ component may be installed on Citrix infrastructure for ACME partner access. ,RFI MBSW IT Technical requirements V1.131,1,yes
+"For Citrix emulation, ACME is using XenApp 6 or XenApp 7.5 emulating Windows 2008 R2 or Windows 2012 R2 server or Windows 7 desktop.",RFI MBSW IT Technical requirements V1.132,1,yes
+The supplier must ensure if it is possible to have multiple simultaneous client instances with different users running on the same Windows servers. ,RFI MBSW IT Technical requirements V1.133,1,yes
+"If server component is running on an applicative server, detail technology and component. ",RFI MBSW IT Technical requirements V1.134,1,yes
+ACME applicative supported platform are Jboss 5.1 running under RedHat Linux 5.6. ,RFI MBSW IT Technical requirements V1.135,1,yes
+"If alternative technology is used, supplier should detail. ",RFI MBSW IT Technical requirements V1.136,1,yes
+"At best, supplier solution should fully be compatible with a complete component combination (compatibility of J2EE applicative and database version with associated compatible operating system). ",RFI MBSW IT Technical requirements V1.137,1,yes
+"At least, supplier solution should be installable on one of ACME proposed Operating Systems. ",RFI MBSW IT Technical requirements V1.138,1,yes
+These operating system have been optimized in order to fulfill security requirements for DMZ access.,RFI MBSW IT Technical requirements V1.139,1,yes
+"In case of operating system only compatibility, supplier solution will be considered as “black box”; the maintenance of underlying “standard component” as J2EE server should be granted by supplier. ",RFI MBSW IT Technical requirements V1.140,1,yes
+Solution vendor must detail if he offers such support.,RFI MBSW IT Technical requirements V1.141,1,yes
+Please detail if solution vendor tool should be accessible from ACME Intranet.,RFI MBSW IT Technical requirements V1.142,1,yes
+Please detail if Vendor solution could be accessible from ENX network ,RFI MBSW IT Technical requirements V1.143,1,yes
+Intranet user authentication from solution deployed inside ACME. ,RFI MBSW IT Technical requirements V1.144,0,no
+Supplier should detail if solution vendor should use LDAP Intranet Directory.,RFI MBSW IT Technical requirements V1.145,1,yes
+"Please detail if ENX authorized protocols are supported between client desktop and ACME ENX DMZ - HTTP/ HTTPS - SOAP with or without WS-Security - CFT (transactional file transfer protocol, concurrent technology with FTP) - MQ Series - ICA over HTTPS (Citrix emulation) - SQL Net Oracle (not recommended)",RFI MBSW IT Technical requirements V1.146,1,yes
+"By default, no other protocols are allowed. ",RFI MBSW IT Technical requirements V1.147,1,yes
+"Thus license protocols like FlexLM, NAS protocols like (CIFS or NFS) are not allowed. ",RFI MBSW IT Technical requirements V1.148,1,yes
+"ENX Web URL rewriting is supported In case of web access, the reverse proxy at ENX DMZ is rewriting application URL. ",RFI MBSW IT Technical requirements V1.149,1,yes
+If URL access inside ACME Intranet is: http://myApplication.intran.ACME.com/MyRootFolder/MyPage.jsp ,RFI MBSW IT Technical requirements V1.150,1,yes
+The client Web access is using URL http://myENXDNS.ACME.enxo.org/MyENXPrefix/MyRootFolder/MyPage.jsp ,RFI MBSW IT Technical requirements V1.151,1,yes
+Please detail filtered ENX Citrix Access rules ,RFI MBSW IT Technical requirements V1.152,1,yes
+Rich client deployed on ENX Citrix farms have limited filtered access to ACME Intranet (only on fixed ports which must be known). ,RFI MBSW IT Technical requirements V1.153,1,yes
+"Vendor should supply list of required ports to access to server components (HTTP, license port etc..., network file access protocols). ",RFI MBSW IT Technical requirements V1.154,1,yes
+"In case of dynamic or not fixed range port, vendor must specify. ",RFI MBSW IT Technical requirements V1.155,1,yes
+"By default, Citrix farm have no access to NFS or CIFS file storage. ",RFI MBSW IT Technical requirements V1.156,1,yes
+Detail if ciphering transport network protocol is supported. ,RFI MBSW IT Technical requirements V1.157,1,yes
+Solution vendor should support ciphering of network protocol exchange between client and server component. ,RFI MBSW IT Technical requirements V1.158,1,yes
+Security mechanisms provided by solution must handle strong encryption using client certificate installed on client desktop. ,RFI MBSW IT Technical requirements V1.159,1,yes
+Detail ciphering transport network protocol support for HTTP protocol case. ,RFI MBSW IT Technical requirements V1.160,1,yes
+Supplier should detail if solution vendor should support HTTPS/SSL with server and optional client X509 client certificate.,RFI MBSW IT Technical requirements V1.161,1,yes
+Solution vendor should supply sizing requirements for the solutions based on business sizing data supplied by ACME. ,RFI MBSW IT Technical requirements V1.162,1,yes
+"If further business data are required, solution vendor should request. ",RFI MBSW IT Technical requirements V1.163,1,yes
+"ACME business sizing data includes number of users, number of elementary information unit per business user documentation, actual size of information unit and documentation, location of user like Intranet France, decentralized engineering centers (Rumania, Korea etc...) ",RFI MBSW IT Technical requirements V1.164,0,no
+Supplier should explain sizing rules based on business sizing data supplied by ACME (with further details if required by vendor). ,RFI MBSW IT Technical requirements V1.165,1,yes
+"Supplier should detail architecture physical and logical diagram explaining for each machine type, installed components, network protocol flow (protocol, port number) between machines. ",RFI MBSW IT Technical requirements V1.166,1,yes
+"In case of alternative solutions, software vendor should detail sizing for every solution. ",RFI MBSW IT Technical requirements V1.167,1,yes
+"For instance, if Oracle or MySQL are candidate database server. ",RFI MBSW IT Technical requirements V1.168,0,no
+Sizing for each database serve should be supplied. ,RFI MBSW IT Technical requirements V1.169,1,yes
+Architecture diagrams must detail dataflow with connected ACME IT systems including Technology used,RFI MBSW IT Technical requirements V1.170,1,yes
+Please detail if solution is able to send or receive MQ Series Message. ,RFI MBSW IT Technical requirements V1.171,1,yes
+ACME supported version is 7.0. ,RFI MBSW IT Technical requirements V1.172,1,yes
+Please detail if solution can call Web Service being described by a WSDL file delivered by ACME. ,RFI MBSW IT Technical requirements V1.173,1,yes
+Please detail if solution can call Web Service using Client Certificate Authentication or basic authentication used separately or mixed. ,RFI MBSW IT Technical requirements V1.174,1,yes
+Client certificate may be supplied by ACME owned public Key infrastructure. ,RFI MBSW IT Technical requirements V1.175,1,yes
+Please detail if solution can use WS-Security protocol to cipher and sign Web service message. ,RFI MBSW IT Technical requirements V1.176,1,yes
+"If solution is providing web service access, available Web services must be described. ",RFI MBSW IT Technical requirements V1.177,1,yes
+"If solution is proving REST access, available REST services must be described. ",RFI MBSW IT Technical requirements V1.178,1,yes
+Solution vendor must indicate if supplied Web service have WSDL description. ,RFI MBSW IT Technical requirements V1.179,1,yes
+"Solution vendor must indicate if supplier Web services can be authenticated, signed, ciphered. ",RFI MBSW IT Technical requirements V1.180,1,yes
+"In case of authenticated web services, solution vendor must indicate available authentication mechanism (basic authentication, server certificate, server and client certificate etc...). ",RFI MBSW IT Technical requirements V1.181,1,yes
+"In case of ciphered or signed web service messages, solution vendor must indicate available ciphering mechanism, notably WS-Security support. ",RFI MBSW IT Technical requirements V1.182,1,yes
+File transfer with ACME Intranet applications. ,RFI MBSW IT Technical requirements V1.183,0,no
+Please detail if solution vendor support CFT axway solution. ,RFI MBSW IT Technical requirements V1.184,1,yes
+See http://www.axway.fr/produits- solutions/mft/a2a-mft/transfer-cft for further detail. ,RFI MBSW IT Technical requirements V1.185,1,yes
+Batch processing in environment deployed inside ACME Intranet. ,RFI MBSW IT Technical requirements V1.186,0,no
+CFT file transfer server is located in Intranet server and file exchanged with ACME intranet application can be accessed though nas type protocol (NFS or CIFS). ,RFI MBSW IT Technical requirements V1.187,1,yes
+"If batch processing must be executed from applicative J2EE server, solution vendor must identify a solution to have access",RFI MBSW IT Technical requirements V1.188,1,yes
+Failover scenarios: solution vendor should summarize in up to 5 sentences proposed restore procedure for following crash scenarios for solution vendor,RFI MBSW IT Technical requirements V1.189,1,yes
+"Server crash: Database server crash, Applicative server crash,Full Text indexer crash, Web server crash 
+Component server crash, database instance crash, applicative server process interruption",RFI MBSW IT Technical requirements V1.190,1,yes
+"Filer crash: database content, full text index file, Stream replication. ",RFI MBSW IT Technical requirements V1.191,1,yes
+"Response time to access to stream data (video, 3D content) must be granted worldwide. ",RFI MBSW IT Technical requirements V1.192,1,yes
+"If, to achieve this, solution may include stream replication mechanisms on several sites (ACME authoring sites like Roumania or India), the solution must be detailed. ",RFI MBSW IT Technical requirements V1.193,1,yes
+"Solution element to specify: - when replication happened (on demand or pushed) - can it be filtered according to site location, content criteria or accessing user profile - in case of content criteria, nature of content criteria: attributes, location inside solution database organization, ACME applicability usage (ability to replicate only X95 documentation of diesel engine for instance). ",RFI MBSW IT Technical requirements V1.194,1,yes
+Data pushed or pulled asynchronously from ACME IT systems will be exchanged by CFT transfer or MQ messages. ,RFI MBSW IT Technical requirements V1.195,1,yes
+Solution vendor must grant compatibility with these technologies (CFT and MQ) and detail technical solution for both technology integration. ,RFI MBSW IT Technical requirements V1.196,1,yes
+No impact on real access response time of batch processing. ,RFI MBSW IT Technical requirements V1.197,1,yes
+Solution vendor must grant no response time downgrade caused by batch processing either internal (on the fly full text indexing) or external (exchange with other ACME IT systems).,RFI MBSW IT Technical requirements V1.198,1,yes
+"Solution vendor must indicate recommended environments used in typical deployment (testing, development, production etc). ",RFI MBSW IT Technical requirements V1.199,1,yes
+"For each environment, solution vendor must indicate recommended architecture compared to production environment, simplification brought by dedicated usage of environment. ",RFI MBSW IT Technical requirements V1.200,1,yes
+Environment management must enable reduce or ideally hidden lengthy migration process (for instance migration processed in background in database separated from production activity with last minute database change) ,RFI MBSW IT Technical requirements V1.201,1,yes
+Solution vendor must indicate whether tools are available to import / export content or configuration between environments (for instance move configuration from testing to production environment). ,RFI MBSW IT Technical requirements V1.202,1,yes
+"For each tool, solution vendor must specify, which data are imported or exported, level of filtering (all data, filtered data), format (XML based, file based, multi or single file), associated procedure. ",RFI MBSW IT Technical requirements V1.203,1,yes
+Solution vendor must detail whether integrity and repair utility tools are available and offered functionalities. ,RFI MBSW IT Technical requirements V1.204,1,yes
+Please detail if solution vendor provides command line to start and stop individual components. ,RFI MBSW IT Technical requirements V1.205,1,yes
+"Please detail: data type to store (database, full text index, replicated stream if any, possible other data to store),  the order of backup granting a coherent backup, possible additional backup steps to grant integrity of backup.",RFI MBSW IT Technical requirements V1.206,1,yes
+Please detail is backup procedure can be performed while vendor solution is stopped.,RFI MBSW IT Technical requirements V1.207,1,yes
+"Solution vendor must specify data to restore (database, full text index, replicated stream if any, possible other data to store), the order of restore granting a coherent recovery, possible additional backup steps to grant integrity of restore. ",RFI MBSW IT Technical requirements V1.208,1,yes
+Please detail if restore procedure can be performed while vendor solution is stopped. ,RFI MBSW IT Technical requirements V1.209,1,yes
+"In case of any event causing major threats for availability of solution, please detail if an event is emitted. ",RFI MBSW IT Technical requirements V1.210,1,yes
+"Please detail if at least, a log is written in easily identifiable location. ",RFI MBSW IT Technical requirements V1.211,1,yes
+"In case of use of windows server technology, please detail if Windows event used. ",RFI MBSW IT Technical requirements V1.212,1,yes
+Please detail if Log file are stored in easily identifiable location and use parsable and possibly configurable format. ,RFI MBSW IT Technical requirements V1.213,1,yes
+Please detail if log management is uniformed between different components. ,RFI MBSW IT Technical requirements V1.214,1,yes
+"In case of use of windows server technology, are log written to windows event system? ",RFI MBSW IT Technical requirements V1.215,1,yes
+"At best, solution provider use SNMP protocol to send alert and give access to indicators about activity of solution components. ",RFI MBSW IT Technical requirements V1.216,1,yes
+"At minimum, every major threats for solution availability is generating log message with easily parse able format. ",RFI MBSW IT Technical requirements V1.217,1,yes
+"The log format must contain: level of critical of message, identifier of message, text of message ",RFI MBSW IT Technical requirements V1.218,1,yes
+" Please detail ITO level integration (SNMP, log with associated format, any other mechanism)",RFI MBSW IT Technical requirements V1.219,1,yes
+Does the software have a management console and / or an administration console. ,RFI MBSW IT Technical requirements V1.220,1,yes
+Supervision console integration with market tool. ,RFI MBSW IT Technical requirements V1.221,0,no
+"Can the software package interface with market administration or supervision tools (HP / ITO, Nagios). ",RFI MBSW IT Technical requirements V1.222,1,yes
+Ability to check if software components are available (“applicative ping”). ,RFI MBSW IT Technical requirements V1.223,1,yes
+"Please detail if vendor solution supplies monitoring activity indicators (number of active sessions, memory usage, etc...) ",RFI MBSW IT Technical requirements V1.224,1,yes
+Is software using license server for client component License server component. ,RFI MBSW IT Technical requirements V1.225,1,yes
+Is software using license server for server component License server technology. ,RFI MBSW IT Technical requirements V1.226,1,yes
+Is software using standard technology (ex FlexLM) or proprietary technology? ,RFI MBSW IT Technical requirements V1.227,1,yes
+Is batch processing managed with a internal scheduler or can it use an external scheduler like Autosys scheduler. ,RFI MBSW IT Technical requirements V1.228,1,yes
+Solution Windows background processes. ,RFI MBSW IT Technical requirements V1.229,0,no
+Are server component deployed on Windows server technology using window services? ,RFI MBSW IT Technical requirements V1.230,1,yes
+System password protection. ,RFI MBSW IT Technical requirements V1.231,0,no
+Are technical user identifier and password cyphered in exploitability tools?,RFI MBSW IT Technical requirements V1.232,1,yes
+What is possible programming language(s) for customization Is single language used or language is depending on customized component. ,RFI MBSW IT Technical requirements V1.233,1,yes
+Please detail development tool usable by the client company (Identify parts running on a server and those running on a client) ,RFI MBSW IT Technical requirements V1.234,1,yes
+Deployment of customization on server component. ,RFI MBSW IT Technical requirements V1.235,0,no
+Describe mechanism to deploy new configuration / extension on server side. ,RFI MBSW IT Technical requirements V1.236,1,yes
+Is customization must be manually deployed on each client desktop or is there some automatization in order to automatically deploy new configuration on client side? ,RFI MBSW IT Technical requirements V1.237,1,yes
+Is it possible for user to customize GUI and menus of the software package? ,RFI MBSW IT Technical requirements V1.238,1,yes
+Is it possible for administrator to customize GUI and menus of the software package? ,RFI MBSW IT Technical requirements V1.239,1,yes
+Is it possible for developer to customize GUI and menus of the software package by configuration not programming.,RFI MBSW IT Technical requirements V1.240,1,yes
+Can solution vendor commit to an end-to-end response time or availability? ,RFI MBSW IT Technical requirements V1.241,1,yes
+Is it global SLA or can it be refined at business workflow level. ,RFI MBSW IT Technical requirements V1.242,1,yes
+Does software vendor offer tools to monitor Service Level agreement like web robot accessing solution vendor in different worldwide location with dedicated business processes? ,RFI MBSW IT Technical requirements V1.243,1,yes
+Does software vendor offer indicators and associated reports allowing ACME to check quality of services. ,RFI MBSW IT Technical requirements V1.244,1,yes
+"If yes, solution vendor must detail provided indicators and available reporting tools.",RFI MBSW IT Technical requirements V1.245,1,yes
+Can solution vendor describe backup policy compatible with down time requirements. ,RFI MBSW IT Technical requirements V1.246,1,yes
+"1 h down time per business day (Monday to Friday), 2 hours downtime during week-end day (Saturday and Sunday). ",RFI MBSW IT Technical requirements V1.247,1,yes
+"Backup policy description must include: Backup frequency, Backup type, full or delta, Backup retention. ",RFI MBSW IT Technical requirements V1.248,1,yes
+Is ASP architecture dedicated to ACME or mutualized with other customers. ,RFI MBSW IT Technical requirements V1.249,1,yes
+"In case of mutualization, how ASP provider grant no security hole between ACME and other customers. ",RFI MBSW IT Technical requirements V1.250,1,yes
+Environment management critical data management Is testing or development environment containing critical data (data which loss or thief is causing major financial drawback to ACME)? ,RFI MBSW IT Technical requirements V1.251,1,yes
+"If yes, at best, critical content must be cyphered in testing like in production environment. ",RFI MBSW IT Technical requirements V1.252,1,yes
+"At least, it must be tampered. ",RFI MBSW IT Technical requirements V1.253,1,yes
+"Is testing or development environment contains critical data, at best it must be cyphered when moved from one environment to another. ",RFI MBSW IT Technical requirements V1.254,1,yes
+"At least, it must be tampered when moved. ",RFI MBSW IT Technical requirements V1.255,1,yes
+"In case of failure, describe procedure to alert ACME. ",RFI MBSW IT Technical requirements V1.256,1,yes
+Procedure must be detail according to level of critical of failure. ,RFI MBSW IT Technical requirements V1.257,1,yes
+"ASP provider must detail escalation process (actors, tasks) and interaction with ACME during escalation process. ",RFI MBSW IT Technical requirements V1.258,1,yes
+"In case of unexpected workload, what is delay to obtain additional servers Reversibility. ",RFI MBSW IT Technical requirements V1.259,1,yes
+In case ACME decide to stop ASP mode. Describe procedure in order ACME to get back data held by ACME. ,RFI MBSW IT Technical requirements V1.260,1,yes
+Software vendor must provide architecture diagrams to show how to provide high availability and scalability Location of support. ,RFI MBSW IT Technical requirements V1.261,1,yes
+ASP provider must detail location of people involved in maintenance and support task at ASP provider site. ,RFI MBSW IT Technical requirements V1.262,1,yes
+Please detail network latency between ASP site and ACME site. ,RFI MBSW IT Technical requirements V1.263,1,yes
+Network latency must be minimal (< 30 ms per network packet). ,RFI MBSW IT Technical requirements V1.264,1,yes
+Please detail bandwidth requirements between ASP site and ACME site. ,RFI MBSW IT Technical requirements V1.265,1,yes
+Bandwidth must be large enough in order to handle file transfers and real time access at peak work load without any bottleneck. ,RFI MBSW IT Technical requirements V1.266,1,yes
+"The purpose of the present Request For Information (RFI) is to obtain preliminary proposals from all those suppliers who may be interested in providing a Communications and Information Systems architectures development tool to support the Spanish Ministry of Defense, in accordance with the criteria provided in this document.",RFI CIS Architectures Development Tool MDEF,0,no
+It should be noted that the purpose of this RFI is not to obtain final proposals. ,RFI CIS Architectures Development Tool MDEF,0,no
+These final proposals will be the subject of a subsequent bidding process. ,RFI CIS Architectures Development Tool MDEF,0,no
+This RFI is not part of a contract nor does it represent a commitment to be contracted by the Spanish Ministry of Defense.,RFI CIS Architectures Development Tool MDEF,0,no
+"The technical information collected in this document is provided on guidance, and interested parties may include variations in such proposals information.",RFI CIS Architectures Development Tool MDEF,0,no
+All information or documentation sent to the Spanish Ministry of Defense given this consultation will be confidential and will not be communicated or publicated.,RFI CIS Architectures Development Tool MDEF,0,no
+"The Order DEF/2639/2015, of December 3rd, which establishes the Spanish Ministry of Defense Communications and Information Systems Policy (CIS Policy), includes in its article 7 the general guidelines by which the planning and the CIS resourcing, its control, organization, operation and maintenance, for the establishment and provision of the associated services, should be governed. ",RFI CIS Architectures Development Tool MDEF,0,no
+"Among such guidelines it is included the technical standarization of these resources, through a hierachical model of architectures similar to that used by NATO, as an instrument of coherence and technical integrity.",RFI CIS Architectures Development Tool MDEF,0,no
+"In the article 7.3.a), the CIS Architectures to be developed are established and organized in the following hierachical way: 1st. ",RFI CIS Architectures Development Tool MDEF,0,no
+Spanish Ministry of Defense Communications and Informations Systems Overarching Architecture (AG CIS/TIC); ,RFI CIS Architectures Development Tool MDEF,0,no
+"These architectures will act as a guide and support for the structured and rigorous development of the CIS Capabilities of the Department ensuring the necessary coherence and technical integrity, the feasibility and necessary budget allocation, and the agility in the deadlines and compliance with the operational requirements through the full systems life cycle.",RFI CIS Architectures Development Tool MDEF,0,no
+"The Instruction 58/2016, of October 28th, of the Secretary of State for Defense, by which the Spanish Ministry of Defense Communications and Information Systems Overarching Architecture (AG CIS/TIC) is aproved, establishes the principles to develop the CIS Architecture.",RFI CIS Architectures Development Tool MDEF,0,no
+"This includes: Standarized models for hierachical architectures, Standarized process for architectures development, Reuse and traceability of the architectures content, Service-oriented approach, Shared architectures information.",RFI CIS Architectures Development Tool MDEF,0,no
+"To that end, collaborative work systems will be used to facilitate the understanding of the relationships between capabilities, systems and CIS components in every level and between different architecture levels. ",RFI CIS Architectures Development Tool MDEF,0,no
+"A general common repository will be created where the Spanish Ministry of Defense CIS Architectures will be stored once they are aproved, including the metadata which facilitates its location, record, classification, access, maintenance and provision. ",RFI CIS Architectures Development Tool MDEF,1,yes
+This department level repository will facilitate the reuse and traceability of the content of all Architectures.,RFI CIS Architectures Development Tool MDEF,1,yes
+"On the other hand, the aforementioned AG CIS/TIC includes, among its derived actions, the following steps for its development as follows.",RFI CIS Architectures Development Tool MDEF,0,no
+"Enable the incremental and sequential development of the Reference and Target CIS Architectures of the Spanish Ministry of Defense, in accordance with what it is established in the AG CIS/TIC and with the operative priorities of the Armed Forces (FAS), guaranteeing full ingration of the CIS Capabilities of the Department in the interoperability policy framework that ensures the end-to-end service provision. ",RFI CIS Architectures Development Tool MDEF,1,yes
+"Harmonize the process between the CIS Architecture development and the CIS resources and finance planning in the Defense Planning framework, ensuring the alignment of the CIS Capabilities with the Armed Forces (FAS) and the Department needs regarding the available financial resources.",RFI CIS Architectures Development Tool MDEF,1,yes
+This RFI focuses on the technical and functional characteristics of the architecture development tool and its support through the full life cycle.,RFI CIS Architectures Development Tool MDEF,0,no
+The request for management information is detailed in the following table. ,RFI CIS Architectures Development Tool MDEF,0,no
+This information must be broken down according to the detail that is considered necessary to be able to interpret it correctly.,RFI CIS Architectures Development Tool MDEF,0,no
+"SIEM-1 Information about the Company, experience, relevant projects related to this application and certifications. ",RFI CIS Architectures Development Tool MDEF,0,no
+Volume of business in the sector during the last three years.,RFI CIS Architectures Development Tool MDEF,0,no
+SIEM-2 Marketing model of the tool offered for use from the Spanish Ministry of Defense.,RFI CIS Architectures Development Tool MDEF,0,no
+SIEM-3 Does the Company have made similar supplies to other customers? ,RFI CIS Architectures Development Tool MDEF,0,no
+"Provide a description of the client, as well as the implementation works. ",RFI CIS Architectures Development Tool MDEF,0,no
+"Companies that are interested in participating in this RFI process, described in this document, may answer the questions and criteria established in the previous sections.",RFI CIS Architectures Development Tool MDEF,0,no
+"Each Company can respond according to the format established below: 
+In any case, no Company will be excluded from future processes of hiring due to non- compliance with one or more of the requirements established in this document.",RFI CIS Architectures Development Tool MDEF,0,no
+"The receipt of responses to the request in this document will have a deadline on April 6th, 2018.",RFI CIS Architectures Development Tool MDEF,0,no
+"Given the information that will be processed by the companies that are selected, as progress in this process, it will be necessary to abide by the established regulatory framework in the Rules of the National Authority for the Protection of Classified Information.",RFI CIS Architectures Development Tool MDEF,0,no
