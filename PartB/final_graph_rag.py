@@ -121,7 +121,7 @@ class KGCompassGraphRAG:
     
     def __init__(self):
         self.graph = nx.MultiDiGraph()
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-MiniLM-L6-v2', cache_folder="D:/TestMate/huggingface_cache/hub")
         
         # Track statistics
         self.stats = defaultdict(int)
@@ -346,6 +346,219 @@ class KGCompassGraphRAG:
         # Sort by score, return top 20
         candidates.sort(key=lambda x: x['score'], reverse=True)
         return candidates[:max_candidates]
+    
+    def two_hop_traversal(self, seed_function: str) -> Dict:
+        """
+        KGCompass 2-Hop Traversal Query - The Heart of KGCompass!
+        
+        Given a "Seed Node" (suspected buggy function), retrieves its neighborhood:
+        
+        1. Incoming CALLS edges: Who calls this function? 
+           → To trace where bad data came from
+        
+        2. Outgoing CALLS edges: Who does this function call?
+           → To check if a dependency is actually the problem
+        
+        3. Parent CONTAINS nodes: The Class or Module it belongs to
+           → To understand the structural context
+        
+        Returns full neighborhood context for the LLM.
+        
+        Cypher-equivalent query:
+        ```cypher
+        MATCH (caller:Function)-[:CALLS]->(seed:Function {name: $seed_function})
+        MATCH (seed)-[:CALLS]->(callee:Function)
+        MATCH (parent)-[:CONTAIN]->(seed)
+        RETURN caller, seed, callee, parent
+        ```
+        """
+        if seed_function not in self.graph.nodes():
+            raise ValueError(f"Seed function '{seed_function}' not found in graph")
+        
+        seed_node = self.graph.nodes[seed_function]
+        if seed_node.get('type') != 'function':
+            raise ValueError(f"'{seed_function}' is not a function node")
+        
+        neighborhood = {
+            'seed': {
+                'name': seed_function,
+                'data': seed_node.get('data', {}),
+                'type': seed_node.get('type')
+            },
+            'callers': [],      # Functions that call the seed (incoming CALLS)
+            'callees': [],      # Functions the seed calls (outgoing CALLS)
+            'parent': None,     # Class or Module containing the seed
+            'siblings': [],     # Other functions in the same parent
+            'second_hop': {
+                'caller_callers': [],   # Who calls the callers (2-hop incoming)
+                'callee_callees': []    # Who the callees call (2-hop outgoing)
+            }
+        }
+        
+        # ====================================================================
+        # HOP 1: Direct Neighbors
+        # ====================================================================
+        
+        # 1a. INCOMING CALLS: Who calls this function?
+        for predecessor in self.graph.predecessors(seed_function):
+            edges = self.graph[predecessor][seed_function]
+            for edge_key, edge_data in edges.items():
+                if edge_data.get('type') == 'CALLS':
+                    caller_node = self.graph.nodes[predecessor]
+                    neighborhood['callers'].append({
+                        'name': predecessor,
+                        'type': caller_node.get('type'),
+                        'data': caller_node.get('data', {})
+                    })
+        
+        # 1b. OUTGOING CALLS: Who does this function call?
+        for successor in self.graph.successors(seed_function):
+            edges = self.graph[seed_function][successor]
+            for edge_key, edge_data in edges.items():
+                if edge_data.get('type') == 'CALLS':
+                    callee_node = self.graph.nodes[successor]
+                    neighborhood['callees'].append({
+                        'name': successor,
+                        'type': callee_node.get('type'),
+                        'data': callee_node.get('data', {})
+                    })
+        
+        # 1c. PARENT CONTAINS: Class or Module containing this function
+        for predecessor in self.graph.predecessors(seed_function):
+            edges = self.graph[predecessor][seed_function]
+            for edge_key, edge_data in edges.items():
+                if edge_data.get('type') == 'CONTAIN':
+                    parent_node = self.graph.nodes[predecessor]
+                    neighborhood['parent'] = {
+                        'name': predecessor,
+                        'type': parent_node.get('type'),
+                        'data': parent_node.get('data', {})
+                    }
+                    
+                    # Get sibling functions (other functions in same parent)
+                    for sibling in self.graph.successors(predecessor):
+                        sibling_edges = self.graph[predecessor][sibling]
+                        for s_key, s_data in sibling_edges.items():
+                            if s_data.get('type') == 'CONTAIN' and sibling != seed_function:
+                                sibling_node = self.graph.nodes[sibling]
+                                if sibling_node.get('type') == 'function':
+                                    neighborhood['siblings'].append({
+                                        'name': sibling,
+                                        'type': sibling_node.get('type'),
+                                        'data': sibling_node.get('data', {})
+                                    })
+                    break  # Only get first parent
+        
+        # ====================================================================
+        # HOP 2: Extended Neighborhood
+        # ====================================================================
+        
+        # 2a. Who calls the callers? (2-hop incoming)
+        for caller in neighborhood['callers']:
+            caller_name = caller['name']
+            for predecessor in self.graph.predecessors(caller_name):
+                edges = self.graph[predecessor][caller_name]
+                for edge_key, edge_data in edges.items():
+                    if edge_data.get('type') == 'CALLS':
+                        caller_caller_node = self.graph.nodes[predecessor]
+                        neighborhood['second_hop']['caller_callers'].append({
+                            'name': predecessor,
+                            'via': caller_name,
+                            'type': caller_caller_node.get('type'),
+                            'data': caller_caller_node.get('data', {})
+                        })
+        
+        # 2b. Who do the callees call? (2-hop outgoing)
+        for callee in neighborhood['callees']:
+            callee_name = callee['name']
+            for successor in self.graph.successors(callee_name):
+                edges = self.graph[callee_name][successor]
+                for edge_key, edge_data in edges.items():
+                    if edge_data.get('type') == 'CALLS':
+                        callee_callee_node = self.graph.nodes[successor]
+                        neighborhood['second_hop']['callee_callees'].append({
+                            'name': successor,
+                            'via': callee_name,
+                            'type': callee_callee_node.get('type'),
+                            'data': callee_callee_node.get('data', {})
+                        })
+        
+        return neighborhood
+    
+    def format_neighborhood_context(self, neighborhood: Dict) -> str:
+        """
+        Format the 2-hop neighborhood into a prompt-friendly string.
+        
+        This gives the LLM all the context it needs to understand:
+        - Where the bug might have originated (callers)
+        - What might actually be broken (callees/dependencies)
+        - The structural context (class, siblings)
+        """
+        seed = neighborhood['seed']
+        seed_data = seed.get('data', {})
+        
+        context = f"""=== 2-HOP NEIGHBORHOOD ANALYSIS ===
+        
+🎯 SEED FUNCTION: {seed['name']}
+   File: {seed_data.get('file_path', 'unknown')}
+   Lines: {seed_data.get('line_start', '?')}-{seed_data.get('line_end', '?')}
+   Signature: {seed_data.get('signature', 'N/A')}
+
+"""
+        
+        # Parent context
+        if neighborhood['parent']:
+            parent = neighborhood['parent']
+            parent_data = parent.get('data', {})
+            context += f"""📦 PARENT ({parent['type'].upper()}): {parent['name']}
+   File: {parent_data.get('file_path', parent_data.get('name', 'unknown'))}
+
+"""
+        
+        # Callers - where bad data might come from
+        if neighborhood['callers']:
+            context += "📥 INCOMING CALLS (potential sources of bad data):\n"
+            for i, caller in enumerate(neighborhood['callers'][:5], 1):
+                caller_data = caller.get('data', {})
+                context += f"   {i}. {caller['name']} → calls → {seed['name']}\n"
+                context += f"      File: {caller_data.get('file_path', 'unknown')}\n"
+            context += "\n"
+        else:
+            context += "📥 INCOMING CALLS: None (entry point function)\n\n"
+        
+        # Callees - dependencies that might be the actual problem
+        if neighborhood['callees']:
+            context += "📤 OUTGOING CALLS (dependencies - might be the real problem):\n"
+            for i, callee in enumerate(neighborhood['callees'][:5], 1):
+                callee_data = callee.get('data', {})
+                context += f"   {i}. {seed['name']} → calls → {callee['name']}\n"
+                context += f"      File: {callee_data.get('file_path', 'unknown')}\n"
+            context += "\n"
+        else:
+            context += "📤 OUTGOING CALLS: None (leaf function)\n\n"
+        
+        # Siblings - related functions in same class/module
+        if neighborhood['siblings']:
+            context += "👥 SIBLING FUNCTIONS (same parent, might share bugs):\n"
+            for i, sibling in enumerate(neighborhood['siblings'][:5], 1):
+                context += f"   {i}. {sibling['name']}\n"
+            context += "\n"
+        
+        # Second hop - extended context
+        second_hop = neighborhood['second_hop']
+        if second_hop['caller_callers']:
+            context += "🔄 2-HOP CALLERS (indirect sources):\n"
+            for i, cc in enumerate(second_hop['caller_callers'][:3], 1):
+                context += f"   {i}. {cc['name']} → {cc['via']} → {seed['name']}\n"
+            context += "\n"
+        
+        if second_hop['callee_callees']:
+            context += "🔄 2-HOP CALLEES (deep dependencies):\n"
+            for i, cc in enumerate(second_hop['callee_callees'][:3], 1):
+                context += f"   {i}. {seed['name']} → {cc['via']} → {cc['name']}\n"
+            context += "\n"
+        
+        return context
     
     def retrieve_external_knowledge(self, bug_description: str, k: int = 3):
         """

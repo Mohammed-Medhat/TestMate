@@ -11,6 +11,8 @@ No distillation needed - just validates your Graph-RAG!
 """
 
 import json
+import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Enable GPU
 from pathlib import Path
 from ast_parser_complete import KGCompassParser
 from final_graph_rag import KGCompassGraphRAG
@@ -37,16 +39,20 @@ class GraphRAGTester:
         """Load vanilla Qwen 7B for testing"""
         print(f"📥 Loading {self.model_name}...")
         
+        cache_dir = "D:/TestMate/huggingface_cache/hub"
+        
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype=torch.float16,
-            device_map="auto",
-            trust_remote_code=True
+            trust_remote_code=True,
+            cache_dir=cache_dir,
+            device_map="cuda"
         )
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
-            trust_remote_code=True
+            trust_remote_code=True,
+            cache_dir=cache_dir
         )
         
         print("✅ Model loaded")
@@ -365,40 +371,49 @@ def create_test_cases():
 # ============================================================================
 
 if __name__ == "__main__":
-    print("="*60)
-    print("Graph-RAG Validation Suite (No Distillation)")
-    print("="*60)
-    
-    tester = GraphRAGTester()
-    
-    # Test 1: Graph construction
-    print("\n🔧 Running Test 1: Graph Construction...")
-    graph, test1_pass = tester.test_graph_construction(".")
-    
-    # Test 2: Retrieval accuracy
-    print("\n🔍 Running Test 2: Retrieval Accuracy...")
-    test_cases = create_test_cases()
-    retrieval_results, test2_pass = tester.test_retrieval_accuracy(test_cases)
-    
-    # Test 3: Baseline comparison (MOST IMPORTANT!)
-    print("\n⚖️  Running Test 3: Vanilla vs Graph-RAG...")
-    comparison_results, test3_pass = tester.test_vanilla_vs_graphrag(test_cases)
-    
-    # Final summary
-    print("\n" + "="*60)
-    print("VALIDATION SUMMARY")
-    print("="*60)
-    
-    all_pass = test1_pass and test2_pass and test3_pass
-    
-    print(f"\nTest 1 (Graph Construction): {'✅ PASS' if test1_pass else '❌ FAIL'}")
-    print(f"Test 2 (Retrieval Accuracy): {'✅ PASS' if test2_pass else '❌ FAIL'}")
-    print(f"Test 3 (Graph-RAG Improvement): {'✅ PASS' if test3_pass else '✅ FAIL'}")
-    
-    if all_pass:
-        print(f"\n🎉 ALL TESTS PASSED! Graph-RAG is working!")
-        print(f"\n✅ Ready to proceed to distillation")
-    else:
-        print(f"\n⚠️  Some tests failed. Debug before distillation.")
-    
-    print("\n" + "="*60)
+    import traceback
+    try:
+        print("="*60)
+        print("Graph-RAG Validation Suite (No Distillation)")
+        print("="*60)
+        
+        tester = GraphRAGTester()
+        
+        # Test 1: Graph construction
+        print("\n[Test 1] Running Graph Construction...")
+        graph, test1_pass = tester.test_graph_construction(".")
+        
+        # Test 2: Retrieval accuracy
+        print("\n[Test 2] Running Retrieval Accuracy...")
+        test_cases = create_test_cases()
+        retrieval_results, test2_pass = tester.test_retrieval_accuracy(test_cases)
+        
+        # Test 3: Baseline comparison (MOST IMPORTANT!)
+        print("\n[Test 3] Running Vanilla vs Graph-RAG...")
+        comparison_results, test3_pass = tester.test_vanilla_vs_graphrag(test_cases)
+        
+        # Final summary
+        print("\n" + "="*60)
+        print("VALIDATION SUMMARY")
+        print("="*60)
+        
+        all_pass = test1_pass and test2_pass and test3_pass
+        
+        print(f"\nTest 1 (Graph Construction): {'PASS' if test1_pass else 'FAIL'}")
+        print(f"Test 2 (Retrieval Accuracy): {'PASS' if test2_pass else 'FAIL'}")
+        print(f"Test 3 (Graph-RAG Improvement): {'PASS' if test3_pass else 'FAIL'}")
+        
+        if all_pass:
+            print(f"\nALL TESTS PASSED! Graph-RAG is working!")
+            print(f"\nReady to proceed to distillation")
+        else:
+            print(f"\nSome tests failed. Debug before distillation.")
+        
+        print("\n" + "="*60)
+            
+    except Exception as e:
+        print(f"\nCRITICAL ERROR: {e}")
+        with open("crash_log.txt", "w", encoding="utf-8") as f:
+            f.write(traceback.format_exc())
+        print("Traceback saved to crash_log.txt")
+        exit(1)
