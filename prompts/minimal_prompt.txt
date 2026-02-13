@@ -1,0 +1,8 @@
+<|im_start|>system
+Expert APR agent. Fix code using stack trace.<|im_end|>
+<|im_start|>user
+ISSUE: {{FAIL}}
+
+SUSPICIOUS CODE SNIPPET:
+{{SNIPPET}}<|im_end|>
+<|im_start|>assistant
