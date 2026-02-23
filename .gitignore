@@ -1,8 +1,22 @@
-Qwen_Model/
+# Python caches
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Qwen Model Files (From your screenshot)
 Qwen_Model/
-__pycache__/
-.venv/
-Qwen_Model/
-__pycache__/
-.venv/
+final/
+qwen-testmate-adapter/
+*.safetensors
+*.bin
+*.Identifier
+
+# Local Environment & Results
+.env
+venv/
+env/
+miniconda3/
+local_run_results.json
+spectrum.json
+coverage.json
