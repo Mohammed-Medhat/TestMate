@@ -173,17 +173,15 @@ def apply_patch(new_code: str) -> bool:
 
 # -------------------- Phase 4: Prompting & Saving --------------------
 def build_repair_prompt(fail_output: str, suspicious_lines: list, snippet: str, full_code: str) -> str:
-    """
-    Build the exact prompt format the model was fine-tuned on.
-    Format: ISSUE + TRACE + BUGGY
-    """
     failure_summary = [line.strip() for line in fail_output.split('\n') if 'E   ' in line or 'FAILED' in line or 'Error' in line]
     trace_text = '\n'.join(failure_summary[:4])
     
     if not trace_text:
         trace_text = "AssertionError: Logic verification failed."
         
-    prompt = f"ISSUE: Fix the logic bug causing the test failure.\n\nTRACE:\n{trace_text}\n\nBUGGY:\n{snippet}"
+    clean_code = BUGGY_FILE.read_text(encoding="utf-8")
+    
+    prompt = f"ISSUE: Fix the logic bug causing the test failure.\n\nTRACE:\n{trace_text}\n\nBUGGY:\n{clean_code}"
     
     return prompt
 def save_model_output(code: str, attempt: int):
