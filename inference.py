@@ -1,27 +1,30 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
-from config import MODEL_NAME, OUTPUT_DIR, CACHE_DIR
+from config import MODEL_NAME, OUTPUT_DIR, CACHE_DIR, ADAPTER_PATH
 
-#
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, cache_dir=CACHE_DIR)
     
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=torch.float16,
-        llm_int8_enable_fp32_cpu_offload=True  
+        bnb_4bit_quant_type="nf4"
     )
     
+    print("Loading Base Model...")
     base = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
         quantization_config=bnb_config,
-        device_map="auto", 
+        device_map={"": 0},  
         cache_dir=CACHE_DIR,
         trust_remote_code=True
     )
-    model = PeftModel.from_pretrained(base, f"{OUTPUT_DIR}/final")
+    
+    print(f"Loading Peft Adapter from: {ADAPTER_PATH}")
+    model = PeftModel.from_pretrained(base, ADAPTER_PATH) 
     return model, tokenizer
+
 def repair_code(issue, buggy_code, model, tokenizer):
     messages = [
         {"role": "system", "content": "Expert APR agent. Fix code using stack trace."},
@@ -40,8 +43,3 @@ def repair_code(issue, buggy_code, model, tokenizer):
         )
     
     return tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-
-if __name__ == "__main__":
-    model, tokenizer = load_model()
-    result = repair_code("Fix operator", "def add(a, b): return a - b", model, tokenizer)
-    print(f"REPAIRED CODE:\n{result}")
