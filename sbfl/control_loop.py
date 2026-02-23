@@ -7,6 +7,7 @@ import subprocess
 import json
 import ast
 import os
+import re
 from pathlib import Path
 
 from sbfl_localiser import rank_suspicious_lines
@@ -87,8 +88,11 @@ def run_tests():
     )
     return result.returncode == 0, result.stdout + result.stderr
 
-def extract_snippet(suspicious_lines, window=3):
-    """Extract code around suspicious lines with line numbers"""
+def extract_snippet(suspicious_lines, window=5):
+    """
+    Extract clean code snippet WITHOUT line numbers or markers.
+    The model needs pure Python code to understand and fix it correctly.
+    """
     code = BUGGY_FILE.read_text(encoding="utf-8").splitlines()
     lines_to_include = set()
     for ln in suspicious_lines:
@@ -97,11 +101,7 @@ def extract_snippet(suspicious_lines, window=3):
             if 0 <= idx < len(code):
                 lines_to_include.add(idx)
     
-    snippet_lines = []
-    for idx in sorted(lines_to_include):
-        marker = " ⚠️" if (idx + 1) in suspicious_lines else ""
-        snippet_lines.append(f"{idx + 1:3d}: {code[idx]}{marker}")
-    
+    snippet_lines = [code[idx] for idx in sorted(lines_to_include)]
     return '\n'.join(snippet_lines)
 
 def extract_full_code():
@@ -114,11 +114,23 @@ def extract_full_code():
 def apply_patch(new_code: str) -> bool:
     """
     Safely apply the patch using Abstract Syntax Trees (AST).
-    This ensures we only replace the buggy function and never break syntax.
+    Includes robust extraction to ignore LLM conversational text.
     """
     try:
-        # 1. Clean LLM output (remove markdown blocks)
-        clean_code = new_code.replace("```python", "").replace("```", "").strip()
+        # 1. Robustly extract ONLY the Python code from the LLM output
+        match = re.search(r'```(?:python)?(.*?)```', new_code, re.DOTALL | re.IGNORECASE)
+        if match:
+            clean_code = match.group(1)
+        else:
+            lines = new_code.split('\n')
+            start_idx = 0
+            for i, line in enumerate(lines):
+                if line.strip().startswith('def ') or line.strip().startswith('class ') or line.strip().startswith('@'):
+                    start_idx = i
+                    break
+            clean_code = '\n'.join(lines[start_idx:])
+            
+        clean_code = clean_code.replace("⚠️", "").replace("⚠", "").strip()
         
         # 2. Parse the LLM's generated code
         new_ast = ast.parse(clean_code)
@@ -142,11 +154,6 @@ def apply_patch(new_code: str) -> bool:
 
         if not modified:
             print("⚠️ Patch rejected: Function names from model didn't match the original file.")
-            # Fallback for complete file generation
-            if len(new_functions) >= 2:
-                print("🔄 Fallback: Applying as full file replacement...")
-                BUGGY_FILE.write_text(clean_code, encoding="utf-8")
-                return True
             return False
 
         # 5. Write the safely modified AST back to the file
@@ -157,6 +164,7 @@ def apply_patch(new_code: str) -> bool:
 
     except SyntaxError as e:
         print(f"❌ Patch rejected: Model generated invalid Python syntax -> {e}")
+        print(f"--- Model Output was ---\n{new_code}\n------------------------")
         return False
     except Exception as e:
         print(f"❌ AST Patching failed: {e}")
@@ -165,24 +173,19 @@ def apply_patch(new_code: str) -> bool:
 
 # -------------------- Phase 4: Prompting & Saving --------------------
 def build_repair_prompt(fail_output: str, suspicious_lines: list, snippet: str, full_code: str) -> str:
-    failure_summary = [line.strip() for line in fail_output.split('\n') if 'FAILED' in line or 'assert' in line or 'Error' in line]
-    failure_text = '\n'.join(failure_summary[:5])
-    susp_lines_text = ', '.join([f"Line {ln}" for ln in suspicious_lines[:3]])
+    """
+    Build the exact prompt format the model was fine-tuned on.
+    Format: ISSUE + TRACE + BUGGY
+    """
+    failure_summary = [line.strip() for line in fail_output.split('\n') if 'E   ' in line or 'FAILED' in line or 'Error' in line]
+    trace_text = '\n'.join(failure_summary[:4])
     
-    prompt = f"""ISSUE: Fix the logic bug in the code. Return ONLY the fixed function.
+    if not trace_text:
+        trace_text = "AssertionError: Logic verification failed."
+        
+    prompt = f"ISSUE: Fix the logic bug causing the test failure.\n\nTRACE:\n{trace_text}\n\nBUGGY:\n{snippet}"
     
-Test Failures:
-{failure_text}
-
-SBFL Analysis highly suspicious lines: {susp_lines_text}
-
-Suspicious Code Section:
-{snippet}
-
-Provide the fixed code:
-"""
     return prompt
-
 def save_model_output(code: str, attempt: int):
     path = ARTIFACTS_DIR / f"model_output_attempt_{attempt}.py"
     path.write_text(code, encoding="utf-8")
@@ -219,7 +222,7 @@ def repair_loop(max_attempts=3, top_k=5):
         print(f"🔍 Top suspicious lines: {suspicious_lines}")
         
         # Step 3: Extract & Build Prompt
-        snippet = extract_snippet(suspicious_lines, window=3)
+        snippet = extract_snippet(suspicious_lines, window=1)
         full_code = extract_full_code()
         prompt = build_repair_prompt(fail_output, suspicious_lines, snippet, full_code)
         
