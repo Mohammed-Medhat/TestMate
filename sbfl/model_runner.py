@@ -26,7 +26,7 @@ def run_testmate(prompt: str) -> str:
         model, tokenizer = load_testmate_model()
         
         messages = [
-            {"role": "system", "content": "Expert APR agent. Fix code using stack trace."},
+            {"role": "system", "content": "Expert APR agent. Output ONLY the complete fixed python function with no line numbers , no explanation no markdown."},
             {"role": "user", "content": prompt}
         ]
         
@@ -35,9 +35,11 @@ def run_testmate(prompt: str) -> str:
 
         with torch.no_grad():
             outputs = model.generate(
-                **inputs, 
-                max_new_tokens=512, 
-                temperature=0.1, 
+                **inputs,
+                max_new_tokens=1024,
+                do_sample=True, 
+                eos_token_id=tokenizer.eos_token_id,      
+                temperature=0.1,
                 pad_token_id=tokenizer.pad_token_id
             )
         

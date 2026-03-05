@@ -64,8 +64,9 @@ def load_and_filter_candidates(json_path):
         if is_bad_test:
             continue
 
-        # 3. Accept if it's a logic failure (AssertionError)
-        if "AssertionError" in error_msg or "Error" in error_msg:
+        # 3. Accept if it's a logic failure
+        LOGIC_ERRORS = {"AssertionError", "ValueError", "RuntimeError", "AttributeError", "TypeError"}
+        if any(err in error_msg for err in LOGIC_ERRORS):
             print(f"✅ Queued {instance_id}: Logic failure detected.")
             valid_candidates.append({
                 "id": instance_id,
@@ -105,9 +106,8 @@ def extract_snippet(suspicious_lines, window=5):
     return '\n'.join(snippet_lines)
 
 def extract_full_code():
-    """Get full code with line numbers"""
-    code = BUGGY_FILE.read_text(encoding="utf-8").splitlines()
-    return '\n'.join(f"{i+1:3d}: {line}" for i, line in enumerate(code))
+    """Get full code WITHOUT line numbers to avoid confusing the model."""
+    return BUGGY_FILE.read_text(encoding="utf-8")
 
 
 # -------------------- Phase 3: AST Smart Patching --------------------
@@ -117,6 +117,19 @@ def apply_patch(new_code: str) -> bool:
     Includes robust extraction to ignore LLM conversational text.
     """
     try:
+        # 0. Backup the original file before any changes
+        original_source = BUGGY_FILE.read_text(encoding="utf-8")
+
+        # FIX: Truncate model output if it starts echoing the prompt back
+        prompt_leak_markers = [
+            "FULL BUGGY CODE", "SUSPICIOUS LINES", "SUSPICIOUS SNIPPET",
+            "TRACE:", "ISSUE:", "FULL BUGGY"
+        ]
+        for marker in prompt_leak_markers:
+            if marker in new_code:
+                new_code = new_code[:new_code.index(marker)]
+                print(f"✂️  Truncated model output at prompt echo marker: '{marker}'")
+
         # 1. Robustly extract ONLY the Python code from the LLM output
         match = re.search(r'```(?:python)?(.*?)```', new_code, re.DOTALL | re.IGNORECASE)
         if match:
@@ -131,7 +144,13 @@ def apply_patch(new_code: str) -> bool:
             clean_code = '\n'.join(lines[start_idx:])
             
         clean_code = clean_code.replace("⚠️", "").replace("⚠", "").strip()
-        
+        clean_code = re.sub(r'^\s*\d+:\s?', '', clean_code, flags=re.MULTILINE)
+        clean_code = re.sub(r'\ndef \w+\([^)]*\):\s*$', '', clean_code.rstrip())
+
+        if clean_code.count('def') == 0:
+            print("❌ Patch rejected: NO function found.")
+            return False
+
         # 2. Parse the LLM's generated code
         new_ast = ast.parse(clean_code)
         new_functions = {node.name: node for node in new_ast.body if isinstance(node, ast.FunctionDef)}
@@ -165,9 +184,11 @@ def apply_patch(new_code: str) -> bool:
     except SyntaxError as e:
         print(f"❌ Patch rejected: Model generated invalid Python syntax -> {e}")
         print(f"--- Model Output was ---\n{new_code}\n------------------------")
+        BUGGY_FILE.write_text(original_source, encoding="utf-8")  # rollback
         return False
     except Exception as e:
         print(f"❌ AST Patching failed: {e}")
+        BUGGY_FILE.write_text(original_source, encoding="utf-8")  # rollback
         return False
 
 
@@ -178,12 +199,19 @@ def build_repair_prompt(fail_output: str, suspicious_lines: list, snippet: str, 
     
     if not trace_text:
         trace_text = "AssertionError: Logic verification failed."
-        
-    clean_code = BUGGY_FILE.read_text(encoding="utf-8")
+
+    lines_str = ', '.join(str(ln) for ln in suspicious_lines)
     
-    prompt = f"ISSUE: Fix the logic bug causing the test failure.\n\nTRACE:\n{trace_text}\n\nBUGGY:\n{clean_code}"
+    prompt = (
+        f"ISSUE: Fix the logic bug causing the test failure.\n\n"
+        f"TRACE:\n{trace_text}\n\n"
+        f"SUSPICIOUS LINES (SBFL): {lines_str}\n\n"
+        f"SUSPICIOUS SNIPPET:\n{snippet}\n\n"
+        f"BUGGY CODE:\n{full_code}"
+    )
     
     return prompt
+
 def save_model_output(code: str, attempt: int):
     path = ARTIFACTS_DIR / f"model_output_attempt_{attempt}.py"
     path.write_text(code, encoding="utf-8")

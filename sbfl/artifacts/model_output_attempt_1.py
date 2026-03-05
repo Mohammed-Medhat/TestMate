@@ -16,13 +16,13 @@ def max_in_list(numbers):
     return max_val
 
 def find_first_in_sorted(arr, x):
-    lo, hi = 0, len(arr) - 1
+    (lo, hi) = (0, len(arr) - 1)
     while lo <= hi:
         mid = (lo + hi) // 2
-        if x == arr[mid]: 
+        if x == arr[mid]:
             return mid
-        elif x < arr[mid]: 
+        elif x < arr[mid]:
             hi = mid - 1
-        else: 
+        else:
             lo = mid + 1
     return -1

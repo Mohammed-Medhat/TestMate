@@ -1,18 +1,18 @@
 import torch
+from pathlib import Path
 
-MODEL_NAME = "/home/c/my_apr_project/Qwen_Model"
-CACHE_DIR = "./model_cache"
-OUTPUT_DIR = "./qwen-testmate-adapter"
-ADAPTER_PATH = "/home/c/my_apr_project/final"
+BASE_DIR = Path(__file__).parent
 
-TRAIN_FILE = "./data/train_prepared.jsonl"
-TEST_FILE  = "./data/test_prepared.jsonl"
+MODEL_NAME   = str(BASE_DIR / "Qwen_Model")
+CACHE_DIR    = str(BASE_DIR / "model_cache")
+OUTPUT_DIR   = str(BASE_DIR / "qwen-testmate-adapter")
+ADAPTER_PATH = str(BASE_DIR / "Final")   
 
-RESUME_PATH = "./checkpoints/checkpoint-300"
+TRAIN_FILE  = str(BASE_DIR / "data" / "train_prepared.jsonl")
+TEST_FILE   = str(BASE_DIR / "data" / "test_prepared.jsonl")
 
-
-MAX_LENGTH = 2048
-BATCH_SIZE = 1
+MAX_LENGTH        = 2048
+BATCH_SIZE        = 1
 GRAD_ACCUMULATION = 16
-LEARNING_RATE = 2e-4
-NUM_EPOCHS = 3
+LEARNING_RATE     = 2e-4
+NUM_EPOCHS        = 3
