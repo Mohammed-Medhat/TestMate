@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import os
 from transformers import (
-    AutoModelForCausalLM, AutoTokenizer, TrainingArguments, 
+    AutoModelForCausalLM, AutoTokenizer, TrainingArguments,
     Trainer, DataCollatorForLanguageModeling, BitsAndBytesConfig
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
@@ -26,16 +26,22 @@ def run_training():
     )
 
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, quantization_config=bnb_config, device_map="auto", 
+        MODEL_NAME, quantization_config=bnb_config, device_map="auto",
         trust_remote_code=True, cache_dir=CACHE_DIR
     )
     model = prepare_model_for_kbit_training(model)
 
+    # LoRA — includes MLP layers for better code reasoning
     lora_config = LoraConfig(
-        r=8, lora_alpha=32, target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
-        lora_dropout=0.05, task_type="CAUSAL_LM"
+        r=16,
+        lora_alpha=32,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"],
+        lora_dropout=0.05,
+        task_type="CAUSAL_LM"
     )
     model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
 
     tokenized_ds = get_tokenized_dataset(tokenizer)
 
@@ -46,24 +52,30 @@ def run_training():
         learning_rate=LEARNING_RATE,
         num_train_epochs=NUM_EPOCHS,
         fp16=True,
+        gradient_checkpointing=True,
+        optim="paged_adamw_8bit",
         save_steps=100,
-        logging_steps=10,
+        logging_steps=100,
+        evaluation_strategy="steps",
+        save_strategy="steps",
+        load_best_model_at_end=FALSE,
         report_to="none"
     )
 
     trainer = Trainer(
-        model=model, args=args,
+        model=model,
+        args=args,
         train_dataset=tokenized_ds["train"],
+        eval_dataset=tokenized_ds["test"],
         data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     )
 
-    if os.path.exists(RESUME_PATH):
-        trainer.train(resume_from_checkpoint=RESUME_PATH)
-    else:
-        trainer.train()
+    trainer.train()
+    print("✅ Training complete!")
 
     model.save_pretrained(f"{OUTPUT_DIR}/final")
     tokenizer.save_pretrained(f"{OUTPUT_DIR}/final")
+    print(f"✅ Adapter saved to {OUTPUT_DIR}/final")
 
 if __name__ == "__main__":
     run_training()
