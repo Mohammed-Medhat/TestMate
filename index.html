@@ -1181,9 +1181,13 @@
       if (!el) return;
       el.innerHTML = STEPS.map(s => {
         let cls = 'ps-idle', icon = '—';
-        if (pipelineDone) { cls = 'ps-done'; icon = '✅' }
-        else if (s.id < currentStep) { cls = 'ps-done'; icon = '✅' }
-        else if (s.id === currentStep && pipelineRunning) { cls = 'ps-run'; icon = '<span style="display:inline-block;animation:rot .8s linear infinite">⟳</span>' }
+        if (pipelineDone && s.id <= 6) {
+          cls = 'ps-done'; icon = '✅';
+        } else if (s.id < currentStep) {
+          cls = 'ps-done'; icon = '✅';
+        } else if (s.id === currentStep && pipelineRunning) {
+          cls = 'ps-run'; icon = '<span style="display:inline-block;animation:rot .8s linear infinite">⟳</span>';
+        }
         return `<div class="pstep ${cls}"><div style="font-size:22px">${s.icon}</div><div><div style="font-size:9.5px;opacity:.5;margin-bottom:2px">STEP ${s.id}</div><div style="font-size:13px;font-weight:600">${s.label}</div></div><div style="margin-left:auto;font-size:18px">${icon}</div></div>`;
       }).join('');
     }
@@ -1223,9 +1227,15 @@
           const d = JSON.parse(e.data);
           if (d.type === 'connected' || d.type === 'ping') return;
           appendLog(d.type, d.msg);
+          // update step live from log messages
+          if (d.msg && d.msg.includes('Step 1')) { currentStep = 1; renderSteps(); }
+          if (d.msg && d.msg.includes('Step 2')) { currentStep = 2; renderSteps(); }
+          if (d.msg && d.msg.includes('Step 3')) { currentStep = 3; renderSteps(); }
+          if (d.msg && d.msg.includes('Step 4')) { currentStep = 4; renderSteps(); }
+          if (d.msg && d.msg.includes('Step 5')) { currentStep = 5; renderSteps(); }
+          if (d.msg && d.msg.includes('Step 6')) { currentStep = 6; renderSteps(); }
           if (d.type === 'done') {
             evtSource.close();
-            // re-fetch ALL logs from server so nothing is missed
             fetchAllLogs().then(() => onPipelineDone());
           }
         } catch (err) { }
@@ -1245,8 +1255,8 @@
         if (d.error) { appendLog('error', '❌ ' + d.error); pipelineRunning = false; }
       });
 
-      // Poll status (steps + attempts)
-      statusPoll = setInterval(pollStatus, 1500);
+      // Poll status (steps) — every 800ms for snappy updates
+      statusPoll = setInterval(pollStatus, 800);
     }
 
     function pollStatus() {
