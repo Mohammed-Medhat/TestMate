@@ -58,7 +58,7 @@ def run_training():
         logging_steps=100,
         evaluation_strategy="steps",
         save_strategy="steps",
-        load_best_model_at_end=FALSE,
+        load_best_model_at_end=True,
         report_to="none"
     )
 

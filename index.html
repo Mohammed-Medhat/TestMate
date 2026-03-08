@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TestMate APR</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700;800&family=DM+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg: #0b0614;
+      --s1: #100a1f;
+      --s2: #160d2a;
+      --s3: #1e1235;
+      --border: rgba(168, 85, 247, .12);
+      --border2: rgba(168, 85, 247, .28);
+      --p: #9333ea;
+      --p2: #7c3aed;
+      --p3: #6366f1;
+      --teal: #06b6d4;
+      --green: #34d399;
+      --red: #f87171;
+      --amber: #fbbf24;
+      --text: rgba(220, 200, 255, .75);
+      --text2: rgba(200, 170, 255, .5);
+      --text3: rgba(168, 130, 220, .3);
+      --white: #f0e8ff;
+      --mono: 'DM Mono', monospace;
+      --head: 'Space Grotesk', sans-serif;
+      --r: 16px;
+      --rs: 10px;
+    }
+
+    html,
+    body {
+      min-height: 100vh;
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden
+    }
+
+    /* stars */
+    #stars {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden
+    }
+
+    .star {
+      position: absolute;
+      border-radius: 50%;
+      background: #fff;
+      animation: twinkle var(--d) ease-in-out infinite
+    }
+
+    @keyframes twinkle {
+
+      0%,
+      100% {
+        opacity: .1
+      }
+
+      50% {
+        opacity: .8
+      }
+    }
+
+    /* nebulae */
+    #nebula {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 70% 50% at -5% 5%, rgba(147, 51, 234, .13) 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 105% 90%, rgba(99, 102, 241, .1) 0%, transparent 55%),
+        radial-gradient(ellipse 40% 30% at 50% 50%, rgba(236, 72, 153, .05) 0%, transparent 60%)
+    }
+
+    /* NAVBAR */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      height: 56px;
+      background: rgba(11, 6, 20, .9);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      padding: 0 32px;
+      gap: 6px
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-right: auto
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--p), var(--p3));
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      box-shadow: 0 0 18px rgba(147, 51, 234, .45)
+    }
+
+    .brand-name {
+      font-family: var(--head);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--white)
+    }
+
+    .brand-sub {
+      font-size: 9px;
+      color: var(--text3);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-top: 1px
+    }
+
+    .ntab {
+      padding: 7px 15px;
+      border-radius: 20px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text2);
+      cursor: pointer;
+      transition: all .18s;
+      border: 1px solid transparent;
+      white-space: nowrap
+    }
+
+    .ntab:hover {
+      color: var(--white);
+      background: rgba(168, 85, 247, .08)
+    }
+
+    .ntab.on {
+      color: #e8d8ff;
+      background: rgba(168, 85, 247, .15);
+      border-color: var(--border2)
+    }
+
+    /* LAYOUT */
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px 80px
+    }
+
+    /* SECTION TITLE */
+    .stitle {
+      font-family: var(--head);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-top: 44px;
+      margin-bottom: 6px
+    }
+
+    .stitle::before {
+      content: '';
+      width: 4px;
+      height: 22px;
+      background: linear-gradient(180deg, var(--p), var(--p3));
+      border-radius: 2px;
+      flex-shrink: 0
+    }
+
+    .ssub {
+      font-size: 13px;
+      color: var(--text2);
+      margin-bottom: 28px;
+      padding-left: 14px
+    }
+
+    /* CARD */
+    .card {
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      transition: border-color .2s
+    }
+
+    .card:hover {
+      border-color: var(--border2)
+    }
+
+    /* BUTTONS */
+    .btn {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      font-size: 13.5px;
+      cursor: pointer;
+      border: none;
+      border-radius: var(--rs);
+      padding: 11px 26px;
+      transition: all .2s;
+      letter-spacing: .3px
+    }
+
+    .btn-p {
+      background: linear-gradient(135deg, var(--p), var(--p2));
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(147, 51, 234, .35)
+    }
+
+    .btn-p:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(147, 51, 234, .55)
+    }
+
+    .btn-p:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+      transform: none
+    }
+
+    .btn-o {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text);
+      box-shadow: none
+    }
+
+    .btn-o:hover {
+      background: rgba(168, 85, 247, .08);
+      color: var(--white)
+    }
+
+    /* STAT CARD */
+    .sgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin: 24px 0
+    }
+
+    .sc {
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center
+    }
+
+    .sv {
+      font-family: var(--head);
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1
+    }
+
+    .sl {
+      font-size: 10px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-top: 5px
+    }
+
+    /* PIPELINE STEPS */
+    .psteps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px
+    }
+
+    .pstep {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      border: 1px solid;
+      transition: all .3s
+    }
+
+    .ps-idle {
+      background: rgba(255, 255, 255, .02);
+      border-color: rgba(255, 255, 255, .06);
+      color: var(--text3)
+    }
+
+    .ps-run {
+      background: rgba(147, 51, 234, .1);
+      border-color: rgba(147, 51, 234, .4);
+      color: #c084fc;
+      animation: pglow 2s ease-in-out infinite
+    }
+
+    .ps-done {
+      background: rgba(52, 211, 153, .08);
+      border-color: rgba(52, 211, 153, .3);
+      color: #34d399
+    }
+
+    .ps-fail {
+      background: rgba(248, 113, 113, .08);
+      border-color: rgba(248, 113, 113, .3);
+      color: #f87171
+    }
+
+    @keyframes pglow {
+
+      0%,
+      100% {
+        box-shadow: none
+      }
+
+      50% {
+        box-shadow: 0 0 20px rgba(147, 51, 234, .25)
+      }
+    }
+
+    /* LOG TERMINAL */
+    .term {
+      background: #060410;
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden
+    }
+
+    .term-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, .25)
+    }
+
+    .wdots {
+      display: flex;
+      gap: 4px
+    }
+
+    .wd {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%
+    }
+
+    .wr {
+      background: #ff5f57
+    }
+
+    .wy {
+      background: #febc2e
+    }
+
+    .wg {
+      background: #28c840
+    }
+
+    .term-label {
+      font-size: 10px;
+      color: var(--text3);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-left: 5px
+    }
+
+    .term-body {
+      padding: 14px 16px;
+      height: 220px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.85
+    }
+
+    .term-body::-webkit-scrollbar {
+      width: 3px
+    }
+
+    .term-body::-webkit-scrollbar-thumb {
+      background: rgba(168, 85, 247, .2);
+      border-radius: 2px
+    }
+
+    .li {
+      color: #a78bfa
+    }
+
+    .lk {
+      color: #34d399
+    }
+
+    .lw {
+      color: #fbbf24
+    }
+
+    .le {
+      color: #f87171
+    }
+
+    .lm {
+      color: rgba(200, 184, 232, .25)
+    }
+
+    .lts {
+      color: rgba(200, 184, 232, .2);
+      margin-right: 8px
+    }
+
+    /* CODE PANELS */
+    .diff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px
+    }
+
+    .cpane {
+      background: #060410;
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column
+    }
+
+    .cpane-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 15px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, .2);
+      flex-shrink: 0
+    }
+
+    .cpane-label {
+      font-size: 11px;
+      color: var(--text2);
+      margin-left: 5px
+    }
+
+    .badger {
+      background: rgba(248, 113, 113, .1);
+      border: 1px solid rgba(248, 113, 113, .2);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 8.5px;
+      color: #f87171;
+      letter-spacing: .5px;
+      margin-left: auto
+    }
+
+    .badgeg {
+      background: rgba(52, 211, 153, .07);
+      border: 1px solid rgba(52, 211, 153, .2);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 8.5px;
+      color: #34d399;
+      letter-spacing: .5px;
+      margin-left: auto
+    }
+
+    .cpane-body {
+      padding: 14px 15px;
+      overflow: auto;
+      max-height: 360px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.75
+    }
+
+    .cpane-body::-webkit-scrollbar {
+      width: 3px;
+      height: 3px
+    }
+
+    .cpane-body::-webkit-scrollbar-thumb {
+      background: rgba(168, 85, 247, .15);
+      border-radius: 2px
+    }
+
+    .lr {
+      color: #f4788a;
+      display: block
+    }
+
+    .lr::before {
+      content: '− ';
+      color: rgba(248, 113, 113, .4);
+      margin-right: 2px
+    }
+
+    .la {
+      color: #5dffc4;
+      display: block
+    }
+
+    .la::before {
+      content: '+ ';
+      color: rgba(52, 211, 153, .4);
+      margin-right: 2px
+    }
+
+    .lhi {
+      background: rgba(248, 113, 113, .12);
+      border-radius: 3px
+    }
+
+    /* HEATMAP */
+    .heatrow {
+      margin-bottom: 14px
+    }
+
+    .heatbar-wrap {
+      height: 6px;
+      background: rgba(255, 255, 255, .04);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 5px
+    }
+
+    .heatbar {
+      height: 100%;
+      background: linear-gradient(90deg, rgba(239, 68, 68, .3), #ef4444);
+      border-radius: 3px;
+      transition: width 1s ease
+    }
+
+    /* TEST ROWS */
+    .trow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 18px;
+      border-radius: 12px;
+      border: 1px solid;
+      margin-bottom: 8px;
+      transition: border-color .2s
+    }
+
+    .trow-p {
+      border-color: rgba(52, 211, 153, .15);
+      background: rgba(52, 211, 153, .03)
+    }
+
+    .trow-f {
+      border-color: rgba(248, 113, 113, .2);
+      background: rgba(248, 113, 113, .04)
+    }
+
+    .tname {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      flex: 1
+    }
+
+    .tbadge {
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: .5px
+    }
+
+    .tbp {
+      background: rgba(52, 211, 153, .1);
+      color: #34d399
+    }
+
+    .tbf {
+      background: rgba(248, 113, 113, .1);
+      color: #f87171
+    }
+
+    /* ATTEMPTS TIMELINE */
+    .timeline {
+      position: relative;
+      padding-left: 28px
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(180deg, rgba(147, 51, 234, .5), rgba(147, 51, 234, .05));
+      border-radius: 1px
+    }
+
+    .attempt-row {
+      position: relative;
+      display: flex;
+      gap: 18px;
+      margin-bottom: 22px
+    }
+
+    .attempt-dot {
+      position: absolute;
+      left: -22px;
+      top: 10px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      border: 2px solid;
+      flex-shrink: 0
+    }
+
+    .ad-s {
+      background: rgba(52, 211, 153, .12);
+      border-color: rgba(52, 211, 153, .4);
+      box-shadow: 0 0 12px rgba(52, 211, 153, .25)
+    }
+
+    .ad-f {
+      background: rgba(248, 113, 113, .1);
+      border-color: rgba(248, 113, 113, .3)
+    }
+
+    .ad-p {
+      background: rgba(168, 85, 247, .1);
+      border-color: rgba(168, 85, 247, .35)
+    }
+
+    .acard {
+      flex: 1;
+      padding: 16px 20px;
+      border-radius: 14px;
+      border: 1px solid
+    }
+
+    .ac-s {
+      border-color: rgba(52, 211, 153, .25);
+      background: rgba(52, 211, 153, .04)
+    }
+
+    .ac-f {
+      border-color: rgba(248, 113, 113, .18);
+      background: rgba(248, 113, 113, .03)
+    }
+
+    /* EMPTY STATE */
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      gap: 14px;
+      text-align: center;
+      color: var(--text3)
+    }
+
+    .empty-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      opacity: .4
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 90px 20px 64px
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(168, 85, 247, .1);
+      border: 1px solid rgba(168, 85, 247, .25);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 11.5px;
+      color: #c084fc;
+      margin-bottom: 28px;
+      letter-spacing: 1px;
+      text-transform: uppercase
+    }
+
+    .hero-h1 {
+      font-family: var(--head);
+      font-size: clamp(38px, 6vw, 70px);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #e879f9, #c084fc 40%, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent
+    }
+
+    .hero-p {
+      font-size: 17px;
+      color: var(--text2);
+      max-width: 520px;
+      margin: 0 auto 40px;
+      line-height: 1.75
+    }
+
+    .hero-btns {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap
+    }
+
+    /* HOW IT WORKS */
+    .hiw-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+      gap: 12px;
+      margin-top: 24px
+    }
+
+    .hiw-card {
+      padding: 22px 18px;
+      text-align: center;
+      background: rgba(255, 255, 255, .025);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      transition: all .25s;
+      cursor: default
+    }
+
+    .hiw-card:hover {
+      border-color: var(--border2);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 32px rgba(147, 51, 234, .1)
+    }
+
+    /* UPLOAD ZONE */
+    .upzone {
+      border: 2px dashed rgba(168, 85, 247, .2);
+      border-radius: 14px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: rgba(168, 85, 247, .02)
+    }
+
+    .upzone:hover {
+      border-color: rgba(168, 85, 247, .5);
+      background: rgba(168, 85, 247, .06)
+    }
+
+    .upzone input {
+      display: none
+    }
+
+    /* SUCCESS BANNER */
+    .success-banner {
+      padding: 28px;
+      border-radius: 20px;
+      text-align: center;
+      background: linear-gradient(135deg, rgba(52, 211, 153, .07), rgba(99, 102, 241, .07));
+      border: 1px solid rgba(52, 211, 153, .22);
+      margin-top: 20px
+    }
+
+    /* SPINNER */
+    .spin {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(168, 85, 247, .2);
+      border-top-color: var(--p);
+      border-radius: 50%;
+      animation: rot .65s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px
+    }
+
+    @keyframes rot {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    /* CHIP */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 10px;
+      color: var(--text2)
+    }
+
+    /* LIVE DOT */
+    .ldot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 7px var(--green);
+      animation: twinkle 1.5s ease-in-out infinite
+    }
+
+    /* page animation */
+    .page {
+      animation: pgi .35s ease both
+    }
+
+    @keyframes pgi {
+      from {
+        opacity: 0;
+        transform: translateY(12px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="stars"></div>
+  <div id="nebula"></div>
+
+  <!-- NAVBAR -->
+  <nav class="nav">
+    <div class="ntab on" onclick="goto('home')">Home</div>
+    <div class="ntab" onclick="goto('upload')">Upload</div>
+    <div class="ntab" onclick="goto('pipeline')">Pipeline</div>
+    <div class="ntab" onclick="goto('code')">Code Diff</div>
+    <div class="ntab" onclick="goto('tests')">Tests</div>
+
+  </nav>
+
+  <div class="wrap">
+
+    <!-- ══ HOME ══════════════════════════════════════════════════════════ -->
+    <div id="p-home" class="page">
+      <div class="hero">
+
+        <h1 class="hero-h1">Automated<br>Program Repair</h1>
+        <p class="hero-p">Fix Python bugs automatically using AI-powered multi-teacher distillation, SBFL fault
+          localization, and smart AST patching.</p>
+        <div class="hero-btns">
+          <button class="btn btn-p" onclick="goto('upload')">🚀 Start Demo</button>
+          <button class="btn btn-o" onclick="goto('pipeline')">View Pipeline ↗</button>
+        </div>
+      </div>
+
+      <div class="stitle">How It Works</div>
+      <div class="ssub">Five intelligent stages to automatically repair bugs</div>
+      <div class="hiw-grid">
+        <div class="hiw-card">
+          <div style="font-size:28px;margin-bottom:10px">🧪</div>
+          <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:6px">01</div>
+          <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:7px">Run Tests</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6">Execute pytest to detect failing test cases
+          </div>
+        </div>
+        <div class="hiw-card">
+          <div style="font-size:28px;margin-bottom:10px">🔍</div>
+          <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:6px">02</div>
+          <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:7px">SBFL Analysis</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6">Rank suspicious lines using Ochiai formula
+          </div>
+        </div>
+        <div class="hiw-card">
+          <div style="font-size:28px;margin-bottom:10px">📝</div>
+          <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:6px">03</div>
+          <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:7px">Prompt Builder</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6">Smart prompt with code + stack trace</div>
+        </div>
+        <div class="hiw-card">
+          <div style="font-size:28px;margin-bottom:10px">🤖</div>
+          <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:6px">04</div>
+          <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:7px">AI Repair</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6">TestMate model generates the fix</div>
+        </div>
+        <div class="hiw-card">
+          <div style="font-size:28px;margin-bottom:10px">✅</div>
+          <div style="font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:6px">05</div>
+          <div style="font-size:13px;font-weight:600;color:var(--white);margin-bottom:7px">AST Patch</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6">Safe function replacement & test verify</div>
+        </div>
+      </div>
+
+      <div class="sgrid" style="margin-top:40px">
+        <div class="sc">
+          <div class="sv" style="color:#c084fc">70%</div>
+          <div class="sl">Manual effort reduced</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color:#34d399">3×</div>
+          <div class="sl">Faster than single-teacher</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color:#38bdf8">60%</div>
+          <div class="sl">Debug time saved</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color:#fbbf24">∞</div>
+          <div class="sl">Local & private</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ UPLOAD ═════════════════════════════════════════════════════════ -->
+    <div id="p-upload" class="page" style="display:none">
+      <div class="stitle">Upload Python Project</div>
+      <div class="ssub">Upload buggy code & test file, or use a built-in demo</div>
+      <div style="max-width:580px">
+
+        <div style="margin-bottom:20px">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;letter-spacing:.5px">Python Source File
+            (buggy_code.py)</div>
+          <label class="upzone">
+            <input type="file" accept=".py" id="fileInput" onchange="handleFileUpload(event,'buggy')">
+            <div style="font-size:22px;margin-bottom:8px;opacity:.5">📄</div>
+            <div id="fileLabel" style="font-size:13px;color:var(--text2)">Drop <span style="color:#c084fc">.py
+                file</span> or click to browse</div>
+          </label>
+        </div>
+
+        <div style="margin-bottom:28px">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;letter-spacing:.5px">Or use the current <code
+              style="color:#c084fc">buggy_code.py</code> in the project:</div>
+          <div class="card"
+            style="padding:14px 18px;cursor:pointer;border-color:rgba(168,85,247,.3);background:rgba(168,85,247,.05)"
+            onclick="useCurrent()">
+            <div style="font-size:13px;font-weight:600;color:var(--white)">📂 Use existing buggy_code.py</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px" id="currentFileInfo">Click to load current
+              project file</div>
+          </div>
+        </div>
+
+        <button class="btn btn-p" style="width:100%;font-size:15px;padding:14px" onclick="startPipeline()">
+          ▶ &nbsp; Run Automatic Repair
+        </button>
+      </div>
+    </div>
+
+    <!-- ══ PIPELINE ═══════════════════════════════════════════════════════ -->
+    <div id="p-pipeline" class="page" style="display:none">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div class="stitle">Repair Pipeline</div>
+          <div class="ssub" id="pipeStatusText">Press "Run Automatic Repair" to start</div>
+        </div>
+        <div style="padding-top:44px;display:flex;gap:10px">
+          <button class="btn btn-p" id="runBtn" onclick="startPipeline()">▶ Run Repair</button>
+          <button class="btn btn-o" onclick="resetPipeline()">↺ Reset</button>
+        </div>
+      </div>
+
+      <div class="psteps" id="pipeSteps">
+        <!-- rendered by JS -->
+      </div>
+
+      <div class="term">
+        <div class="term-head">
+          <div class="wdots">
+            <div class="wd wr"></div>
+            <div class="wd wy"></div>
+            <div class="wd wg"></div>
+          </div>
+          <span class="term-label">Pipeline Log</span>
+          <div id="liveIndicator" style="margin-left:auto;display:none">
+            <div class="ldot"></div>
+          </div>
+        </div>
+        <div class="term-body" id="logBody">
+          <span class="lm">// Waiting for pipeline…</span>
+        </div>
+      </div>
+
+      <!-- Success / Fail banner — appears after pipeline finishes -->
+      <div id="successBanner" style="display:none;margin-top:20px" class="success-banner">
+        <div style="font-size:36px;margin-bottom:10px">🎉</div>
+        <div style="font-family:var(--head);font-size:20px;font-weight:800;color:var(--white);margin-bottom:8px">Bug
+          Fixed Successfully</div>
+        <div style="font-size:13px;color:var(--text2)" id="successMsg">All tests are now passing</div>
+        <button class="btn btn-p" style="margin-top:18px" onclick="goto('code')">View Code Diff →</button>
+      </div>
+      <div id="failBanner"
+        style="display:none;margin-top:20px;padding:24px;border-radius:20px;text-align:center;background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2)">
+        <div style="font-size:32px;margin-bottom:10px">❌</div>
+        <div style="font-family:var(--head);font-size:18px;font-weight:700;color:#f87171;margin-bottom:8px">All Attempts
+          Failed</div>
+        <div style="font-size:13px;color:var(--text2)">Check the log above for details</div>
+      </div>
+    </div>
+
+    <!-- ══ CODE DIFF ══════════════════════════════════════════════════════ -->
+    <div id="p-code" class="page" style="display:none">
+      <div class="stitle">Code Diff — Before vs After</div>
+      <div class="ssub">SBFL fault localization + AST-safe patch</div>
+
+      <!-- SBFL Heatmap -->
+      <div class="card" style="padding:22px;margin-bottom:20px">
+        <div
+          style="font-size:10px;color:rgba(168,85,247,.6);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px">
+          SBFL Fault Localization</div>
+        <div id="sbflList">
+          <div class="empty">
+            <div class="empty-icon">🔍</div>
+            <div style="font-size:12px">Run the pipeline first to see suspicious lines</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diff panels -->
+      <div class="diff-grid">
+        <div class="cpane">
+          <div class="cpane-head">
+            <div class="wdots">
+              <div class="wd wr"></div>
+              <div class="wd wy"></div>
+              <div class="wd wg"></div>
+            </div>
+            <span class="cpane-label">buggy_code.py — BEFORE</span>
+            <span class="badger">BUGGY</span>
+          </div>
+          <div class="cpane-body">
+            <pre id="codeBefore" style="color:var(--text3);font-style:italic">// Load code from Upload page</pre>
+          </div>
+        </div>
+        <div class="cpane">
+          <div class="cpane-head">
+            <div class="wdots">
+              <div class="wd wr"></div>
+              <div class="wd wy"></div>
+              <div class="wd wg"></div>
+            </div>
+            <span class="cpane-label">buggy_code.py — AFTER</span>
+            <span class="badgeg">FIXED</span>
+          </div>
+          <div class="cpane-body">
+            <pre id="codeAfter" style="color:var(--text3);font-style:italic">// Patched code appears after repair</pre>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:right;margin-top:14px">
+        <button class="btn btn-o" onclick="loadCode()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- ══ TESTS ══════════════════════════════════════════════════════════ -->
+    <div id="p-tests" class="page" style="display:none">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div class="stitle">Test Results</div>
+          <div class="ssub">Live pytest output from test_logic.py</div>
+        </div>
+        <div style="padding-top:44px">
+          <button class="btn btn-p" onclick="loadTests()">▶ Run Tests</button>
+        </div>
+      </div>
+
+      <div class="sgrid" id="testStats">
+        <div class="sc">
+          <div class="sv" style="color:#a78bfa" id="tTotal">—</div>
+          <div class="sl">Total</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color:#34d399" id="tPassed">—</div>
+          <div class="sl">Passed</div>
+        </div>
+        <div class="sc">
+          <div class="sv" style="color:#f87171" id="tFailed">—</div>
+          <div class="sl">Failed</div>
+        </div>
+      </div>
+
+      <div id="testList">
+        <div class="empty">
+          <div class="empty-icon">🧪</div>
+          <div style="font-size:12px">Click "Run Tests" to see results</div>
+        </div>
+      </div>
+
+      <div class="term" style="margin-top:20px">
+        <div class="term-head">
+          <div class="wdots">
+            <div class="wd wr"></div>
+            <div class="wd wy"></div>
+            <div class="wd wg"></div>
+          </div>
+          <span class="term-label">Failure Trace</span>
+        </div>
+        <div class="term-body" id="testTrace"><span class="lm">// No trace yet</span></div>
+      </div>
+    </div>
+
+    <!-- ══ ATTEMPTS ═══════════════════════════════════════════════════════ -->
+
+
+
+  </div><!-- /wrap -->
+
+  <script>
+    // ── Stars ──────────────────────────────────────────────────────────────
+    (function () {
+      const el = document.getElementById('stars');
+      for (let i = 0; i < 70; i++) {
+        const s = document.createElement('div');
+        s.className = 'star';
+        const sz = Math.random() * 2 + .4;
+        s.style.cssText = `left:${Math.random() * 100}%;top:${Math.random() * 100}%;width:${sz}px;height:${sz}px;opacity:${Math.random() * .6 + .1};--d:${2 + Math.random() * 4}s;animation-delay:${Math.random() * 5}s`;
+        el.appendChild(s);
+      }
+    })();
+
+    // ── State ──────────────────────────────────────────────────────────────
+    const STEPS = [
+      { id: 1, label: "Run Tests", icon: "🧪" },
+      { id: 2, label: "Fault Localization", icon: "🔍" },
+      { id: 3, label: "Prompt Generation", icon: "📝" },
+      { id: 4, label: "Model Repair", icon: "🤖" },
+      { id: 5, label: "Apply Patch", icon: "🔧" },
+      { id: 6, label: "Verify Tests", icon: "✅" },
+    ];
+
+    let currentStep = 0, pipelineDone = false, pipelineRunning = false;
+    let originalCode = "", fixedCode = "";
+    let statusPoll = null, evtSource = null;
+
+    // ── Navigation ─────────────────────────────────────────────────────────
+    function goto(id) {
+      document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+      document.querySelectorAll('.ntab').forEach(t => t.classList.remove('on'));
+      document.getElementById('p-' + id).style.display = 'block';
+      document.getElementById('p-' + id).classList.remove('page');
+      void document.getElementById('p-' + id).offsetWidth;
+      document.getElementById('p-' + id).classList.add('page');
+      const tabs = { home: 0, upload: 1, pipeline: 2, code: 3, tests: 4 };
+      document.querySelectorAll('.ntab')[tabs[id]]?.classList.add('on');
+      if (id === 'code') loadCode();
+      renderSteps();
+    }
+
+    // ── Step Rendering ─────────────────────────────────────────────────────
+    function renderSteps() {
+      const el = document.getElementById('pipeSteps');
+      if (!el) return;
+      el.innerHTML = STEPS.map(s => {
+        let cls = 'ps-idle', icon = '—';
+        if (pipelineDone) { cls = 'ps-done'; icon = '✅' }
+        else if (s.id < currentStep) { cls = 'ps-done'; icon = '✅' }
+        else if (s.id === currentStep && pipelineRunning) { cls = 'ps-run'; icon = '<span style="display:inline-block;animation:rot .8s linear infinite">⟳</span>' }
+        return `<div class="pstep ${cls}"><div style="font-size:22px">${s.icon}</div><div><div style="font-size:9.5px;opacity:.5;margin-bottom:2px">STEP ${s.id}</div><div style="font-size:13px;font-weight:600">${s.label}</div></div><div style="margin-left:auto;font-size:18px">${icon}</div></div>`;
+      }).join('');
+    }
+
+    // ── File upload ────────────────────────────────────────────────────────
+    function handleFileUpload(e, type) {
+      const f = e.target.files[0]; if (!f) return;
+      document.getElementById('fileLabel').innerHTML = `<span style="color:#c084fc">✓ ${f.name}</span>`;
+    }
+
+    function useCurrent() {
+      fetch('/api/code').then(r => r.json()).then(d => {
+        originalCode = d.buggy;
+        document.getElementById('currentFileInfo').textContent =
+          `✓ Loaded ${d.buggy.split('\n').length} lines`;
+        document.getElementById('currentFileInfo').style.color = '#34d399';
+      });
+    }
+
+    // ── Run Pipeline ────────────────────────────────────────────────────────
+    function startPipeline() {
+      pipelineRunning = true; pipelineDone = false; currentStep = 0;
+      document.getElementById('logBody').innerHTML = '';
+      document.getElementById('liveIndicator').style.display = 'flex';
+      document.getElementById('runBtn').disabled = true;
+      document.getElementById('runBtn').innerHTML = '<span class="spin"></span>Running…';
+      document.getElementById('pipeStatusText').textContent = '⏳ Pipeline running…';
+      renderSteps();
+      goto('pipeline');
+
+      // Start SSE
+      if (evtSource) evtSource.close();
+      evtSource = new EventSource('/api/stream');
+
+      evtSource.onmessage = function (e) {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.type === 'connected' || d.type === 'ping') return;
+          appendLog(d.type, d.msg);
+          if (d.type === 'done') {
+            evtSource.close();
+            // re-fetch ALL logs from server so nothing is missed
+            fetchAllLogs().then(() => onPipelineDone());
+          }
+        } catch (err) { }
+      };
+
+      evtSource.onerror = function () {
+        // SSE dropped — fallback to polling until done
+        evtSource.close();
+        if (!pipelineDone) {
+          appendLog('warn', '⚠️  Live stream interrupted — polling for results…');
+          waitForDone();
+        }
+      };
+
+      // Call run endpoint
+      fetch('/api/run', { method: 'POST' }).then(r => r.json()).then(d => {
+        if (d.error) { appendLog('error', '❌ ' + d.error); pipelineRunning = false; }
+      });
+
+      // Poll status (steps + attempts)
+      statusPoll = setInterval(pollStatus, 1500);
+    }
+
+    function pollStatus() {
+      fetch('/api/status').then(r => r.json()).then(d => {
+        currentStep = d.step || 0;
+        renderSteps();
+        if (d.done) clearInterval(statusPoll);
+      });
+    }
+
+    // Fetch ALL logs stored on server (in case SSE missed some)
+    function fetchAllLogs() {
+      return fetch('/api/logs').then(r => r.json()).then(data => {
+        const el = document.getElementById('logBody');
+        el.innerHTML = '';   // clear, then re-render all
+        (data.logs || []).forEach(l => appendLog(l.type, l.msg));
+      }).catch(() => { });
+    }
+
+    // Fallback: poll until server says done, then call onPipelineDone
+    function waitForDone() {
+      const iv = setInterval(() => {
+        fetch('/api/status').then(r => r.json()).then(d => {
+          currentStep = d.step || 0;
+          renderSteps();
+          if (d.done) {
+            clearInterval(iv);
+            fetchAllLogs().then(() => onPipelineDone());
+          }
+        });
+      }, 1500);
+    }
+
+    function onPipelineDone() {
+      pipelineRunning = false; pipelineDone = true;
+      currentStep = 6;
+      clearInterval(statusPoll);
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('runBtn').innerHTML = '▶ Run Repair';
+      document.getElementById('liveIndicator').style.display = 'none';
+      renderSteps();
+      fetch('/api/status').then(r => r.json()).then(d => {
+        const ok = d.success;
+        state_success = ok;
+        document.getElementById('pipeStatusText').textContent =
+          ok ? '✅ Pipeline complete — bug fixed!' : '❌ All attempts exhausted';
+        if (ok) {
+          document.getElementById('successBanner').style.display = 'block';
+          document.getElementById('failBanner').style.display = 'none';
+          document.getElementById('successMsg').textContent =
+            `Fixed in ${d.attempt || '?'} attempt(s) — all tests passing`;
+          loadCode();
+        } else {
+          document.getElementById('failBanner').style.display = 'block';
+          document.getElementById('successBanner').style.display = 'none';
+        }
+      });
+    }
+
+    function resetPipeline() {
+      pipelineRunning = false; pipelineDone = false; currentStep = 0;
+      document.getElementById('logBody').innerHTML = '<span class="lm">// Waiting for pipeline…</span>';
+      document.getElementById('pipeStatusText').textContent = 'Press "Run Repair" to start';
+      document.getElementById('successBanner').style.display = 'none';
+      document.getElementById('failBanner').style.display = 'none';
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('runBtn').innerHTML = '▶ Run Repair';
+      renderSteps();
+    }
+
+    // ── Log ────────────────────────────────────────────────────────────────
+    function appendLog(type, msg) {
+      const el = document.getElementById('logBody');
+      const ts = new Date().toLocaleTimeString('en-GB');
+      const cls = { info: 'li', success: 'lk', warn: 'lw', error: 'le', done: 'lk' }[type] || 'lm';
+      const div = document.createElement('div');
+      div.innerHTML = `<span class="lts">[${ts}]</span><span class="${cls}">${msg}</span>`;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // ── Load Code ──────────────────────────────────────────────────────────
+    function loadCode() {
+      fetch('/api/code').then(r => r.json()).then(d => {
+        originalCode = d.buggy || '';
+        fixedCode = d.fixed || '';
+        currentCode = d.current || '';
+        renderCode();
+        loadSBFL();
+      });
+    }
+
+    function renderCode() {
+      const before = document.getElementById('codeBefore');
+      const after = document.getElementById('codeAfter');
+
+      // ── BEFORE panel: always show the original buggy code ──
+      if (!originalCode) {
+        before.innerHTML = '<span style="color:var(--text3);font-style:italic">// Run the pipeline first</span>';
+      } else {
+        before.innerHTML = originalCode.split('\n')
+          .map((l, i) => `<span class="lr"><span style="color:rgba(248,113,113,.25);user-select:none;margin-right:8px;font-size:10px">${String(i + 1).padStart(3, ' ')}</span>${esc(l)}</span>`)
+          .join('');
+      }
+
+      // ── AFTER panel: show diff if fix exists, else show current code ──
+      if (!fixedCode) {
+        if (pipelineDone && !state_success) {
+          after.innerHTML = '<span style="color:var(--red);font-style:italic">// ❌ All repair attempts failed — no fix generated</span>';
+        } else if (!pipelineDone) {
+          after.innerHTML = '<span style="color:var(--text3);font-style:italic">// ⏳ Run the pipeline to generate a fix</span>';
+        } else {
+          // pipeline done + success but fixed code not saved yet — show current
+          after.innerHTML = currentCode.split('\n')
+            .map((l, i) => `<span class="la"><span style="color:rgba(52,211,153,.25);user-select:none;margin-right:8px;font-size:10px">${String(i + 1).padStart(3, ' ')}</span>${esc(l)}</span>`)
+            .join('');
+        }
+        return;
+      }
+
+      // ── Proper unified diff ──
+      const bLines = originalCode.split('\n');
+      const fLines = fixedCode.split('\n');
+
+      // build LCS-based diff
+      const diff = computeDiff(bLines, fLines);
+
+      before.innerHTML = diff.map(d => {
+        const ln = `<span style="color:rgba(248,113,113,.25);user-select:none;margin-right:8px;font-size:10px">${d.li !== null ? String(d.li + 1).padStart(3, ' ') : '   '}</span>`;
+        if (d.type === 'equal') return `<span class="ln">${ln}${esc(d.val)}</span>`;
+        if (d.type === 'remove') return `<span class="lr">${ln}${esc(d.val)}</span>`;
+        if (d.type === 'insert') return `<span style="display:block;opacity:0;user-select:none">${ln}${esc(d.val)}</span>`;
+        return '';
+      }).join('');
+
+      after.innerHTML = diff.map(d => {
+        const ln = `<span style="color:rgba(52,211,153,.25);user-select:none;margin-right:8px;font-size:10px">${d.ri !== null ? String(d.ri + 1).padStart(3, ' ') : '   '}</span>`;
+        if (d.type === 'equal') return `<span class="ln">${ln}${esc(d.val)}</span>`;
+        if (d.type === 'insert') return `<span class="la">${ln}${esc(d.val)}</span>`;
+        if (d.type === 'remove') return `<span style="display:block;opacity:0;user-select:none">${ln}${esc(d.val)}</span>`;
+        return '';
+      }).join('');
+    }
+
+    // Simple LCS diff — returns [{type:'equal'|'remove'|'insert', val, li, ri}]
+    function computeDiff(a, b) {
+      const m = a.length, n = b.length;
+      // dp[i][j] = LCS length
+      const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = m - 1; i >= 0; i--)
+        for (let j = n - 1; j >= 0; j--)
+          dp[i][j] = a[i] === b[j] ? 1 + dp[i + 1][j + 1] : Math.max(dp[i + 1][j], dp[i][j + 1]);
+
+      const res = []; let i = 0, j = 0;
+      while (i < m || j < n) {
+        if (i < m && j < n && a[i] === b[j]) {
+          res.push({ type: 'equal', val: a[i], li: i, ri: j }); i++; j++;
+        } else if (j < n && (i >= m || dp[i][j + 1] >= dp[i + 1][j])) {
+          res.push({ type: 'insert', val: b[j], li: null, ri: j }); j++;
+        } else {
+          res.push({ type: 'remove', val: a[i], li: i, ri: null }); i++;
+        }
+      }
+      return res;
+    }
+
+    let currentCode = '', state_success = false;
+
+    function loadSBFL() {
+      fetch('/api/sbfl').then(r => r.json()).then(data => {
+        if (!data.length) { return }
+        const el = document.getElementById('sbflList');
+        el.innerHTML = data.map(s => `
+      <div class="heatrow">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px">
+          <span style="color:#c084fc;font-family:var(--mono)">Line ${s.line}</span>
+          <span style="color:#f87171;font-weight:600">score ${s.score}</span>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:var(--text2);margin-bottom:5px">
+          <span style="background:rgba(239,68,68,${s.score * .3});padding:1px 3px;border-radius:3px">${esc(s.code)}</span>
+        </div>
+        <div class="heatbar-wrap"><div class="heatbar" style="width:${s.score * 100}%"></div></div>
+      </div>`).join('');
+      });
+    }
+
+    // ── Tests ──────────────────────────────────────────────────────────────
+    function loadTests() {
+      document.getElementById('testList').innerHTML = '<div class="empty"><div class="empty-icon"><span class="spin" style="width:24px;height:24px;border-width:3px"></span></div><div style="font-size:12px">Running pytest…</div></div>';
+      fetch('/api/tests').then(r => r.json()).then(d => {
+        document.getElementById('tTotal').textContent = d.total || 0;
+        document.getElementById('tPassed').textContent = d.passed || 0;
+        document.getElementById('tFailed').textContent = d.failed || 0;
+        if (!d.tests || !d.tests.length) {
+          document.getElementById('testList').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>No test results found</div></div>';
+          return;
+        }
+        document.getElementById('testList').innerHTML = d.tests.map(t => `
+      <div class="trow ${t.status === 'pass' ? 'trow-p' : 'trow-f'}">
+        <div style="font-size:18px">${t.status === 'pass' ? '✅' : '❌'}</div>
+        <div class="tname" style="color:${t.status === 'pass' ? '#86efac' : '#fca5a5'}">${t.name}</div>
+        <div class="tbadge ${t.status === 'pass' ? 'tbp' : 'tbf'}">${t.status.toUpperCase()}</div>
+      </div>`).join('');
+        // trace
+        const tr = document.getElementById('testTrace');
+        if (d.trace) { tr.innerHTML = d.trace.split('\n').map(l => `<div><span class="le">${esc(l)}</span></div>`).join('') }
+        else { tr.innerHTML = '<span class="lm">// All tests passing — no errors</span>' }
+      });
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    renderSteps();
+  </script>
+</body>
+
+</html>
