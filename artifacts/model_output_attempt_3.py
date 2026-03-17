@@ -1,11 +1,28 @@
-class BoundedStack:
-    def __init__(self, max_size: int = 100):
-        self.items = []
-        self.max_size = max_size
-    def push(self, item):
-        if len(self.items) >= self.max_size:
-            raise Exception("Stack overflow")
-        self.items.append(item)
-    def pop(self):
-        if self.is_empty():
-            raise Exception("Stack underflow")
+def add(a, b):
+    return a + b
+
+def divide(a, b):
+    if b == 0:
+        return None
+    return a / b
+
+def max_in_list(numbers):
+    if not numbers:
+        return None
+    max_val = numbers[0]
+    for num in numbers:
+        if num > max_val:
+            max_val = num
+    return max_val
+
+def find_first_in_sorted(arr, x):
+    (lo, hi) = (0, len(arr) - 1)
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if x == arr[mid]:
+            return mid
+        elif x < arr[mid]:
+            hi = mid - 1
+        else:
+            lo = mid + 1
+    return -1
