@@ -31,17 +31,19 @@ def run_testmate(prompt: str) -> str:
         ]
         chat_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(chat_prompt, return_tensors="pt").to("cuda")
+        
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=1024,
-                do_sample=True,
+                do_sample=False,  # <--- Changed to False for deterministic outputs (no hallucination)
                 eos_token_id=tokenizer.eos_token_id,
-                temperature=0.1,
                 pad_token_id=tokenizer.pad_token_id
             )
+            
         fixed_code = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-        return fixed_code
+        return fixed_code.strip()
+        
     except Exception as e:
-        print(f"❌ Error: {e}")
-        return ""
+        print(f"❌ Error running TestMate model: {e}")
+        raise
