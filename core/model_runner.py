@@ -36,7 +36,9 @@ def run_testmate(prompt: str) -> str:
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=1024,
-                do_sample=False,  # <--- Changed to False for deterministic outputs (no hallucination)
+                do_sample=True,        
+                temperature=0.2,   
+                top_p=0.95,          
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id
             )

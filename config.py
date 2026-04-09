@@ -17,7 +17,7 @@ TEST_FILE   = str(BASE_DIR / "data" / "test_prepared.jsonl")
 
 # ── Training hyperparameters ──────────────────────────────────────────
 MAX_LENGTH        = 2048
-BATCH_SIZE        = 2  
+BATCH_SIZE        = 1  
 GRAD_ACCUMULATION = 16
 LEARNING_RATE     = 2e-4
 NUM_EPOCHS        = 3
