@@ -13,6 +13,17 @@ from inference import load_model
 _model = None
 _tokenizer = None
 
+def reset_model():
+    """Unload the current model and tokenizer, freeing GPU memory."""
+    global _model, _tokenizer
+    if _model is not None:
+        import gc
+        _model = None
+        _tokenizer = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        print("🔄 Model unloaded and GPU memory freed.")
+
 def load_testmate_model():
     global _model, _tokenizer
     if _model is not None:
@@ -22,7 +33,11 @@ def load_testmate_model():
     print("✅ Model loaded successfully")
     return _model, _tokenizer
 
-def run_testmate(prompt: str) -> str:
+def run_testmate(prompt: str, attempt: int = 1) -> str:
+    """
+    Runs the prompt through the model.
+    Uses dynamic temperature based on the attempt number to avoid deterministic failures.
+    """
     try:
         model, tokenizer = load_testmate_model()
         messages = [
@@ -31,13 +46,15 @@ def run_testmate(prompt: str) -> str:
         ]
         chat_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(chat_prompt, return_tensors="pt").to("cuda")
+
+        current_temp = 0.2 if attempt == 1 else (0.5 if attempt == 2 else 0.8)
         
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=1024,
                 do_sample=True,        
-                temperature=0.2,   
+                temperature=current_temp,   
                 top_p=0.95,          
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id
@@ -45,7 +62,6 @@ def run_testmate(prompt: str) -> str:
             
         fixed_code = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
         return fixed_code.strip()
-        
     except Exception as e:
-        print(f"❌ Error running TestMate model: {e}")
-        raise
+        print(f"Error in model inference: {e}")
+        return ""

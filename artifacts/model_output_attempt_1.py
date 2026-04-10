@@ -1,43 +1,28 @@
-class TreeNode:
-    def __init__(self, val=0, left=None, right=None):
-        self.val = val
-        self.left = left
-        self.right = right
+def add(a, b):
+    return a + b
 
-def is_valid_bst(root):
-    def helper(node, low=float('-inf'), high=float('inf')):
-        if not node:
-            return True
-        if not (low < node.val < high):
-            return False
-        return (helper(node.left, low, node.val) and
-                helper(node.right, node.val, high))
-    
-    return helper(root)
+def divide(a, b):
+    if b == 0:
+        return None
+    return a / b
 
+def max_in_list(numbers):
+    if not numbers:
+        return None
+    max_val = numbers[0]
+    for num in numbers:
+        if num > max_val:
+            max_val = num
+    return max_val
 
-class LRUCache:
-    def __init__(self, capacity: int):
-        self.capacity = capacity
-        self.cache = {}
-        self.order = [] # بيسجل ترتيب الاستخدام (أقدم حاجة في الأول)
-
-    def get(self, key: int) -> int:
-        if key in self.cache:
-            self.order.remove(key)
-            self.order.append(key)
-            return self.cache[key]
-        return -1
-
-    def put(self, key: int, value: int) -> None:
-        if key in self.cache:
-            self.cache[key] = value
-            self.order.remove(key)
-            self.order.append(key)
+def find_first_in_sorted(arr, x):
+    (lo, hi) = (0, len(arr) - 1)
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if x == arr[mid]:
+            return mid
+        elif x < arr[mid]:
+            hi = mid - 1
         else:
-            if len(self.cache) >= self.capacity:
-                oldest_key = self.order.pop(0)
-                del self.cache[oldest_key]
-            
-            self.cache[key] = value
-            self.order.append(key)
+            lo = mid + 1
+    return -1

@@ -76,8 +76,15 @@ def load_and_filter_candidates(json_path):
 # ── Phase 2: Test execution & code extraction ─────────────────────────
 
 def run_tests() -> tuple:
-    result = subprocess.run(["pytest", "-v"], capture_output=True, text=True)
-    return result.returncode == 0, result.stdout + result.stderr
+    try:
+        result = subprocess.run(
+            ["pytest", "-v"],
+            capture_output=True, text=True, timeout=120
+        )
+        return result.returncode == 0, result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        print("⏰ Tests timed out after 120s — likely an infinite loop in buggy code.")
+        return False, "TimeoutExpired: test suite exceeded 120 seconds."
 
 
 def extract_snippet(suspicious_lines: list, window: int = 5) -> str:
@@ -205,11 +212,16 @@ def repair_loop(max_attempts: int = 3, top_k: int = 5) -> bool:
     print("🚀 TestMate + SBFL + AST Repair Loop")
     print("=" * 70)
 
-    # Snapshot original so we can fully restore if all attempts fail
+    # Snapshot original once — used for final restore if all attempts fail
     original_snapshot = BUGGY_FILE.read_text(encoding="utf-8")
 
     for attempt in range(1, max_attempts + 1):
         print(f"\n🔄 Repair Attempt {attempt}/{max_attempts}")
+
+        # Snapshot at the START of each attempt so every retry begins from
+        # the same clean baseline (avoids building on a half-broken patch
+        # left by the previous attempt's failed apply_patch call).
+        attempt_snapshot = BUGGY_FILE.read_text(encoding="utf-8")
 
         # Step 1: Run tests
         passed, test_output = run_tests()
@@ -249,23 +261,33 @@ def repair_loop(max_attempts: int = 3, top_k: int = 5) -> bool:
             print(f"🔍 Top suspicious lines: {suspicious_lines}")
 
             # Step 3: Build prompt
-            snippet = extract_snippet(suspicious_lines, window=1)
+            snippet = extract_snippet(suspicious_lines, window=5)
             prompt  = build_repair_prompt(fail_output, suspicious_lines, snippet, full_code)
 
+        if attempt > 1 and fail_output:
+            prompt += (
+                f"\n\n[SYSTEM WARNING - ATTEMPT {attempt}]:\n"
+                f"Your previous fix FAILED and produced this error:\n{fail_output[:300]}\n"
+                f"Please analyze the root cause deeply and try a COMPLETELY DIFFERENT logical approach. "
+                f"Do not repeat the previous code."
+            )
+
         # Step 4: Call model
-        print("🤖 Calling TestMate model...")
+        print(f"🤖 Calling TestMate model (Attempt {attempt})...")
         try:
-            new_code = run_testmate(prompt)
+            new_code = run_testmate(prompt, attempt=attempt)
         except Exception as e:
             print(f"❌ Model call failed: {e}")
             return False
+        # ────────────────────────────────────────────────────────────
 
         save_model_output(new_code, attempt)
 
         # Step 5: Apply patch
         print("🔧 Applying smart patch...")
         if not apply_patch(new_code):
-            print("❌ Patch failed. Trying next attempt...")
+            print("❌ Patch failed. Restoring attempt snapshot and trying next attempt...")
+            BUGGY_FILE.write_text(attempt_snapshot, encoding="utf-8")
             continue
 
     print("\n" + "=" * 70)
