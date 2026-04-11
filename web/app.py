@@ -132,14 +132,24 @@ def api_status():
 def api_stream():
     def generate():
         yield 'data: {"type":"connected","msg":"Stream ready"}\n\n'
-        while True:
-            try:
-                entry = log_q.get(timeout=25)
-                yield f"data: {json.dumps(entry)}\n\n"
-                if entry.get("type") == "done":
+        try:
+            while True:
+                try:
+                    entry = log_q.get(timeout=25)
+                    yield f"data: {json.dumps(entry)}\n\n"
+                    if entry.get("type") == "done":
+                        break
+                except queue.Empty:
+                    yield 'data: {"type":"ping"}\n\n'
+        except GeneratorExit:
+            # Client disconnected — drain the queue so the pipeline thread
+            # never blocks on a full queue waiting for a dead consumer.
+            print("⚠️  SSE client disconnected — draining log queue.")
+            while not log_q.empty():
+                try:
+                    log_q.get_nowait()
+                except queue.Empty:
                     break
-            except queue.Empty:
-                yield 'data: {"type":"ping"}\n\n'
     return Response(
         stream_with_context(generate()),
         mimetype="text/event-stream",
@@ -376,4 +386,4 @@ if __name__ == "__main__":
     print(f"  tests : {TEST_FILE}  {'✅' if TEST_FILE.exists() else '❌ NOT FOUND'}")
     print("  URL   : http://localhost:5000")
     print("=" * 55 + "\n")
-    app.run(debug=True, port=5000, threaded=True, use_reloader=False)
+    app.run(debug=True, port=3000, threaded=True, use_reloader=False)

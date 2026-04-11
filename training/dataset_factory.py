@@ -158,7 +158,7 @@ QUIXBUGS_TRAIN = {
     "sqrt": {
         "buggy": "def sqrt(x, epsilon=0.0001):\n    approx = x / 2\n    while abs(approx ** 2 - x) > epsilon:\n        approx = (approx + x / approx) / 2\n    return approx",
         "fixed": "def sqrt(x, epsilon=0.0001):\n    approx = x / 2.0\n    while abs(approx * approx - x) > epsilon:\n        approx = (approx + x / approx) / 2.0\n    return approx",
-        "issue": "Use float division and multiply instead of ** for stability.", "error": "AssertionError"
+        "issue": "Use float literals (2.0) to prevent integer division in Python 2 compatibility scenarios; replace approx**2 with approx*approx for minor numerical stability improvement and to avoid pow() overhead.", "error": "AssertionError"
     },
     "levenshtein": {
         "buggy": "def levenshtein(source, target):\n    if source == '': return len(target)\n    if target == '': return len(source)\n    if source[0] == target[0]:\n        return levenshtein(source[1:], target[1:])\n    else:\n        return 1 + min(\n            levenshtein(source, target[1:]),\n            levenshtein(source[1:], target[1:]),\n            levenshtein(source[1:], target)\n        )",

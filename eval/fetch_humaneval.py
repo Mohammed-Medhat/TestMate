@@ -6,7 +6,6 @@ from datasets import load_dataset
 def build_humaneval_dataset():
     out_file = "humaneval_eval_dataset.json"
     
-    # مسح أي نسخة قديمة
     if os.path.exists(out_file):
         os.remove(out_file)
         print(f"🗑️  Deleted old {out_file}")
@@ -20,16 +19,12 @@ def build_humaneval_dataset():
         entry_point = item['entry_point']
         test_setup = item.get('test_setup', "")
         test_code = item['test']
+ 
+        clean_test_body = re.sub(
+            rf"\s*check\s*\(\s*{re.escape(entry_point)}\s*\)\s*$",
+            "", test_code, flags=re.MULTILINE
+        ).strip()
         
-        # ── FIX 1: بناء ملف التست بشكل صحيح ──────────────────────
-        # الـ check function بتكون موجودة في test_code من HumanEval
-        # نحتاج نحطها جوه test file ونخلي pytest يلاقيها
-        
-        # إزالة أي استدعاء قديم لـ check في نهاية الكود
-        clean_test_body = re.sub(rf"\s*check\s*\(\s*{entry_point}\s*\)\s*$", "", test_code, flags=re.MULTILINE).strip()
-        
-        # ── FIX 2: بناء الـ test file الصحيح ─────────────────────
-        # نحط كل حاجة جوه دالة واحدة test_* عشان pytest يشوفها
         full_test_file = f"""from solution import {entry_point}
 
 {test_setup}
@@ -57,7 +52,7 @@ def test_{entry_point}_correctness():
             "description": item.get('docstring', 'Fix the python code').strip(),
             "buggy_code": item['prompt'] + item['declaration'] + item['buggy_solution'],
             "tests": full_test_file,
-            "entry_point": entry_point  # مفيد للـ debugging
+            "entry_point": entry_point  
         }
         formatted_dataset.append(sample)
     
@@ -71,7 +66,7 @@ def test_{entry_point}_correctness():
     print("🔍 Sample test structure (first entry):")
     print("═" * 70)
     sample_lines = formatted_dataset[0]['tests'].splitlines()
-    for i, line in enumerate(sample_lines[:25], 1):  # أول 25 سطر
+    for i, line in enumerate(sample_lines[:25], 1): 
         print(f"{i:3}: {line}")
     if len(sample_lines) > 25:
         print(f"     ... ({len(sample_lines) - 25} more lines)")

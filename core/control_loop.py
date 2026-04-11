@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from core.sbfl_localiser import rank_suspicious_lines
 from core.run_and_collect import collect_spectrum
 from core.model_runner import run_testmate
+from config import REPAIR_TEMPERATURES, MAX_REPAIR_ATTEMPTS
 
 # ── Paths ─────────────────────────────────────────────────────────────
 BUGGY_FILE    = PROJECT_ROOT / "buggy_code.py"
@@ -207,7 +208,7 @@ def save_model_output(code: str, attempt: int):
 
 # ── Phase 5: Main repair loop ─────────────────────────────────────────
 
-def repair_loop(max_attempts: int = 3, top_k: int = 5) -> bool:
+def repair_loop(max_attempts: int = MAX_REPAIR_ATTEMPTS, top_k: int = 5) -> bool:
     print("=" * 70)
     print("🚀 TestMate + SBFL + AST Repair Loop")
     print("=" * 70)
@@ -242,10 +243,9 @@ def repair_loop(max_attempts: int = 3, top_k: int = 5) -> bool:
         if not ranked:
             # SBFL failed — likely a syntax error, get exact message
             print("⚠️  No SBFL data — checking for syntax error...")
-            import ast as _ast
             syntax_msg = ""
             try:
-                _ast.parse(full_code)
+                ast.parse(full_code)
             except SyntaxError as e:
                 syntax_msg = f"SyntaxError at line {e.lineno}: {e.msg}\n    {e.text or ''}"
                 print(f"🔍 Detected: {syntax_msg}")
@@ -301,5 +301,5 @@ def repair_loop(max_attempts: int = 3, top_k: int = 5) -> bool:
 # ── Entry point ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    success = repair_loop(max_attempts=3, top_k=5)
+    success = repair_loop(max_attempts=MAX_REPAIR_ATTEMPTS, top_k=5)
     exit(0 if success else 1)

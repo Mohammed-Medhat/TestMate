@@ -10,6 +10,13 @@ for path in [current_dir, parent_dir]:
 
 from inference import load_model
 
+try:
+    from config import REPAIR_TEMPERATURES, TOP_P, MAX_NEW_TOKENS
+except ImportError:
+    REPAIR_TEMPERATURES = [0.2, 0.5, 0.8]
+    TOP_P = 0.95
+    MAX_NEW_TOKENS = 1024
+
 _model = None
 _tokenizer = None
 
@@ -47,15 +54,15 @@ def run_testmate(prompt: str, attempt: int = 1) -> str:
         chat_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = tokenizer(chat_prompt, return_tensors="pt").to("cuda")
 
-        current_temp = 0.2 if attempt == 1 else (0.5 if attempt == 2 else 0.8)
-        
+        current_temp = REPAIR_TEMPERATURES[min(attempt - 1, len(REPAIR_TEMPERATURES) - 1)]
+
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=1024,
-                do_sample=True,        
-                temperature=current_temp,   
-                top_p=0.95,          
+                max_new_tokens=MAX_NEW_TOKENS,
+                do_sample=True,
+                temperature=current_temp,
+                top_p=TOP_P,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id
             )

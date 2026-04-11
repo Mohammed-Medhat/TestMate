@@ -21,3 +21,11 @@ BATCH_SIZE        = 1
 GRAD_ACCUMULATION = 16
 LEARNING_RATE     = 2e-4
 NUM_EPOCHS        = 3
+
+# ── Inference / repair hyperparameters ───────────────────────────────
+# Temperature schedule per attempt (index 0 = attempt 1, etc.)
+# Low temp first for high-confidence fix; higher temp on retries for diversity.
+REPAIR_TEMPERATURES = [0.2, 0.5, 0.8]
+MAX_REPAIR_ATTEMPTS = 3
+TOP_P               = 0.95
+MAX_NEW_TOKENS      = 1024

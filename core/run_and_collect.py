@@ -1,19 +1,26 @@
 """
 run_and_collect.py — Per-test coverage runner for SBFL.
-Uses the Python coverage API directly (no subprocess) to avoid
-working-directory and path issues when locating the target file.
+
+Strategy: sequential in-process execution with one Coverage() instance
+per test. This avoids:
+  - subprocess startup overhead (1-2s per test)
+  - CTracer thread-safety conflicts (only occur with concurrent threads)
+
+Each test gets its own Coverage() object created fresh, started, stopped,
+and discarded before the next test begins — no shared state.
 """
 import os
 import sys
 import json
 from pathlib import Path
 from collections import defaultdict
+import subprocess
+
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def get_all_tests(test_dir: str = ".") -> list:
     """Collect all pytest test IDs without running them."""
-    import subprocess
     result = subprocess.run(
         ["pytest", "--collect-only", "-q", test_dir],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
@@ -27,13 +34,17 @@ def get_all_tests(test_dir: str = ".") -> list:
 
 def _run_single_test_with_coverage(test_id: str, source_dir: str) -> tuple:
     """
-    Run one pytest test under Python coverage API.
+    Run one pytest test in-process under a fresh Coverage() instance.
+    A new Coverage object is created and destroyed per call — this is
+    safe as long as calls are sequential (no concurrent threads).
+
     Returns (passed: bool, output: str, executed_lines: dict[filepath, set[int]])
     """
     import coverage as coverage_module
     import io
     from contextlib import redirect_stdout, redirect_stderr
 
+    # Fresh instance per test — no shared CTracer state across calls
     cov = coverage_module.Coverage(source=[source_dir], data_file=None)
     cov.start()
 
@@ -53,11 +64,9 @@ def _run_single_test_with_coverage(test_id: str, source_dir: str) -> tuple:
     finally:
         cov.stop()
 
-    # Extract per-file executed lines
     executed = defaultdict(set)
     try:
-        file_reporters = cov.get_data().measured_files()
-        for filepath in file_reporters:
+        for filepath in cov.get_data().measured_files():
             lines = cov.get_data().lines(filepath)
             if lines:
                 executed[filepath] = set(lines)
@@ -70,17 +79,20 @@ def _run_single_test_with_coverage(test_id: str, source_dir: str) -> tuple:
 # ── Core SBFL logic ───────────────────────────────────────────────────
 
 def run_tests_with_coverage(test_list: list, source_dir: str = ".") -> tuple:
-    """Run each test individually under coverage. Returns (coverage_per_test, fail_output)."""
+    """
+    Run each test sequentially in-process under coverage.
+    Sequential execution avoids CTracer conflicts while keeping the
+    speed benefit of in-process test running (no subprocess overhead).
+    Returns (coverage_per_test, fail_output).
+    """
     coverage_per_test = {}
     fail_output = ""
 
     for test in test_list:
-        print(f"  ▶ Running {test}")
         passed, output, executed = _run_single_test_with_coverage(test, source_dir)
-
+        print(f"  ▶ {'✅' if passed else '❌'} {test}")
         if not passed:
             fail_output += f"\n=== {test} ===\n{output}"
-
         coverage_per_test[test] = {"passed": passed, "coverage": executed}
 
     return coverage_per_test, fail_output
@@ -91,17 +103,22 @@ def detect_target_file(coverage_per_test: dict, hint: str = "buggy_code.py") -> 
     Find the source file most likely to contain the bug.
     1. Use hint if any covered filepath ends with it.
     2. Otherwise pick the non-test .py file covered by the most failing tests.
+    Emits a clear warning when the hint is not found so callers are not
+    silently misled into analysing the wrong file.
     """
     all_files: set = set()
     for info in coverage_per_test.values():
         all_files.update(info["coverage"].keys())
 
-    # Try hint first
     for fp in all_files:
         if fp.endswith(hint) or os.path.basename(fp) == hint:
             return hint
 
-    # Auto-detect by failure correlation
+    # Hint not found — warn explicitly before auto-detecting
+    print(f"⚠️  Hint file '{hint}' was NOT found in coverage data.")
+    print(f"   Covered files: {sorted(os.path.basename(f) for f in all_files)}")
+    print(f"   SBFL results may target the wrong file — verify your test imports.")
+
     scores: dict = defaultdict(int)
     for info in coverage_per_test.values():
         if not info["passed"]:
@@ -112,10 +129,10 @@ def detect_target_file(coverage_per_test: dict, hint: str = "buggy_code.py") -> 
 
     if scores:
         best = max(scores, key=scores.get)
-        print(f"🔍 Auto-detected target file: '{best}' (hint '{hint}' not found)")
+        print(f"🔍 Auto-detected target file: '{best}' (using as fallback)")
         return best
 
-    print(f"⚠️  Could not auto-detect target — falling back to '{hint}'")
+    print(f"⚠️  Could not auto-detect target — falling back to hint '{hint}' (may be inaccurate)")
     return hint
 
 
