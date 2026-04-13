@@ -526,7 +526,7 @@ def main():
             "finetuned_full — fine-tuned, iterative k≤3"
         )
     )
-    parser.add_argument("--output_dir", default="eval_results_2nd")
+    parser.add_argument("--output_dir", default="eval_results")
     parser.add_argument("--dataset",    default="humaneval_eval_dataset.json")
     parser.add_argument("--limit",      type=int, default=None,
                         help="Limit to N samples (useful for quick testing)")
