@@ -526,7 +526,7 @@ def main():
             "finetuned_full — fine-tuned, iterative k≤3"
         )
     )
-    parser.add_argument("--output_dir", default="eval_results")
+    parser.add_argument("--output_dir", default="eval_results_2nd")
     parser.add_argument("--dataset",    default="humaneval_eval_dataset.json")
     parser.add_argument("--limit",      type=int, default=None,
                         help="Limit to N samples (useful for quick testing)")
@@ -556,6 +556,8 @@ def main():
         ft_modes.append("finetuned_zero")
     if args.mode in ("all", "finetuned_only", "finetuned_full"):
         ft_modes.append("finetuned_full")
+    if args.mode in ("all", "base_only", "base_full"):
+        base_modes.append("base_full") 
 
     # ── Base model evaluations ─────────────────────────────────────────
     if base_modes:

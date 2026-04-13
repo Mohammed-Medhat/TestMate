@@ -386,4 +386,4 @@ if __name__ == "__main__":
     print(f"  tests : {TEST_FILE}  {'✅' if TEST_FILE.exists() else '❌ NOT FOUND'}")
     print("  URL   : http://localhost:5000")
     print("=" * 55 + "\n")
-    app.run(debug=True, port=3000, threaded=True, use_reloader=False)
+    app.run(debug=True, port=5000, threaded=True, use_reloader=False)
