@@ -1,0 +1,1 @@
+{"timestamp": "2026-04-19 04:19:30", "source_file": "hooks_buggy.py", "target": "default_hooks", "classification": "Oracle Generation Error", "reason": "Variants yielded mixed codes: [0, 0, 0]"}

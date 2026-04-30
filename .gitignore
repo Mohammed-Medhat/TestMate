@@ -1,4 +1,83 @@
-venv
-env
-data
-repos
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ========================
+# Virtual Environments
+# ========================
+venv/
+env/
+.env/
+.venv/
+
+# ========================
+# IDE / Editor
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ========================
+# Data & Generated Artifacts
+# ========================
+data/
+repos/
+*.db
+*.pkl
+.coverage
+coverage.json
+output.txt
+
+# ========================
+# Model Weights & Checkpoints
+# ========================
+models/
+*.safetensors
+*.pt
+*.pth
+*.bin
+
+# ========================
+# Graphs (serialized)
+# ========================
+graphs/
+
+# ========================
+# Pytest & Coverage
+# ========================
+.pytest_cache/
+htmlcov/
+
+# ========================
+# Archives
+# ========================
+*.zip
+
+# ========================
+# OS Files
+# ========================
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ========================
+# PartA (pulled from upstream repo)
+# ========================
+PartA/
+
+# ========================
+# Eval benchmark files (large, downloadable)
+# ========================
+PartB/testgen_eval_lite/testgen_eval_files/
+
+# ========================
+# LoRA model weights (too large for git)
+# ========================
+PartB/models/graphrag_lora/
+PartB/value_reasoning/kaggle/working/value_reasoning_model/

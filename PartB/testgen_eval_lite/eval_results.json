@@ -1,0 +1,16 @@
+[
+  {
+    "status": "no_tests",
+    "targets_covered": 0,
+    "targets_total": 2,
+    "coverage_pct": 0.0,
+    "mutation_score": 0,
+    "composite_score": 0,
+    "assertion_score": 0,
+    "branch_cov_score": 0,
+    "diversity_score": 0,
+    "edge_cases_score": 0,
+    "runtime_seconds": 592.6,
+    "file": "121_validators.py"
+  }
+]

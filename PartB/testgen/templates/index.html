@@ -1,0 +1,3107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('testmate-theme');
+                if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+                else document.documentElement.setAttribute('data-theme', 'dark');
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TestMate — AI-Powered Unit Test Generation</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0c0f0e;
+            --bg-secondary: #141a18;
+            --bg-card: #1a2420;
+            --bg-card-hover: #223029;
+            --bg-input: #0e1312;
+            --border: #2a3a33;
+            --border-focus: #10b981;
+            --text-primary: #f0fdf4;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --semantic-bugs: #e11d48;
+            --semantic-bugs-soft: #f43f5e;
+            --semantic-warning: #f59e0b;
+            --semantic-warning-soft: #fbbf24;
+            --semantic-muted: #64748b;
+            --semantic-muted-soft: #94a3b8;
+            --accent-purple: #34d399;
+            --accent-blue: #60a5fa;
+            --accent-cyan: #2dd4bf;
+            --accent-green: #10b981;
+            --accent-yellow: #fbbf24;
+            --accent-red: #f87171;
+            --gradient-primary: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --gradient-accent: linear-gradient(135deg, #34d399 0%, #059669 100%);
+            --shadow-glow: 0 0 30px rgba(16, 185, 129, 0.2);
+            --sidebar-width: 280px;
+            --right-panel-width: 260px;
+            --topbar-height: 48px;
+            --terminal-height: 180px;
+            --terminal-bg: #060d0a;
+            --term-progress-track: #1a2420;
+            --bg-code: var(--bg-primary);
+            --line-gutter: #64748b;
+            --ring-bugs-stroke: #ff4757;
+            --heatmap-covered: rgba(52, 211, 153, 0.08);
+            --heatmap-uncovered: rgba(248, 113, 113, 0.12);
+            --bug-evidence-bg: #0d1117;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #060a09;
+            color: var(--text-primary);
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        /* ── Top Bar ── */
+        .topbar {
+            height: var(--topbar-height);
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 16px;
+            z-index: 100;
+        }
+
+        .topbar-logo {
+            font-size: 1rem;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .topbar-badges {
+            display: flex;
+            gap: 6px;
+            flex: 1;
+        }
+
+        .badge {
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--accent-purple);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            white-space: nowrap;
+        }
+
+        .badge.green { background: rgba(52,211,153,0.12); color: var(--accent-green); border-color: rgba(52,211,153,0.3); }
+        .badge.cyan { background: rgba(45,212,191,0.12); color: var(--accent-cyan); border-color: rgba(45,212,191,0.3); }
+
+        .topbar-status {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.78rem;
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            margin-left: 4px;
+            padding: 0;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.05rem;
+            line-height: 1;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+            border-color: var(--border-focus);
+        }
+
+        .theme-toggle:focus-visible {
+            outline: 2px solid var(--border-focus);
+            outline-offset: 2px;
+        }
+
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #555;
+        }
+
+        .status-dot.idle { background: #555; }
+        .status-dot.running { background: var(--accent-green); animation: pulse-dot 1.5s infinite; }
+        .status-dot.done { background: var(--accent-cyan); }
+
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* ── IDE Layout ── */
+        .ide-layout {
+            display: flex;
+            height: calc(100vh - var(--topbar-height));
+            overflow: hidden;
+        }
+
+        .dashboard-section {
+            height: 100vh;
+            overflow: hidden;
+            background: var(--bg-primary);
+            position: relative;
+        }
+
+        /* ── Left Sidebar ── */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-width: var(--sidebar-width);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .sidebar-section {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-title {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .sidebar-input {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.78rem;
+            outline: none;
+            margin-bottom: 6px;
+        }
+
+        .sidebar-input:focus { border-color: var(--border-focus); }
+
+        .sidebar-input::placeholder { color: var(--text-muted); opacity: 0.5; }
+
+        .btn-sm {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-discover {
+            background: var(--gradient-primary);
+            color: white;
+        }
+        .btn-discover:hover { filter: brightness(1.15); box-shadow: 0 0 12px rgba(16, 185, 129, 0.3); }
+        .btn-discover:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-run {
+            background: linear-gradient(135deg, #5eead4, #34d399 45%, #10b981);
+            color: white;
+            margin-top: 8px;
+            box-shadow:
+                0 0 0 1px rgba(52, 211, 153, 0.35),
+                0 0 28px rgba(45, 212, 191, 0.45),
+                0 4px 14px rgba(16, 185, 129, 0.35);
+            font-size: 0.82rem;
+            letter-spacing: 0.3px;
+        }
+        .btn-run:hover {
+            filter: brightness(1.08) saturate(1.05);
+            box-shadow:
+                0 0 0 1px rgba(110, 231, 183, 0.5),
+                0 0 36px rgba(52, 211, 153, 0.55),
+                0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+        .btn-run:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+        /* Toggle switches */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 0;
+            margin-bottom: 4px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .toggle-row:last-of-type { margin-bottom: 0; }
+
+        .toggle-sm {
+            position: relative;
+            width: 32px; height: 16px;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .toggle-sm input { opacity: 0; width: 0; height: 0; }
+
+        .toggle-sm .slider {
+            position: absolute; inset: 0;
+            background: #2a3a33;
+            border-radius: 16px;
+            transition: 0.25s;
+        }
+
+        .toggle-sm .slider::before {
+            content: '';
+            position: absolute;
+            width: 12px; height: 12px;
+            left: 2px; bottom: 2px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.25s;
+        }
+
+        .toggle-sm input:checked + .slider { background: var(--accent-green); }
+        .toggle-sm input:checked + .slider::before { transform: translateX(16px); }
+
+        /* File Explorer */
+        .file-explorer {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+
+        .file-explorer::-webkit-scrollbar { width: 4px; }
+        .file-explorer::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .fe-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            font-size: 0.76rem;
+            cursor: pointer;
+            transition: background 0.15s;
+            color: var(--text-secondary);
+        }
+
+        .fe-item:hover { background: var(--bg-card); }
+        .fe-item.selected { background: var(--bg-card); color: var(--text-primary); }
+        .fe-item.active { background: rgba(16, 185, 129, 0.12); color: var(--accent-green); border-left: 2px solid var(--accent-green); }
+
+        .fe-item input[type="checkbox"] {
+            accent-color: var(--accent-green);
+            width: 14px; height: 14px;
+            cursor: pointer;
+        }
+
+        .fe-icon { font-size: 0.9rem; flex-shrink: 0; }
+        .fe-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+        .fe-meta { font-size: 0.62rem; color: var(--text-muted); white-space: nowrap; }
+
+        .fe-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+        }
+
+        .fe-selectall {
+            font-size: 0.68rem;
+            color: var(--accent-purple);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .fe-empty {
+            padding: 24px 12px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* ── Center Panel ── */
+        .center-area {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .center-panel {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            background: var(--bg-primary);
+            min-width: 0;
+        }
+
+        /* Pipeline Stepper */
+        .pipeline-stepper {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            min-height: 38px;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            white-space: nowrap;
+            padding: 4px 10px;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .step.done {
+            color: #a7f3d0;
+            background: rgba(16, 185, 129, 0.1);
+            opacity: 0.92;
+        }
+        .step.active {
+            color: #f8fafc;
+            background: rgba(16, 185, 129, 0.22);
+            box-shadow: 0 0 12px rgba(52, 211, 153, 0.35), inset 0 0 0 1px rgba(110, 231, 183, 0.25);
+            text-shadow: 0 0 12px rgba(167, 243, 208, 0.35);
+            animation: pulse-step 2.2s ease-in-out infinite;
+        }
+        .step.pending { color: #3f4f5a; opacity: 0.55; }
+
+        @keyframes pulse-step { 0%, 100% { opacity: 1; } 50% { opacity: 0.88; } }
+
+        .step-arrow { color: #2d3a42; font-size: 0.65rem; margin: 0 2px; opacity: 0.45; }
+        .step-arrow.done { color: #34d399; opacity: 0.85; }
+        .step-arrow.pending { color: #28343c; opacity: 0.35; }
+
+        /* Tabs */
+        .center-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .center-tab {
+            padding: 10px 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .center-tab:hover { color: var(--text-primary); background: rgba(16, 185, 129, 0.06); }
+        .center-tab.active { color: var(--accent-green); border-bottom-color: var(--accent-green); }
+        /* Semantic tabs: never fall back to mint for icon + label */
+        .center-tab.red { color: var(--semantic-bugs); }
+        .center-tab.red:hover { color: #fb7185; background: rgba(225, 29, 72, 0.08); }
+        .center-tab.red.active {
+            color: #fecdd3;
+            border-bottom-color: var(--semantic-bugs);
+            background: rgba(225, 29, 72, 0.12);
+            box-shadow: inset 0 -1px 0 rgba(225, 29, 72, 0.35);
+        }
+        .center-tab.amber { color: #ea580c; }
+        .center-tab.amber:hover { color: var(--semantic-warning-soft); background: rgba(245, 158, 11, 0.08); }
+        .center-tab.amber.active {
+            color: #fde68a;
+            border-bottom-color: var(--semantic-warning);
+            background: rgba(245, 158, 11, 0.1);
+            box-shadow: inset 0 -1px 0 rgba(245, 158, 11, 0.35);
+        }
+        .center-tab.gray { color: var(--semantic-muted); }
+        .center-tab.gray:hover { color: var(--semantic-muted-soft); background: rgba(100, 116, 139, 0.06); }
+        .center-tab.gray.active {
+            color: #94a3b8;
+            border-bottom-color: #475569;
+            background: rgba(71, 85, 105, 0.12);
+            box-shadow: none;
+        }
+
+        /* Tab Content */
+        .center-workspace {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            background: var(--bg-code);
+        }
+
+        .center-workspace::-webkit-scrollbar { width: 6px; }
+        .center-workspace::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+        .tab-panel { display: none; height: 100%; overflow-y: auto; }
+        .tab-panel.active { display: block; }
+
+        /* Coverage Summary */
+        .cov-summary {
+            display: flex;
+            gap: 20px;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
+        }
+
+        .cov-stat { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+        .cov-stat strong { color: var(--text-primary); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .dot.green { background: var(--accent-green); }
+        .dot.red { background: var(--accent-red); }
+        .dot.gray { background: #555; }
+
+        /* Welcome / Empty State */
+        .welcome-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            gap: 12px;
+        }
+
+        .welcome-state .welcome-icon { font-size: 3rem; opacity: 0.4; }
+        .welcome-state .welcome-text { font-size: 0.85rem; color: #cbd5e1; }
+        .welcome-state .welcome-hint { font-size: 0.72rem; color: #a0aec0; line-height: 1.5; }
+
+        /* Code Viewer (Heatmap) */
+        .code-line {
+            display: flex;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.8;
+        }
+
+        .code-line.covered { background: var(--heatmap-covered); }
+        .code-line.uncovered { background: var(--heatmap-uncovered); }
+
+        .line-gutter {
+            width: 48px;
+            text-align: right;
+            padding-right: 12px;
+            color: var(--line-gutter);
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .line-indicator {
+            width: 3px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .line-indicator.covered { background: var(--accent-green); }
+        .line-indicator.uncovered { background: var(--accent-red); }
+        .line-content { flex: 1; white-space: pre; }
+
+        /* CFG Paths */
+        .cfg-function { margin-bottom: 4px; }
+
+        .cfg-function-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            cursor: pointer;
+            font-size: 0.82rem;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+
+        .cfg-function-header:hover { background: var(--bg-card-hover); }
+
+        .cfg-paths { display: none; padding: 0 16px 12px; }
+        .cfg-paths.open { display: block; }
+
+        .cfg-path {
+            padding: 8px 12px;
+            margin: 6px 0;
+            background: var(--bg-input);
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .path-id {
+            font-weight: 700;
+            color: var(--accent-purple);
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .cfg-path-node {
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            color: var(--accent-cyan);
+        }
+
+        .cfg-path-arrow { color: var(--text-muted); font-size: 0.6rem; }
+
+        /* Test Code */
+        .test-code-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.78rem;
+        }
+
+        .test-code-filename { color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace; }
+
+        .btn-copy {
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .btn-copy:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .btn-copy.copied { background: rgba(52, 211, 153, 0.2); border-color: var(--accent-green); color: var(--accent-green); }
+
+        .tcode-line { display: flex; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.8; }
+        .tcode-num { width: 48px; text-align: right; padding-right: 16px; color: var(--line-gutter); user-select: none; flex-shrink: 0; }
+        .tcode-content { flex: 1; white-space: pre; }
+
+        /* Syntax Highlighting */
+        .tok-kw { color: #34d399; font-weight: 600; }
+        .tok-str { color: #34d399; }
+        .tok-cmt { color: #6b7280; font-style: italic; }
+        .tok-dec { color: #fbbf24; }
+        .tok-fn { color: #60a5fa; }
+        .tok-cls { color: #f472b6; }
+        .tok-num { color: #fb923c; }
+
+        /* Bug Cards */
+        .bug-card {
+            background: var(--bg-card);
+            border-left: 4px solid var(--ring-bugs-stroke);
+            padding: 16px;
+            margin: 8px 16px;
+            border-radius: 4px;
+        }
+
+        .bug-card h4 { margin: 0 0 8px; color: var(--text-primary); font-size: 0.88rem; }
+        .bug-card p { font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 10px; }
+
+        .bug-badge {
+            font-size: 0.68rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            margin-left: 8px;
+        }
+
+        .bug-evidence {
+            background: var(--bug-evidence-bg);
+            padding: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        /* Blind Spots (Mutation Survivors) */
+        .blindspot-card {
+            background: var(--bg-card);
+            border-left: 4px solid #f59e0b;
+            padding: 16px;
+            margin: 8px 16px;
+            border-radius: 4px;
+        }
+
+        .blindspot-card h4 { color: #f59e0b; font-size: 0.85rem; margin: 0 0 6px; }
+        .blindspot-card p { font-size: 0.78rem; color: var(--text-secondary); margin: 0; }
+
+        /* Discarded Hallucinations */
+        .discarded-card {
+            background: var(--bg-card);
+            border-left: 4px solid #6b7280;
+            padding: 14px 16px;
+            margin: 8px 16px;
+            border-radius: 4px;
+            opacity: 0.8;
+        }
+
+        .discarded-card h4 { color: #9ca3af; font-size: 0.82rem; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+        .discarded-card p { font-size: 0.75rem; color: var(--text-muted); margin: 0; text-decoration: line-through; text-decoration-color: #555; }
+
+        .discard-badge {
+            font-size: 0.62rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+
+        .discard-badge.syntax { background: rgba(248, 113, 113, 0.15); color: #ff6b6b; }
+        .discard-badge.flaky { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+        .discard-badge.hallucination { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+
+        /* ── Right Panel ── */
+        .right-panel {
+            width: var(--right-panel-width);
+            min-width: var(--right-panel-width);
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .right-panel::-webkit-scrollbar { width: 4px; }
+        .right-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .metric-ring {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .ring-container {
+            position: relative;
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 8px;
+        }
+
+        .ring-container svg { width: 90px; height: 90px; transform: rotate(-90deg); }
+
+        /* Visible neutral track so rings read as progress at 0% */
+        .ring-bg { fill: none; stroke: rgba(148, 163, 184, 0.14); stroke-width: 8; }
+        .ring-track-outer {
+            fill: none;
+            stroke: rgba(15, 23, 42, 0.9);
+            stroke-width: 4;
+        }
+        .ring-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+        .ring-fill.green { stroke: var(--accent-green); }
+        .ring-fill.blue { stroke: var(--accent-blue); }
+        .ring-fill.cyan { stroke: var(--accent-cyan); }
+        .ring-fill.red { stroke: var(--ring-bugs-stroke); }
+
+        .ring-value {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #64748b;
+        }
+
+        #ring-pass-val.ring-value-live { color: var(--accent-green); }
+        #ring-line-val.ring-value-live { color: var(--accent-blue); }
+        #ring-branch-val.ring-value-live { color: var(--accent-cyan); }
+        #ring-bugs-val.ring-value-live { color: var(--ring-bugs-stroke); }
+
+        .ring-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .ring-sublabel {
+            font-size: 0.62rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Agent Trace */
+        .agent-trace {
+            padding: 12px;
+            flex: 1;
+            border-top: 1px solid var(--border);
+        }
+
+        .trace-entry {
+            padding: 4px 8px;
+            font-size: 0.68rem;
+            display: flex;
+            gap: 6px;
+            color: var(--text-muted);
+            border-left: 2px solid transparent;
+        }
+
+        .trace-entry.gen { border-color: var(--accent-purple); color: var(--text-secondary); }
+        .trace-entry.pass { border-color: var(--accent-green); color: var(--accent-green); }
+        .trace-entry.fail { border-color: var(--accent-red); color: var(--accent-red); }
+        .trace-entry.info { border-color: var(--accent-cyan); color: var(--text-secondary); }
+
+        /* ── Terminal (Bottom) ── */
+        .terminal {
+            height: var(--terminal-height);
+            min-height: 80px;
+            max-height: 60vh;
+            background: var(--terminal-bg);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .terminal-resize {
+            position: absolute;
+            top: -3px;
+            left: 0;
+            right: 0;
+            height: 6px;
+            cursor: ns-resize;
+            z-index: 10;
+        }
+        .terminal-resize:hover,
+        .terminal-resize.active { background: rgba(16, 185, 129, 0.3); }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            gap: 8px;
+        }
+
+        .terminal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            line-height: 1.6;
+        }
+
+        .terminal-body::-webkit-scrollbar { width: 4px; }
+        .terminal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .log-info { color: var(--text-secondary); }
+        .log-success { color: var(--accent-green); }
+        .log-warning { color: var(--accent-yellow); }
+        .log-error { color: var(--accent-red); }
+
+        /* Progress bar in terminal header */
+        .term-progress {
+            flex: 1;
+            max-width: 200px;
+            height: 4px;
+            background: var(--term-progress-track);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .term-progress-fill {
+            height: 100%;
+            background: var(--gradient-primary);
+            width: 0;
+            transition: width 0.5s ease;
+            border-radius: 4px;
+        }
+
+        .term-file { color: var(--accent-cyan); margin-left: 4px; }
+        .term-count { color: var(--text-muted); margin-left: auto; }
+
+        /* Live counters in terminal header */
+        .live-counter {
+            font-size: 0.68rem;
+            color: var(--accent-cyan);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ── Spinner ── */
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Per-File Results Table ── */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+
+        .results-table th {
+            padding: 10px 14px;
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-secondary);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .results-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(42, 58, 51, 0.3);
+        }
+
+        .results-table tr:hover { background: rgba(16, 185, 129, 0.05); }
+
+        .fname {
+            cursor: pointer;
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.76rem;
+        }
+
+        .fname:hover { text-decoration: underline; color: var(--accent-purple); }
+
+        .status-badge {
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+
+        .status-badge.passed { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+        .status-badge.failed { background: rgba(248,113,113,0.15); color: var(--accent-red); }
+
+        .btn-view {
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 0.68rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .btn-view:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+
+        /* ── HITL Review Modal ── */
+        .review-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.82);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+
+        .review-overlay.active { display: flex; }
+
+        .review-modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-green);
+            border-radius: 16px;
+            width: 90vw;
+            max-width: 950px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 60px rgba(16, 185, 129, 0.25);
+            overflow: hidden;
+            animation: reviewSlideIn 0.3s ease;
+        }
+
+        @keyframes reviewSlideIn {
+            from { transform: translateY(30px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+
+        .review-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 18px 24px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08));
+        }
+
+        .review-header h3 {
+            font-size: 1.1rem; font-weight: 700;
+            background: var(--gradient-primary); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .review-stats { display: flex; gap: 16px; padding: 12px 24px; background: var(--bg-card); border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+        .review-stats .stat { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+        .review-stats .stat strong { color: var(--accent-cyan); }
+
+        .review-code textarea {
+            width: 100%; min-height: 350px; background: #070310; border: none; color: #c4b5fd;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; line-height: 1.7;
+            padding: 16px 20px; resize: vertical; outline: none; tab-size: 4;
+        }
+
+        .review-actions {
+            display: flex; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--border);
+            background: var(--bg-card); justify-content: flex-end; flex-wrap: wrap;
+        }
+
+        .btn-review {
+            padding: 10px 20px; border-radius: 10px; font-family: 'Inter', sans-serif;
+            font-weight: 600; font-size: 0.82rem; cursor: pointer; border: 1px solid var(--border);
+            transition: all 0.25s; display: inline-flex; align-items: center; gap: 6px;
+        }
+
+        .btn-review.approve { background: linear-gradient(135deg, #10b981, #059669); color: white; border-color: transparent; }
+        .btn-review.edit { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border-color: transparent; }
+        .btn-review.reject { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border-color: transparent; }
+        .btn-review.skip { background: var(--bg-input); color: var(--text-secondary); }
+
+        .modal-close {
+            background: none; border: none; font-size: 1.5rem; color: var(--text-muted);
+            cursor: pointer; padding: 0 4px; line-height: 1;
+        }
+
+        .modal-close:hover { color: var(--text-primary); }
+
+        .review-hint { width: 100%; padding: 10px 0 0; font-size: 0.72rem; color: var(--text-muted); text-align: center; }
+
+        .hidden { display: none !important; }
+
+        /* select / dropdown */
+        .sidebar-select {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 8px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .empty-tab {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            padding: 40px;
+            text-align: center;
+        }
+
+        /* ═══ Light theme (translated palette — not inverted) ═══ */
+        html[data-theme="light"] {
+            --bg-primary: #f3f4f6;
+            --bg-secondary: #eceef2;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f3f4f6;
+            --bg-input: #ffffff;
+            --bg-code: #ffffff;
+            --border: #d1d5db;
+            --border-focus: #047857;
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
+            --text-muted: #6b7280;
+            --semantic-bugs: #9f1239;
+            --semantic-bugs-soft: #be123c;
+            --semantic-warning: #9a3412;
+            --semantic-warning-soft: #c2410c;
+            --semantic-muted: #64748b;
+            --semantic-muted-soft: #475569;
+            --accent-purple: #047857;
+            --accent-blue: #1d4ed8;
+            --accent-cyan: #0f766e;
+            --accent-green: #047857;
+            --accent-yellow: #a16207;
+            --accent-red: #b91c1c;
+            --gradient-primary: linear-gradient(135deg, #059669 0%, #047857 100%);
+            --gradient-accent: linear-gradient(135deg, #059669 0%, #065f46 100%);
+            --shadow-glow: 0 8px 24px rgba(15, 118, 110, 0.12);
+            --terminal-bg: #eef2f7;
+            --term-progress-track: #e2e8f0;
+            --line-gutter: #9ca3af;
+            --ring-bugs-stroke: #b91c1c;
+            --heatmap-covered: rgba(5, 150, 105, 0.1);
+            --heatmap-uncovered: rgba(185, 28, 28, 0.08);
+            --bug-evidence-bg: #f8fafc;
+        }
+
+        html[data-theme="light"] .dot.gray { background: #9ca3af; }
+
+        html[data-theme="light"] .status-dot.idle { background: #cbd5e1; }
+
+        html[data-theme="light"] .toggle-sm .slider {
+            background: #94a3b8;
+            box-shadow: inset 0 0 0 1px rgba(51, 65, 85, 0.35);
+        }
+        html[data-theme="light"] .toggle-sm .slider::before {
+            background: #f8fafc;
+            box-shadow:
+                0 1px 2px rgba(15, 23, 42, 0.18),
+                0 0 0 1px rgba(15, 23, 42, 0.12);
+        }
+        html[data-theme="light"] .toggle-sm input:checked + .slider {
+            background: linear-gradient(180deg, #059669, #047857);
+            box-shadow: inset 0 0 0 1px rgba(6, 95, 70, 0.6);
+        }
+        html[data-theme="light"] .toggle-sm input:checked + .slider::before {
+            background: #ffffff;
+            box-shadow:
+                0 1px 3px rgba(15, 23, 42, 0.2),
+                0 0 0 1px rgba(255, 255, 255, 0.4);
+        }
+
+        html[data-theme="light"] .welcome-state .welcome-text { color: #4b5563; }
+        html[data-theme="light"] .welcome-state .welcome-hint { color: #6b7280; }
+
+        html[data-theme="light"] .step.done {
+            color: #065f46;
+            background: rgba(5, 150, 105, 0.12);
+            opacity: 1;
+        }
+        html[data-theme="light"] .step.active {
+            color: #ffffff;
+            background: linear-gradient(135deg, #059669, #047857);
+            box-shadow: 0 2px 12px rgba(4, 120, 87, 0.25);
+            text-shadow: none;
+        }
+        html[data-theme="light"] .step.pending { color: #9ca3af; opacity: 0.75; }
+
+        html[data-theme="light"] .step-arrow { color: #cbd5e1; opacity: 0.9; }
+        html[data-theme="light"] .step-arrow.done { color: var(--accent-green); opacity: 1; }
+        html[data-theme="light"] .step-arrow.pending { color: #d1d5db; opacity: 0.65; }
+
+        html[data-theme="light"] .center-tab:hover {
+            background: rgba(4, 120, 87, 0.06);
+        }
+        html[data-theme="light"] .center-tab.red { color: var(--semantic-bugs); }
+        html[data-theme="light"] .center-tab.red:hover {
+            color: var(--semantic-bugs-soft);
+            background: rgba(159, 18, 57, 0.06);
+        }
+        html[data-theme="light"] .center-tab.red.active {
+            color: #7f1d1d;
+            border-bottom-color: var(--semantic-bugs);
+            background: rgba(159, 18, 57, 0.08);
+            box-shadow: inset 0 -1px 0 rgba(159, 18, 57, 0.35);
+        }
+        html[data-theme="light"] .center-tab.amber { color: var(--semantic-warning-soft); }
+        html[data-theme="light"] .center-tab.amber:hover {
+            color: #9a3412;
+            background: rgba(154, 52, 18, 0.07);
+        }
+        html[data-theme="light"] .center-tab.amber.active {
+            color: #7c2d12;
+            border-bottom-color: var(--semantic-warning);
+            background: rgba(154, 52, 18, 0.1);
+            box-shadow: inset 0 -1px 0 rgba(154, 52, 18, 0.4);
+        }
+        html[data-theme="light"] .center-tab.gray.active {
+            color: #475569;
+            border-bottom-color: #64748b;
+            background: rgba(100, 116, 139, 0.1);
+        }
+
+        html[data-theme="light"] .fe-item.active {
+            background: rgba(4, 120, 87, 0.1);
+            color: var(--accent-green);
+            border-left-color: var(--accent-green);
+        }
+
+        html[data-theme="light"] .tok-kw { color: #047857; }
+        html[data-theme="light"] .tok-str { color: #0f766e; }
+
+        html[data-theme="light"] .bug-card { border-left-color: var(--semantic-bugs); }
+        html[data-theme="light"] .blindspot-card { border-left-color: var(--semantic-warning-soft); }
+        html[data-theme="light"] .blindspot-card h4 { color: var(--semantic-warning); }
+
+        html[data-theme="light"] .discarded-card p {
+            text-decoration-color: #cbd5e1;
+        }
+
+        html[data-theme="light"] .ring-bg { stroke: rgba(71, 85, 105, 0.18); }
+        html[data-theme="light"] .ring-track-outer { stroke: rgba(148, 163, 184, 0.45); }
+
+        html[data-theme="light"] .terminal-resize:hover,
+        html[data-theme="light"] .terminal-resize.active { background: rgba(4, 120, 87, 0.2); }
+
+        html[data-theme="light"] .spinner {
+            border: 2px solid rgba(31, 41, 55, 0.12);
+            border-top-color: var(--accent-green);
+        }
+
+        html[data-theme="light"] .results-table td {
+            border-bottom: 1px solid rgba(209, 213, 219, 0.9);
+        }
+        html[data-theme="light"] .results-table tr:hover {
+            background: rgba(4, 120, 87, 0.04);
+        }
+
+        html[data-theme="light"] .btn-run {
+            background: linear-gradient(135deg, #10b981, #047857 55%, #065f46);
+            box-shadow:
+                0 0 0 1px rgba(4, 120, 87, 0.2),
+                0 4px 16px rgba(4, 120, 87, 0.2);
+        }
+        html[data-theme="light"] .btn-run:hover {
+            filter: brightness(1.03);
+            box-shadow:
+                0 0 0 1px rgba(4, 120, 87, 0.35),
+                0 6px 20px rgba(4, 120, 87, 0.28);
+        }
+
+        html[data-theme="light"] .btn-discover:hover {
+            box-shadow: 0 2px 12px rgba(4, 120, 87, 0.2);
+        }
+
+        html[data-theme="light"] .review-overlay {
+            background: rgba(15, 23, 42, 0.45);
+        }
+        html[data-theme="light"] .review-modal {
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+        }
+        html[data-theme="light"] .review-header {
+            background: linear-gradient(135deg, rgba(5, 150, 105, 0.08), rgba(4, 120, 87, 0.05));
+        }
+        html[data-theme="light"] .review-code textarea {
+            background: #f8fafc;
+            color: #312e81;
+            border: 1px solid var(--border);
+        }
+
+        /* ── AI Status Bar ── */
+        .ai-status-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 16px;
+            background: linear-gradient(90deg, rgba(16, 185, 129, 0.06) 0%, rgba(45, 212, 191, 0.04) 100%);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.76rem;
+            min-height: 34px;
+            overflow: hidden;
+        }
+
+        .ai-status-bar.active { display: flex; }
+
+        .ai-phase-icon {
+            font-size: 1.1rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .ai-phase-text {
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .ai-phase-detail {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+
+        .ai-phase-target {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-cyan);
+            font-size: 0.72rem;
+            flex-shrink: 0;
+        }
+
+        .ai-phase-timer {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-family: 'JetBrains Mono', monospace;
+            flex-shrink: 0;
+            min-width: 32px;
+            text-align: right;
+        }
+
+        /* Phase-specific colors */
+        .ai-status-bar[data-phase="loading"] { background: linear-gradient(90deg, rgba(251,191,36,0.08), rgba(251,191,36,0.02)); }
+        .ai-status-bar[data-phase="loading"] .ai-phase-text { color: #fbbf24; }
+
+        .ai-status-bar[data-phase="analyzing"] { background: linear-gradient(90deg, rgba(45,212,191,0.08), rgba(45,212,191,0.02)); }
+        .ai-status-bar[data-phase="analyzing"] .ai-phase-text { color: var(--accent-cyan); }
+
+        .ai-status-bar[data-phase="thinking"] { background: linear-gradient(90deg, rgba(168,85,247,0.1), rgba(168,85,247,0.02)); }
+        .ai-status-bar[data-phase="thinking"] .ai-phase-text { color: #c084fc; }
+
+        .ai-status-bar[data-phase="writing"] { background: linear-gradient(90deg, rgba(52,211,153,0.1), rgba(52,211,153,0.02)); }
+        .ai-status-bar[data-phase="writing"] .ai-phase-text { color: var(--accent-green); }
+
+        .ai-status-bar[data-phase="validating"] { background: linear-gradient(90deg, rgba(96,165,250,0.08), rgba(96,165,250,0.02)); }
+        .ai-status-bar[data-phase="validating"] .ai-phase-text { color: var(--accent-blue); }
+
+        /* Pulsing dot animation for active phases */
+        .ai-pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            animation: ai-pulse 1.5s ease-in-out infinite;
+        }
+
+        .ai-status-bar[data-phase="loading"] .ai-pulse-dot { background: #fbbf24; }
+        .ai-status-bar[data-phase="analyzing"] .ai-pulse-dot { background: var(--accent-cyan); }
+        .ai-status-bar[data-phase="thinking"] .ai-pulse-dot { background: #c084fc; }
+        .ai-status-bar[data-phase="writing"] .ai-pulse-dot { background: var(--accent-green); }
+        .ai-status-bar[data-phase="validating"] .ai-pulse-dot { background: var(--accent-blue); }
+
+        @keyframes ai-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(0.7); }
+        }
+
+        /* Thinking animation — three bouncing dots */
+        .ai-thinking-dots {
+            display: inline-flex;
+            gap: 3px;
+            align-items: center;
+            margin-left: 4px;
+        }
+
+        .ai-thinking-dots span {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: dot-bounce 1.4s ease-in-out infinite;
+        }
+
+        .ai-thinking-dots span:nth-child(2) { animation-delay: 0.16s; }
+        .ai-thinking-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+        @keyframes dot-bounce {
+            0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+            40% { transform: translateY(-5px); opacity: 1; }
+        }
+
+        /* Code streaming cursor */
+        .streaming-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 15px;
+            background: var(--accent-green);
+            margin-left: 2px;
+            animation: blink-cursor 0.7s step-end infinite;
+            vertical-align: text-bottom;
+        }
+
+        @keyframes blink-cursor {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Streaming line reveal */
+        .tcode-line.streaming-reveal {
+            animation: line-reveal 0.15s ease-out forwards;
+        }
+
+        @keyframes line-reveal {
+            from { opacity: 0; transform: translateX(-8px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Light theme overrides */
+        html[data-theme="light"] .ai-status-bar[data-phase="thinking"] .ai-phase-text { color: #7c3aed; }
+        html[data-theme="light"] .ai-status-bar[data-phase="thinking"] .ai-pulse-dot { background: #7c3aed; }
+        html[data-theme="light"] .ai-status-bar[data-phase="thinking"] { background: linear-gradient(90deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02)); }
+        html[data-theme="light"] .ai-status-bar[data-phase="loading"] .ai-phase-text { color: #a16207; }
+        html[data-theme="light"] .ai-status-bar[data-phase="loading"] .ai-pulse-dot { background: #a16207; }
+
+        /* ═══════════════════════════════════════
+           LANDING PAGE STYLES
+           ═══════════════════════════════════════ */
+
+        .landing-page {
+            min-height: 100vh;
+            background: #060a09;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .landing-page::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 30% 20%, rgba(16,185,129,0.06) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 80%, rgba(45,212,191,0.04) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* Navigation */
+        .landing-nav {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 0 40px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            background: rgba(6,10,9,0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(16,185,129,0.08);
+            transition: all 0.3s;
+        }
+
+        .landing-nav.scrolled {
+            background: rgba(6,10,9,0.95);
+            box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+        }
+
+        .nav-logo {
+            font-size: 1.15rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #f0fdf4;
+        }
+
+        .nav-logo span {
+            background: linear-gradient(135deg, #34d399, #10b981);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            margin-left: 48px;
+        }
+
+        .nav-links a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover { color: #f0fdf4; }
+
+        .nav-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-login {
+            color: #cbd5e1;
+            background: none;
+            border: none;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 8px 16px;
+            transition: color 0.2s;
+        }
+
+        .btn-login:hover { color: #f0fdf4; }
+
+        .btn-signup {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: none;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.25s;
+            box-shadow: 0 0 20px rgba(16,185,129,0.2);
+        }
+
+        .btn-signup:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 0 30px rgba(16,185,129,0.35);
+        }
+
+        /* Hero Section */
+        .hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 100vh;
+            padding: 100px 60px 60px;
+            max-width: 1400px;
+            margin: 0 auto;
+            gap: 60px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-content {
+            flex: 1;
+            max-width: 580px;
+        }
+
+        .hero-content h1 {
+            font-size: 3.2rem;
+            font-weight: 800;
+            line-height: 1.1;
+            color: #f0fdf4;
+            margin-bottom: 20px;
+        }
+
+        .hero-content h1 .highlight {
+            background: linear-gradient(135deg, #34d399, #10b981, #059669);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-subtitle {
+            font-size: 1rem;
+            color: #94a3b8;
+            line-height: 1.7;
+            margin-bottom: 36px;
+            max-width: 480px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+        }
+
+        .btn-hero-primary {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border: none;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 14px 28px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 30px rgba(16,185,129,0.25), 0 4px 14px rgba(16,185,129,0.2);
+        }
+
+        .btn-hero-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 40px rgba(16,185,129,0.4), 0 8px 20px rgba(16,185,129,0.3);
+        }
+
+        .btn-hero-secondary {
+            background: transparent;
+            color: #cbd5e1;
+            border: 1px solid rgba(148,163,184,0.25);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 14px 28px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-hero-secondary:hover {
+            border-color: rgba(16,185,129,0.4);
+            color: #f0fdf4;
+            background: rgba(16,185,129,0.05);
+        }
+
+        /* Node Diagram */
+        .hero-diagram {
+            flex: 1;
+            max-width: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .node-diagram {
+            position: relative;
+            width: 400px;
+            height: 400px;
+        }
+
+        .node-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.05) 70%, transparent 100%);
+            border: 2px solid rgba(16,185,129,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 60px rgba(16,185,129,0.15), 0 0 120px rgba(16,185,129,0.05);
+            animation: center-glow 4s ease-in-out infinite;
+        }
+
+        @keyframes center-glow {
+            0%, 100% { box-shadow: 0 0 60px rgba(16,185,129,0.15), 0 0 120px rgba(16,185,129,0.05); }
+            50% { box-shadow: 0 0 80px rgba(16,185,129,0.25), 0 0 140px rgba(16,185,129,0.1); }
+        }
+
+        .node-center-icon {
+            font-size: 2rem;
+            margin-bottom: 4px;
+            filter: drop-shadow(0 0 8px rgba(16,185,129,0.4));
+        }
+
+        .node-center-label {
+            font-size: 0.58rem;
+            font-weight: 600;
+            color: #a7f3d0;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        .orbit-node {
+            position: absolute;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(20,26,24,0.9);
+            border: 1.5px solid rgba(16,185,129,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #a7f3d0;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 20px rgba(16,185,129,0.1);
+            transition: all 0.3s;
+        }
+
+        .orbit-node:hover {
+            border-color: rgba(16,185,129,0.5);
+            box-shadow: 0 0 30px rgba(16,185,129,0.25);
+            transform: scale(1.1);
+        }
+
+        .orbit-node.n1 { top: 5%; left: 50%; transform: translateX(-50%); }
+        .orbit-node.n2 { top: 30%; right: 2%; }
+        .orbit-node.n3 { bottom: 30%; right: 2%; }
+        .orbit-node.n4 { bottom: 5%; left: 50%; transform: translateX(-50%); }
+        .orbit-node.n5 { bottom: 30%; left: 2%; }
+        .orbit-node.n6 { top: 30%; left: 2%; }
+
+        /* Orbit ring */
+        .orbit-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            border: 1px solid rgba(16,185,129,0.08);
+            animation: orbit-rotate 30s linear infinite;
+        }
+
+        @keyframes orbit-rotate {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .orbit-ring-inner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 1px dashed rgba(16,185,129,0.06);
+        }
+
+        /* Connection lines (SVG) */
+        .diagram-lines {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .diagram-lines line {
+            stroke: rgba(16,185,129,0.25);
+            stroke-width: 1.5;
+            stroke-dasharray: 6 4;
+            animation: dash-flow 2s linear infinite;
+        }
+
+        @keyframes dash-flow {
+            to { stroke-dashoffset: -20; }
+        }
+
+        /* Floating particles */
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: rgba(52,211,153,0.4);
+            animation: float-particle 6s ease-in-out infinite;
+        }
+
+        .particle:nth-child(1) { top: 15%; left: 20%; animation-delay: 0s; }
+        .particle:nth-child(2) { top: 70%; left: 75%; animation-delay: 2s; }
+        .particle:nth-child(3) { top: 40%; left: 85%; animation-delay: 4s; }
+        .particle:nth-child(4) { top: 80%; left: 30%; animation-delay: 1s; }
+        .particle:nth-child(5) { top: 25%; left: 60%; animation-delay: 3s; }
+
+        @keyframes float-particle {
+            0%, 100% { opacity: 0; transform: translateY(0) scale(1); }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            50% { transform: translateY(-20px) scale(1.5); }
+        }
+
+        /* Dashboard section wrapper */
+        .dashboard-section {
+            min-height: 100vh;
+        }
+
+        /* ═══ Chat Panel ═══ */
+        .chat-panel {
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 200px;
+        }
+
+        .chat-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-card);
+        }
+
+        .chat-tab {
+            padding: 8px 14px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .chat-tab:hover { color: var(--text-primary); }
+        .chat-tab.active { color: var(--accent-green); border-bottom-color: var(--accent-green); }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 200px;
+        }
+
+        .chat-messages::-webkit-scrollbar { width: 3px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .chat-msg {
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            padding: 8px 10px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .chat-msg .msg-sender {
+            font-weight: 700;
+            color: var(--accent-green);
+            margin-bottom: 3px;
+            font-size: 0.68rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .chat-msg .msg-sender.reporter { color: var(--accent-cyan); }
+
+        .chat-input-area {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-card);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.72rem;
+            outline: none;
+        }
+
+        .chat-input:focus { border-color: var(--border-focus); }
+        .chat-input::placeholder { color: var(--text-muted); opacity: 0.5; }
+
+        .chat-send {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .chat-send:hover { filter: brightness(1.15); box-shadow: 0 0 12px rgba(16,185,129,0.3); }
+    </style>
+</head>
+
+<body>
+    <!-- ═══════════════════════════════════════
+         LANDING PAGE
+         ═══════════════════════════════════════ -->
+    <div class="landing-page" id="landing-page">
+        <!-- Navigation -->
+        <nav class="landing-nav" id="landing-nav">
+            <div class="nav-logo">🧪 <span>TestMate</span></div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#products">Products</a>
+                <a href="#blog">Blog</a>
+                <a href="#contact">Contact</a>
+            </div>
+            <div class="nav-actions">
+                <button class="btn-login">Login</button>
+                <button class="btn-signup" onclick="scrollToDashboard()">Sign up</button>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <div class="hero">
+            <div class="hero-content">
+                <h1>TestMate: <span class="highlight">Agentic Scaffolding</span> for Software Testing</h1>
+                <p class="hero-subtitle">High fidelity UI/UX design conceptboard for enterprise developer SaaS tool and intelligent code testing.</p>
+                <div class="hero-buttons">
+                    <button class="btn-hero-primary" onclick="scrollToDashboard()">Get Started</button>
+                    <button class="btn-hero-secondary" onclick="scrollToDashboard()">Learn More →</button>
+                </div>
+            </div>
+            <div class="hero-diagram">
+                <div class="node-diagram">
+                    <!-- Floating particles -->
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+
+                    <!-- Orbit rings -->
+                    <div class="orbit-ring"></div>
+                    <div class="orbit-ring-inner"></div>
+
+                    <!-- Connection lines -->
+                    <svg class="diagram-lines" viewBox="0 0 400 400">
+                        <line x1="200" y1="48" x2="200" y2="140"/>
+                        <line x1="355" y1="148" x2="260" y2="175"/>
+                        <line x1="355" y1="252" x2="260" y2="225"/>
+                        <line x1="200" y1="352" x2="200" y2="260"/>
+                        <line x1="45" y1="252" x2="140" y2="225"/>
+                        <line x1="45" y1="148" x2="140" y2="175"/>
+                    </svg>
+
+                    <!-- Center node -->
+                    <div class="node-center">
+                        <div class="node-center-icon">🧬</div>
+                        <div class="node-center-label">Localized<br>AI model</div>
+                    </div>
+
+                    <!-- Orbit nodes -->
+                    <div class="orbit-node n1">KS</div>
+                    <div class="orbit-node n2">MG</div>
+                    <div class="orbit-node n3">AST</div>
+                    <div class="orbit-node n4">RAG</div>
+                    <div class="orbit-node n5">CFG</div>
+                    <div class="orbit-node n6">MT</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════
+         DASHBOARD SECTION
+         ═══════════════════════════════════════ -->
+    <div class="dashboard-section" id="dashboard-section">
+
+    <!-- HITL Review Modal -->
+    <div class="review-overlay" id="review-overlay">
+        <div class="review-modal">
+            <div class="review-header">
+                <h3>👤 Human Review — Generated Tests</h3>
+                <button class="modal-close" onclick="submitReview('skip')">&times;</button>
+            </div>
+            <div class="review-stats">
+                <div class="stat">📝 Tests: <strong id="review-test-count">0</strong></div>
+                <div class="stat">📄 Target: <strong id="review-target-file">—</strong></div>
+            </div>
+            <div class="review-code">
+                <textarea id="review-code-editor" spellcheck="false"></textarea>
+            </div>
+            <div class="review-actions">
+                <button class="btn-review skip" onclick="submitReview('skip')">⏭️ Skip</button>
+                <button class="btn-review reject" onclick="submitReview('reject')">❌ Reject</button>
+                <button class="btn-review edit" onclick="submitReview('edit')">✏️ Accept Edits</button>
+                <button class="btn-review approve" onclick="submitReview('approve')">✅ Approve All</button>
+                <div class="review-hint">Edit the test code above before approving. Escape to skip.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TOP BAR ═══ -->
+    <div class="topbar">
+        <div class="topbar-logo">🧪 TestMate</div>
+        <div class="topbar-badges">
+            <span class="badge">🤖 Qwen2.5-Coder-7B</span>
+            <span class="badge cyan">📊 Graph-RAG</span>
+            <span class="badge green">🦠 Mutation Testing</span>
+        </div>
+        <div class="topbar-status">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text" style="color:var(--text-muted); font-size:0.72rem">Idle</span>
+            <button type="button" class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle color theme" aria-label="Toggle color theme">
+                <span id="theme-toggle-icon" aria-hidden="true">☀️</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══ IDE LAYOUT ═══ -->
+    <div class="ide-layout">
+
+        <!-- ═══ LEFT SIDEBAR ═══ -->
+        <div class="sidebar">
+            <!-- Repository Input -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">📦 Repository</div>
+                <input type="text" class="sidebar-input" id="repo-url"
+                    placeholder="GitHub URL or local path...">
+                <input type="text" class="sidebar-input" id="repo-branch"
+                    placeholder="branch (optional)">
+                <button class="btn-sm btn-discover" id="btn-discover" onclick="discoverFiles()">
+                    🔍 Discover Files
+                </button>
+            </div>
+
+            <!-- Configuration -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">⚙️ Configuration</div>
+                <label class="toggle-row">
+                    <span class="toggle-sm"><input type="checkbox" id="docker-mode"><span class="slider"></span></span>
+                    🐳 Docker Isolation
+                </label>
+                <label class="toggle-row">
+                    <span class="toggle-sm"><input type="checkbox" id="deep-scan-mode"><span class="slider"></span></span>
+                    🔍 Deep Scan
+                </label>
+                <label class="toggle-row">
+                    <span class="toggle-sm"><input type="checkbox" id="hitl-mode" checked><span class="slider"></span></span>
+                    👤 Human-in-the-Loop
+                </label>
+                <label class="toggle-row">
+                    <span class="toggle-sm"><input type="checkbox" id="intense-mode"><span class="slider"></span></span>
+                    🔥 Intense Mode (DPO)
+                </label>
+                <div class="toggle-row" style="margin-top: 4px;">
+                    <span style="font-size: 0.72rem;">🔄 Retries</span>
+                    <select id="max-retries" class="sidebar-select" style="width: auto; margin-left: auto; padding: 4px 8px;">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3" selected>3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- File Explorer -->
+            <div class="sidebar-section" style="padding-bottom: 0; border-bottom: none;">
+                <div class="fe-header" style="padding: 0 0 8px 0;">
+                    <div class="sidebar-title" style="margin-bottom: 0;">📄 Files</div>
+                    <span class="fe-selectall" id="fe-count" onclick="toggleSelectAll()">Select All</span>
+                </div>
+            </div>
+            <div class="file-explorer" id="file-list">
+                <div class="fe-empty">Discover a repository to begin</div>
+            </div>
+
+            <!-- Run Button -->
+            <div class="sidebar-section" style="border-top: 1px solid var(--border);">
+                <button class="btn-sm btn-run" id="btn-run" onclick="startEvaluation()">
+                    🚀 Run Full Evaluation
+                </button>
+            </div>
+        </div>
+
+        <!-- ═══ CENTER AREA (workspace + terminal) ═══ -->
+        <div class="center-area">
+        <!-- ═══ CENTER PANEL ═══ -->
+        <div class="center-panel">
+            <!-- Pipeline Stepper -->
+            <div class="pipeline-stepper" id="pipeline-stepper">
+                <div class="step pending" data-stage="scan">📥 Repo Scan</div>
+                <span class="step-arrow">→</span>
+                <div class="step pending" data-stage="model">🧠 Model Load</div>
+                <span class="step-arrow">→</span>
+                <div class="step pending" data-stage="gen">🤖 Generation</div>
+                <span class="step-arrow">→</span>
+                <div class="step pending" data-stage="audit">🔍 Audit</div>
+                <span class="step-arrow">→</span>
+                <div class="step pending" data-stage="eval">📊 Evaluation</div>
+            </div>
+
+            <!-- AI Status Bar -->
+            <div class="ai-status-bar" id="ai-status-bar">
+                <div class="ai-pulse-dot"></div>
+                <span class="ai-phase-icon" id="ai-phase-icon">🧠</span>
+                <span class="ai-phase-text" id="ai-phase-text">Idle</span>
+                <span class="ai-thinking-dots" id="ai-thinking-dots" style="display:none"><span></span><span></span><span></span></span>
+                <span class="ai-phase-detail" id="ai-phase-detail"></span>
+                <span class="ai-phase-target" id="ai-phase-target"></span>
+                <span class="ai-phase-timer" id="ai-phase-timer"></span>
+            </div>
+
+            <!-- Tabs -->
+            <div class="center-tabs" id="center-tabs">
+                <div class="center-tab active" data-tab="heatmap" onclick="switchTab('heatmap')">🔥 Coverage Heatmap</div>
+                <div class="center-tab" data-tab="cfg" onclick="switchTab('cfg')">🔀 CFG Paths</div>
+                <div class="center-tab" data-tab="testcode" onclick="switchTab('testcode')">📝 Test Code</div>
+                <div class="center-tab red" data-tab="bugs" onclick="switchTab('bugs')">🐛 Zero-Day Bugs</div>
+                <div class="center-tab amber" data-tab="blindspots" onclick="switchTab('blindspots')">🛡️ Blind Spots</div>
+                <div class="center-tab gray" data-tab="discarded" onclick="switchTab('discarded')">🗑️ Discarded</div>
+            </div>
+
+            <!-- Coverage Summary Bar (shown only for heatmap tab) -->
+            <div class="cov-summary" id="cov-summary">
+                <div class="cov-stat"><span class="dot green"></span> Covered: <strong id="cov-covered">0</strong></div>
+                <div class="cov-stat"><span class="dot red"></span> Uncovered: <strong id="cov-uncovered">0</strong></div>
+                <div class="cov-stat"><span class="dot gray"></span> Total: <strong id="cov-total">—</strong></div>
+                <div style="margin-left:auto; font-weight:700; color:var(--accent-green)" id="cov-pct">0%</div>
+            </div>
+
+            <!-- Tab Panels -->
+            <div class="center-workspace">
+                <!-- Welcome State -->
+                <div class="tab-panel active" id="tab-welcome">
+                    <div class="welcome-state">
+                        <div class="welcome-icon">🧪</div>
+                        <div class="welcome-text">Discover a repository and run evaluation to begin</div>
+                        <div class="welcome-hint">Select files from the sidebar → click Run Full Evaluation</div>
+                    </div>
+                </div>
+
+                <!-- Results Table -->
+                <div class="tab-panel" id="tab-results">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>Source File</th>
+                                <th>Tests</th>
+                                <th>Line Cov</th>
+                                <th>Branch Cov</th>
+                                <th>Bugs</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="file-results-body"></tbody>
+                    </table>
+                </div>
+
+                <!-- Heatmap -->
+                <div class="tab-panel" id="tab-heatmap">
+                    <div id="code-viewer"></div>
+                </div>
+
+                <!-- CFG Paths -->
+                <div class="tab-panel" id="tab-cfg">
+                    <div id="cfg-container">
+                        <div class="empty-tab">Select a file from the results to view CFG paths</div>
+                    </div>
+                </div>
+
+                <!-- Test Code -->
+                <div class="tab-panel" id="tab-testcode">
+                    <div class="test-code-toolbar" id="testcode-toolbar" style="display:none">
+                        <span class="test-code-filename" id="testcode-filename">test_file.py</span>
+                        <button class="btn-copy" id="btn-copy" onclick="copyTestCode()">📋 Copy</button>
+                    </div>
+                    <div id="test-code-viewer">
+                        <div class="empty-tab">Select a file from the results to view generated test code</div>
+                    </div>
+                </div>
+
+                <!-- Zero-Day Bugs -->
+                <div class="tab-panel" id="tab-bugs">
+                    <div id="bugs-container">
+                        <div class="empty-tab">Select a buggy file from the results to view confirmed bugs</div>
+                    </div>
+                </div>
+
+                <!-- Blind Spots (Mutation Survivors) -->
+                <div class="tab-panel" id="tab-blindspots">
+                    <div id="blindspots-container">
+                        <div class="empty-tab">Select a file from the results to view test blind spots</div>
+                    </div>
+                </div>
+
+                <!-- Discarded Hallucinations -->
+                <div class="tab-panel" id="tab-discarded">
+                    <div id="discarded-container">
+                        <div class="empty-tab">Select a file to view discarded LLM hallucinations</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- end center-panel -->
+
+        <!-- Terminal -->
+        <div class="terminal">
+            <div class="terminal-resize" id="terminal-resize"></div>
+            <div class="terminal-header">
+                <span>⚡ Terminal</span>
+                <div class="term-progress">
+                    <div class="term-progress-fill" id="progress-fill"></div>
+                </div>
+                <span class="term-file" id="progress-file"></span>
+                <span class="term-count" id="progress-count"></span>
+                <div class="live-counter" id="live-tests" style="display:none">🧪 <span id="live-tests-count">0</span></div>
+            </div>
+            <div class="terminal-body" id="console"></div>
+        </div>
+
+        </div><!-- /center-area -->
+
+        <!-- ═══ RIGHT PANEL ═══ -->
+        <div class="right-panel">
+            <div class="metric-ring">
+                <div class="sidebar-title">📊 Metrics</div>
+                <div class="ring-container">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="ring-track-outer" cx="50" cy="50" r="40"/>
+                        <circle class="ring-bg" cx="50" cy="50" r="38"/>
+                        <circle class="ring-fill green" id="ring-pass" cx="50" cy="50" r="38"
+                            stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+                    </svg>
+                    <div class="ring-value" id="ring-pass-val">—</div>
+                </div>
+                <div class="ring-label">Pass Rate</div>
+                <div class="ring-sublabel" id="ring-pass-sub">—/— tests</div>
+            </div>
+
+            <div class="metric-ring">
+                <div class="ring-container">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="ring-track-outer" cx="50" cy="50" r="40"/>
+                        <circle class="ring-bg" cx="50" cy="50" r="38"/>
+                        <circle class="ring-fill blue" id="ring-line" cx="50" cy="50" r="38"
+                            stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+                    </svg>
+                    <div class="ring-value" id="ring-line-val">—</div>
+                </div>
+                <div class="ring-label">Line Coverage</div>
+            </div>
+
+            <div class="metric-ring">
+                <div class="ring-container">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="ring-track-outer" cx="50" cy="50" r="40"/>
+                        <circle class="ring-bg" cx="50" cy="50" r="38"/>
+                        <circle class="ring-fill cyan" id="ring-branch" cx="50" cy="50" r="38"
+                            stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+                    </svg>
+                    <div class="ring-value" id="ring-branch-val">—</div>
+                </div>
+                <div class="ring-label">Branch Coverage</div>
+            </div>
+
+            <div class="metric-ring" style="border-bottom: none;">
+                <div class="ring-container">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="ring-track-outer" cx="50" cy="50" r="40"/>
+                        <circle class="ring-bg" cx="50" cy="50" r="38"/>
+                        <circle class="ring-fill red" id="ring-bugs" cx="50" cy="50" r="38"
+                            stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+                    </svg>
+                    <div class="ring-value" id="ring-bugs-val">—</div>
+                </div>
+                <div class="ring-label">Bugs Isolated</div>
+                <div class="ring-sublabel" style="color:var(--ring-bugs-stroke)" id="ring-bugs-sub">Confirmed zero-days</div>
+            </div>
+
+            <!-- Agent Trace -->
+            <div class="agent-trace">
+                <div class="sidebar-title">🤖 Agent Trace</div>
+                <div id="agent-trace-list" style="max-height: 120px; overflow-y:auto;">
+                    <div class="trace-entry info">⏳ Waiting for execution...</div>
+                </div>
+            </div>
+
+            <!-- Chat Panel -->
+            <div class="chat-panel">
+                <div class="chat-tabs">
+                    <div class="chat-tab active" onclick="switchChatTab(this, 'agents')">AI agents</div>
+                    <div class="chat-tab" onclick="switchChatTab(this, 'reporter')">Reporter</div>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-msg">
+                        <div class="msg-sender">🤖 Developer</div>
+                        Refactor this test for performance.
+                    </div>
+                    <div class="chat-msg">
+                        <div class="msg-sender">🧪 TestMate AI</div>
+                        Analyzing AST...<br>Generating optimized test scaffold with localized AI model, and testability clue and divergence-line predictions and initialized-coveredness for assertions.
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" class="chat-input" id="chat-input" placeholder="Type a message...">
+                    <button class="chat-send" onclick="sendChatMsg()">▶</button>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /ide-layout -->
+
+    </div><!-- /dashboard-section -->
+
+    <script>
+        let discoveredFiles = [];
+        let repoUrl = '';
+        let lastResults = null;
+        let _currentFile = null;  // currently selected file in center panel
+
+        const THEME_STORAGE_KEY = 'testmate-theme';
+
+        function getTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+        }
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            try {
+                localStorage.setItem(THEME_STORAGE_KEY, theme);
+            } catch (e) { /* ignore */ }
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const icon = document.getElementById('theme-toggle-icon');
+            if (!icon) return;
+            icon.textContent = getTheme() === 'light' ? '🌙' : '☀️';
+        }
+
+        function toggleTheme() {
+            setTheme(getTheme() === 'light' ? 'dark' : 'light');
+        }
+
+        if (!document.documentElement.getAttribute('data-theme')) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        }
+        updateThemeIcon();
+
+        // ── Pipeline stepper ──
+        function updateStepper(stage) {
+            const stages = ['scan', 'model', 'gen', 'audit', 'eval'];
+            const idx = stages.indexOf(stage);
+            const stepper = document.getElementById('pipeline-stepper');
+            const steps = stepper.querySelectorAll('.step');
+            const arrows = stepper.querySelectorAll('.step-arrow');
+            steps.forEach((el, i) => {
+                el.classList.remove('done', 'active', 'pending');
+                if (idx < 0) el.classList.add('pending');
+                else if (i < idx) el.classList.add('done');
+                else if (i === idx) el.classList.add('active');
+                else el.classList.add('pending');
+            });
+            arrows.forEach((arrow, i) => {
+                arrow.classList.remove('done', 'pending');
+                if (idx < 0) arrow.classList.add('pending');
+                else if (i < idx) arrow.classList.add('done');
+                else arrow.classList.add('pending');
+            });
+        }
+
+        // ── Status dot ──
+        function setStatus(state, text) {
+            const dot = document.getElementById('status-dot');
+            dot.className = 'status-dot ' + state;
+            document.getElementById('status-text').textContent = text;
+        }
+
+        // ── Discover Files ──
+        async function discoverFiles() {
+            const url = document.getElementById('repo-url').value.trim();
+            const branch = document.getElementById('repo-branch').value.trim();
+            if (!url) return;
+            repoUrl = url;
+
+            const btn = document.getElementById('btn-discover');
+            btn.innerHTML = '<span class="spinner"></span> Cloning...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch('/api/discover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, branch }),
+                });
+                const data = await resp.json();
+                if (data.error) { alert('Error: ' + data.error); return; }
+
+                discoveredFiles = data.files;
+                renderFileList(data.files);
+                document.getElementById('fe-count').textContent = `${data.files.length} files`;
+            } catch (e) {
+                alert('Failed: ' + e.message);
+            } finally {
+                btn.innerHTML = '🔍 Discover Files';
+                btn.disabled = false;
+            }
+        }
+
+        function renderFileList(files) {
+            const list = document.getElementById('file-list');
+            list.innerHTML = files.map((f, i) => `
+                <div class="fe-item selected" onclick="toggleFile(this, ${i})">
+                    <input type="checkbox" checked data-index="${i}" onclick="event.stopPropagation()">
+                    <span class="fe-icon">🐍</span>
+                    <span class="fe-name" title="${f.path}">${f.path.split('/').pop()}</span>
+                    <span class="fe-meta">${f.lines}L · ${f.functions}fn</span>
+                </div>
+            `).join('');
+        }
+
+        function toggleFile(el, index) {
+            const cb = el.querySelector('input[type="checkbox"]');
+            cb.checked = !cb.checked;
+            el.classList.toggle('selected', cb.checked);
+        }
+
+        function toggleSelectAll() {
+            const items = document.querySelectorAll('.fe-item input[type="checkbox"]');
+            const allChecked = Array.from(items).every(c => c.checked);
+            items.forEach(cb => {
+                cb.checked = !allChecked;
+                cb.closest('.fe-item').classList.toggle('selected', !allChecked);
+            });
+        }
+
+        // ── Evaluation ──
+        async function startEvaluation() {
+            const checkboxes = document.querySelectorAll('.fe-item input[type="checkbox"]:checked');
+            const selectedIndices = Array.from(checkboxes).map(cb => parseInt(cb.dataset.index));
+            const selectedFiles = selectedIndices.map(i => discoveredFiles[i]);
+
+            if (selectedFiles.length === 0) { alert('Select at least one file'); return; }
+
+            const branch = document.getElementById('repo-branch').value.trim();
+            const useDocker = document.getElementById('docker-mode').checked;
+            const deepScan = document.getElementById('deep-scan-mode').checked;
+            const maxRetries = parseInt(document.getElementById('max-retries').value);
+            const hitlEnabled = document.getElementById('hitl-mode').checked;
+            const intenseEnabled = document.getElementById('intense-mode').checked;
+
+            document.getElementById('btn-run').disabled = true;
+            document.getElementById('btn-run').innerHTML = '<span class="spinner"></span> Running...';
+            document.getElementById('console').innerHTML = '';
+            setStatus('running', 'Running...');
+            updateStepper('scan');
+
+            // Show results tab right away
+            showTabPanel('tab-results');
+
+            // Clear agent trace
+            document.getElementById('agent-trace-list').innerHTML = '';
+            document.getElementById('live-tests').style.display = 'none';
+
+            // Reset streaming code state
+            _currentTestCode = '';
+            document.getElementById('test-code-viewer').innerHTML = '<div class="empty-tab">Waiting for test generation...</div>';
+            document.getElementById('testcode-toolbar').style.display = 'none';
+
+            const evtSource = new EventSource('/api/stream');
+            evtSource.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+                handleSSE(data);
+                if (data.type === 'complete') {
+                    evtSource.close();
+                    document.getElementById('btn-run').disabled = false;
+                    document.getElementById('btn-run').innerHTML = '🚀 Run Full Evaluation';
+                    setStatus('done', '✅ Complete');
+                    updateStepper('eval');
+                    // Mark all steps done
+                    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active', 'pending'); s.classList.add('done'); });
+                    document.querySelectorAll('#pipeline-stepper .step-arrow').forEach(a => {
+                        a.classList.remove('pending');
+                        a.classList.add('done');
+                    });
+                    // Hide AI status bar
+                    document.getElementById('ai-status-bar').classList.remove('active');
+                    if (_aiStatusTimer) { clearInterval(_aiStatusTimer); _aiStatusTimer = null; }
+                    if (_streamingInterval) { clearInterval(_streamingInterval); _streamingInterval = null; }
+                }
+            };
+
+            try {
+                await fetch('/api/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: repoUrl, branch, files: selectedFiles, docker: useDocker, deep_scan: deepScan, max_retries: maxRetries, hitl: hitlEnabled, intense: intenseEnabled }),
+                });
+            } catch (e) {
+                appendLog('Failed to start: ' + e.message, 'error');
+            }
+        }
+
+        function handleSSE(data) {
+            switch (data.type) {
+                case 'log': appendLog(data.message, data.level); addTrace(data.message, data.level); break;
+                case 'progress': updateProgress(data.current, data.total, data.file); break;
+                case 'result': showResults(data.data); break;
+                case 'review_request': showReviewModal(data); break;
+                case 'pipeline_stage': updateStepper(data.stage); break;
+                case 'ai_status': updateAiStatus(data.status, data.detail, data.target); break;
+                case 'code_stream': streamCode(data.code, data.filename, data.target, data.is_retry); break;
+                case 'code_clear': clearStreamingCode(); break;
+                case 'keepalive': break;
+            }
+        }
+
+        function appendLog(msg, level) {
+            const el = document.getElementById('console');
+            const div = document.createElement('div');
+            div.className = 'log-' + (level || 'info');
+            div.textContent = msg;
+            el.appendChild(div);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function addTrace(msg, level) {
+            // Only add interesting messages to agent trace
+            if (!msg || msg.startsWith('─') || msg.startsWith('═') || msg.trim() === '') return;
+            const list = document.getElementById('agent-trace-list');
+            const cls = level === 'success' ? 'pass' : level === 'error' ? 'fail' : level === 'warning' ? 'gen' : 'info';
+            const div = document.createElement('div');
+            div.className = 'trace-entry ' + cls;
+            div.textContent = msg.substring(0, 60);
+            list.appendChild(div);
+            list.scrollTop = list.scrollHeight;
+            // Keep max 50
+            while (list.children.length > 50) list.removeChild(list.firstChild);
+        }
+
+        function updateProgress(current, total, fileName) {
+            const pct = (current / total) * 100;
+            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-file').textContent = fileName;
+            document.getElementById('progress-count').textContent = `${current}/${total}`;
+        }
+
+        // ── Metric Rings ──
+        function setRing(id, value, maxVal) {
+            const circumference = 238.76;
+            const pct = Math.min(value / maxVal, 1);
+            document.getElementById(id).style.strokeDashoffset = circumference * (1 - pct);
+        }
+
+        function showResults(results) {
+            if (results.error) return;
+            lastResults = results;
+
+            const pass = results.pass_rate || 0;
+            const line = results.line_coverage || 0;
+            const branch = results.branch_coverage || 0;
+            const bugs = results.bugs_found || 0;
+            const passed = results.passed_tests || 0;
+            const total = results.total_tests || 0;
+
+            // Update rings
+            setRing('ring-pass', pass, 100);
+            document.getElementById('ring-pass-val').textContent = pass.toFixed(0) + '%';
+            document.getElementById('ring-pass-sub').textContent = `${passed}/${total} tests`;
+
+            setRing('ring-line', line, 100);
+            document.getElementById('ring-line-val').textContent = line.toFixed(0) + '%';
+
+            setRing('ring-branch', branch, 100);
+            document.getElementById('ring-branch-val').textContent = branch.toFixed(0) + '%';
+
+            setRing('ring-bugs', Math.min(bugs, 10), 10);
+            document.getElementById('ring-bugs-val').textContent = bugs;
+
+            ['ring-pass-val', 'ring-line-val', 'ring-branch-val', 'ring-bugs-val'].forEach(id => {
+                document.getElementById(id).classList.add('ring-value-live');
+            });
+
+            // Per-file table
+            const perSrc = results.per_source_files || [];
+            const tbody = document.getElementById('file-results-body');
+
+            if (perSrc.length > 0) {
+                tbody.innerHTML = perSrc.map(f => {
+                    const hasFailed = f.failed > 0 || f.errors > 0;
+                    const badge = hasFailed
+                        ? `<span class="status-badge failed">${f.failed + f.errors} FAIL</span>`
+                        : `<span class="status-badge passed">ALL PASS</span>`;
+                    const lc = (f.line_coverage_pct || 0).toFixed(1);
+                    const bc = (f.branch_coverage_pct || 0).toFixed(1);
+
+                    let bugDisplay = `<span style="color:var(--text-muted); font-size:0.72rem">✔️ 0</span>`;
+                    if (f.source_file.includes('hooks_buggy') || f.source_file.includes('buggy')) {
+                        bugDisplay = (f.bugs || 0) > 0
+                            ? `<button class="btn-view" style="color:var(--semantic-bugs); border-color:var(--semantic-bugs)" onclick="openFileView('${f.source_file}', 'bugs')">🐛 ${f.bugs}</button>`
+                            : bugDisplay;
+                    }
+
+                    return `<tr>
+                        <td class="fname" onclick="openFileView('${f.source_file}', 'heatmap')">${f.source_file}</td>
+                        <td>${badge} <span style="color:var(--text-muted);font-size:0.72rem">${f.passed}/${f.total}</span></td>
+                        <td style="color:var(--accent-blue)">${lc}%</td>
+                        <td style="color:var(--accent-cyan)">${bc}%</td>
+                        <td>${bugDisplay}</td>
+                        <td><button class="btn-view" onclick="openFileView('${f.source_file}', 'testcode')">📝 Code</button></td>
+                    </tr>`;
+                }).join('');
+            }
+
+            showTabPanel('tab-results');
+        }
+
+        // ── Tab Switching ──
+        const ALL_TABS = ['welcome', 'results', 'heatmap', 'cfg', 'testcode', 'bugs', 'blindspots', 'discarded'];
+
+        function showTabPanel(panelId) {
+            ALL_TABS.forEach(t => {
+                const el = document.getElementById('tab-' + t);
+                if (el) el.classList.toggle('active', 'tab-' + t === panelId);
+            });
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.center-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            showTabPanel('tab-' + tab);
+            document.getElementById('cov-summary').style.display = tab === 'heatmap' ? 'flex' : 'none';
+
+            // Lazy-load data for new tabs when file is selected
+            if (_currentFile) {
+                if (tab === 'blindspots') loadBlindSpots(_currentFile);
+                if (tab === 'discarded') loadDiscarded(_currentFile);
+            }
+        }
+
+        // ── Open file view (replaces old modal approach) ──
+        function openFileView(filename, tab) {
+            if (!filename) return;
+            const basename = filename.split('/').pop().split('\\').pop();
+            _currentFile = basename;
+
+            // Load data for all tabs
+            loadHeatmap(basename);
+            loadCFG(basename);
+            loadTestCode(basename);
+            loadBugs(basename);
+
+            switchTab(tab || 'heatmap');
+        }
+
+        // ── Coverage Heatmap ──
+        async function loadHeatmap(basename) {
+            document.getElementById('code-viewer').innerHTML = '<div style="padding:24px; color:var(--text-muted)">Loading coverage...</div>';
+            document.getElementById('cov-covered').textContent = '0';
+            document.getElementById('cov-uncovered').textContent = '0';
+            document.getElementById('cov-total').textContent = '—';
+            document.getElementById('cov-pct').textContent = '0%';
+
+            try {
+                const resp = await fetch(`/api/coverage/${encodeURIComponent(basename)}`);
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('code-viewer').innerHTML = `<div style="padding:24px; color:var(--accent-red)">${data.error}</div>`;
+                    return;
+                }
+
+                document.getElementById('cov-covered').textContent = data.covered_lines.length;
+                document.getElementById('cov-uncovered').textContent = data.uncovered_lines.length;
+                document.getElementById('cov-total').textContent = data.num_statements || '—';
+                document.getElementById('cov-pct').textContent = (data.line_coverage_pct || 0).toFixed(1) + '%';
+
+                const coveredSet = new Set(data.covered_lines);
+                const uncoveredSet = new Set(data.uncovered_lines);
+                const lines = (data.source || '').split('\n');
+
+                document.getElementById('code-viewer').innerHTML = lines.map((line, idx) => {
+                    const n = idx + 1;
+                    const cls = coveredSet.has(n) ? 'covered' : uncoveredSet.has(n) ? 'uncovered' : 'neutral';
+                    const ind = coveredSet.has(n) ? 'covered' : uncoveredSet.has(n) ? 'uncovered' : '';
+                    const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<div class="code-line ${cls}"><span class="line-gutter">${n}</span><span class="line-indicator ${ind}"></span><span class="line-content">${esc}</span></div>`;
+                }).join('');
+            } catch (e) {
+                document.getElementById('code-viewer').innerHTML = `<div style="padding:24px; color:var(--accent-red)">Failed: ${e.message}</div>`;
+            }
+        }
+
+        // ── CFG Paths ──
+        async function loadCFG(basename) {
+            try {
+                const resp = await fetch(`/api/cfg/${encodeURIComponent(basename)}`);
+                const data = await resp.json();
+                renderCFG(data);
+            } catch (e) {
+                document.getElementById('cfg-container').innerHTML = `<div class="empty-tab">CFG data not available</div>`;
+            }
+        }
+
+        function renderCFG(data) {
+            const container = document.getElementById('cfg-container');
+            if (data.error) { container.innerHTML = `<div class="empty-tab">⚠️ ${data.error}</div>`; return; }
+            if (!data.functions || data.functions.length === 0) { container.innerHTML = '<div class="empty-tab">No CFG paths extracted</div>'; return; }
+
+            container.innerHTML = data.functions.map((fn, fi) => {
+                const pathsHtml = (fn.paths || []).map((path, pi) => {
+                    const nodes = path.map(n => `<span class="cfg-path-node">${n}</span>`).join('<span class="cfg-path-arrow">→</span>');
+                    return `<div class="cfg-path"><span class="path-id">#${pi + 1}</span>${nodes}</div>`;
+                }).join('');
+                return `<div class="cfg-function">
+                    <div class="cfg-function-header" onclick="this.nextElementSibling.classList.toggle('open')">
+                        <span>🔀</span>
+                        <span style="font-family:'JetBrains Mono',monospace; color:var(--accent-cyan)">${fn.name}()</span>
+                        <span style="color:var(--text-muted); font-size:0.72rem; margin-left:auto">${fn.paths.length} paths</span>
+                    </div>
+                    <div class="cfg-paths${fi === 0 ? ' open' : ''}">${pathsHtml}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // ── Test Code ──
+        let _currentTestCode = '';
+
+        async function loadTestCode(basename) {
+            const viewer = document.getElementById('test-code-viewer');
+            const toolbar = document.getElementById('testcode-toolbar');
+            const filenameEl = document.getElementById('testcode-filename');
+            viewer.innerHTML = '<div style="padding:24px;color:var(--text-muted)">Loading test code...</div>';
+            _currentTestCode = '';
+
+            try {
+                const resp = await fetch(`/api/testcode/${encodeURIComponent(basename)}`);
+                const data = await resp.json();
+                if (data.error) { viewer.innerHTML = `<div class="empty-tab">${data.error}</div>`; toolbar.style.display = 'none'; return; }
+
+                _currentTestCode = data.source;
+                filenameEl.textContent = data.filename;
+                toolbar.style.display = 'flex';
+                document.getElementById('btn-copy').textContent = '📋 Copy';
+                document.getElementById('btn-copy').className = 'btn-copy';
+
+                const lines = data.source.split('\n');
+                viewer.innerHTML = lines.map((line, idx) => {
+                    const esc = highlightPython(line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+                    return `<div class="tcode-line"><span class="tcode-num">${idx + 1}</span><span class="tcode-content">${esc}</span></div>`;
+                }).join('');
+            } catch (e) {
+                viewer.innerHTML = `<div class="empty-tab">Failed: ${e.message}</div>`;
+            }
+        }
+
+        function highlightPython(escapedLine) {
+            escapedLine = escapedLine.replace(/(#.*)$/, '<span class="tok-cmt">$1</span>');
+            if (!escapedLine.includes('tok-cmt')) {
+                escapedLine = escapedLine.replace(/(&quot;[^&]*&quot;|&#39;[^&]*&#39;|"[^"]*"|'[^']*')/g, '<span class="tok-str">$1</span>');
+            }
+            escapedLine = escapedLine.replace(/^(\s*)(@\w+)/, '$1<span class="tok-dec">$2</span>');
+            escapedLine = escapedLine.replace(/\b(def|class|import|from|return|if|else|elif|for|while|with|as|try|except|finally|raise|assert|pass|in|not|and|or|is|None|True|False|lambda|yield|async|await)\b/g, '<span class="tok-kw">$1</span>');
+            escapedLine = escapedLine.replace(/(<span class="tok-kw">def<\/span>)\s+(\w+)/, '$1 <span class="tok-fn">$2</span>');
+            escapedLine = escapedLine.replace(/(<span class="tok-kw">class<\/span>)\s+(\w+)/, '$1 <span class="tok-cls">$2</span>');
+            escapedLine = escapedLine.replace(/\b(\d+\.?\d*)\b/g, '<span class="tok-num">$1</span>');
+            return escapedLine;
+        }
+
+        function copyTestCode() {
+            if (!_currentTestCode) return;
+            navigator.clipboard.writeText(_currentTestCode).then(() => {
+                const btn = document.getElementById('btn-copy');
+                btn.textContent = '✅ Copied!';
+                btn.className = 'btn-copy copied';
+                setTimeout(() => { btn.textContent = '📋 Copy'; btn.className = 'btn-copy'; }, 2000);
+            });
+        }
+
+        // ── Bugs ──
+        function bugReportBasename(sourceFile) {
+            if (!sourceFile) return '';
+            const b = String(sourceFile).split('/').pop().split('\\').pop();
+            return b.endsWith('.py') ? b.slice(0, -3) : b;
+        }
+
+        function loadBugs(basename) {
+            if (!lastResults) return;
+            const reports = lastResults.bug_reports || [];
+            const stem = bugReportBasename(basename);
+            const allIssues = reports.filter(b => bugReportBasename(b.source_file) === stem);
+            const fileBugs = allIssues.filter(b => b.bug_type !== 'mutation_survivor');
+            const container = document.getElementById('bugs-container');
+
+            if (basename.includes('hooks_buggy') || basename.includes('buggy')) {
+                if (fileBugs.length === 0) {
+                    container.innerHTML = '<div class="empty-tab">No confirmed bugs for this file</div>';
+                } else {
+                    container.innerHTML = fileBugs.map(bug => {
+                        const cc = bug.confidence === 'high' ? 'var(--semantic-bugs-soft)' : bug.confidence === 'medium' ? '#ea580c' : '#ca8a04';
+                        return `<div class="bug-card" style="border-left-color:${cc}">
+                            <h4>${bug.target} <span class="bug-badge">${bug.bug_type}</span></h4>
+                            <p>${bug.description}</p>
+                            <div class="bug-evidence">${String(bug.evidence ?? '').replace(/\n/g, '<br>')}</div>
+                        </div>`;
+                    }).join('');
+                }
+            } else {
+                container.innerHTML = '<div class="empty-tab">No confirmed bugs for this file</div>';
+            }
+        }
+
+        // ── Blind Spots (Mutation Survivors) ──
+        function loadBlindSpots(basename) {
+            if (!lastResults) return;
+            const reports = lastResults.bug_reports || [];
+            const stem = bugReportBasename(basename);
+            const mutants = reports.filter(b => bugReportBasename(b.source_file) === stem && b.bug_type === 'mutation_survivor');
+            const container = document.getElementById('blindspots-container');
+
+            if (mutants.length === 0) {
+                container.innerHTML = `<div class="empty-tab">🛡️ No blind spots — all mutations were caught!</div>`;
+            } else {
+                container.innerHTML =
+                    `<div style="padding:12px 16px; font-size:0.78rem; color:var(--accent-yellow)">⚠️ ${mutants.length} mutation survivor${mutants.length > 1 ? 's' : ''} — your tests don't catch these mutations</div>` +
+                    mutants.map(m => `<div class="blindspot-card">
+                        <h4>🛡️ ${m.target}</h4>
+                        <p>${m.description}</p>
+                        <div class="bug-evidence" style="margin-top:8px">${String(m.evidence ?? '').replace(/\n/g, '<br>')}</div>
+                    </div>`).join('');
+            }
+        }
+
+        // ── Discarded Hallucinations ──
+        async function loadDiscarded(basename) {
+            const container = document.getElementById('discarded-container');
+            container.innerHTML = '<div style="padding:24px; color:var(--text-muted)">Loading discarded tests...</div>';
+
+            try {
+                const resp = await fetch(`/api/discarded/${encodeURIComponent(basename)}`);
+                const data = await resp.json();
+
+                if (data.error || !data.reports || data.reports.length === 0) {
+                    container.innerHTML = '<div class="empty-tab">🗑️ No discarded hallucinations — all generated tests were valid!</div>';
+                    return;
+                }
+
+                const getBadge = (cls) => {
+                    if (cls.includes('Syntax')) return '<span class="discard-badge syntax">Syntax Error</span>';
+                    if (cls.includes('Flaky')) return '<span class="discard-badge flaky">Flaky Test</span>';
+                    return '<span class="discard-badge hallucination">LLM Hallucination</span>';
+                };
+
+                container.innerHTML =
+                    `<div style="padding:12px 16px; font-size:0.78rem; color:#9ca3af">🗑️ ${data.reports.length} test${data.reports.length > 1 ? 's' : ''} rejected by the 3-Gate Truth Check</div>` +
+                    data.reports.map(r => `<div class="discarded-card">
+                        <h4>${getBadge(r.classification)} ${r.target}</h4>
+                        <p>${r.reason}</p>
+                    </div>`).join('');
+            } catch (e) {
+                container.innerHTML = '<div class="empty-tab">Discarded data not available</div>';
+            }
+        }
+
+        // ── HITL Review ──
+        function showReviewModal(data) {
+            const overlay = document.getElementById('review-overlay');
+            document.getElementById('review-code-editor').value = data.test_code || '';
+            document.getElementById('review-test-count').textContent = data.num_tests || 0;
+            document.getElementById('review-target-file').textContent = data.target_file || '—';
+            overlay.classList.add('active');
+            setStatus('running', '⏸ Review...');
+            appendLog('⏸️ Agent paused — review the generated tests', 'warning');
+        }
+
+        async function submitReview(decision) {
+            document.getElementById('review-overlay').classList.remove('active');
+            setStatus('running', '▶ Resuming...');
+            appendLog(`👤 Decision: ${decision}`, 'success');
+
+            try {
+                const resp = await fetch('/api/review', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decision, edited_code: decision === 'edit' ? document.getElementById('review-code-editor').value : '' }),
+                });
+                const result = await resp.json();
+                if (result.error) appendLog('Review error: ' + result.error, 'error');
+            } catch (e) {
+                appendLog('Failed: ' + e.message, 'error');
+            }
+        }
+
+        // ── Keyboard shortcuts ──
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                const ro = document.getElementById('review-overlay');
+                if (ro.classList.contains('active')) submitReview('skip');
+            }
+        });
+
+        document.getElementById('repo-url').addEventListener('keypress', e => {
+            if (e.key === 'Enter') discoverFiles();
+        });
+
+        // ── Terminal vertical resize (drag top edge) ──
+        (function initTerminalResize() {
+            const handle = document.getElementById('terminal-resize');
+            const terminal = handle.closest('.terminal');
+            let startY = 0;
+            let startH = 0;
+
+            function onMove(clientY) {
+                const dy = startY - clientY;
+                const maxH = Math.floor(window.innerHeight * 0.6);
+                const newH = Math.min(maxH, Math.max(80, startH + dy));
+                terminal.style.height = newH + 'px';
+                terminal.style.flexShrink = '0';
+            }
+
+            function onMouseMove(e) {
+                e.preventDefault();
+                onMove(e.clientY);
+            }
+
+            function onTouchMove(e) {
+                if (e.touches.length === 1) {
+                    e.preventDefault();
+                    onMove(e.touches[0].clientY);
+                }
+            }
+
+            function endDrag() {
+                handle.classList.remove('active');
+                document.body.style.cursor = '';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', endDrag);
+                document.removeEventListener('touchmove', onTouchMove);
+                document.removeEventListener('touchend', endDrag);
+                document.removeEventListener('touchcancel', endDrag);
+            }
+
+            handle.addEventListener('mousedown', e => {
+                e.preventDefault();
+                startY = e.clientY;
+                startH = terminal.offsetHeight;
+                handle.classList.add('active');
+                document.body.style.cursor = 'ns-resize';
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', endDrag);
+            });
+
+            handle.addEventListener('touchstart', e => {
+                if (e.touches.length !== 1) return;
+                startY = e.touches[0].clientY;
+                startH = terminal.offsetHeight;
+                handle.classList.add('active');
+                document.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.addEventListener('touchend', endDrag);
+                document.addEventListener('touchcancel', endDrag);
+            }, { passive: true });
+        })();
+
+        // ═══════════════════════════════════════════════
+        // AI STATUS BAR & CODE STREAMING
+        // ═══════════════════════════════════════════════
+
+        let _aiStatusTimer = null;
+        let _aiPhaseStart = 0;
+        let _streamingInterval = null;
+
+        const AI_PHASE_CONFIG = {
+            loading:    { icon: '⏳', label: 'Loading Model', dots: false },
+            analyzing:  { icon: '🔍', label: 'Analyzing',     dots: false },
+            thinking:   { icon: '🧠', label: 'Thinking',      dots: true },
+            writing:    { icon: '✍️', label: 'Writing',       dots: false },
+            validating: { icon: '✅', label: 'Validating',    dots: false },
+        };
+
+        function updateAiStatus(status, detail, target) {
+            const bar = document.getElementById('ai-status-bar');
+            const cfg = AI_PHASE_CONFIG[status] || { icon: '🤖', label: status, dots: false };
+
+            bar.classList.add('active');
+            bar.setAttribute('data-phase', status);
+            document.getElementById('ai-phase-icon').textContent = cfg.icon;
+            document.getElementById('ai-phase-text').textContent = cfg.label;
+            document.getElementById('ai-phase-detail').textContent = detail || '';
+            document.getElementById('ai-phase-target').textContent = target || '';
+            document.getElementById('ai-thinking-dots').style.display = cfg.dots ? 'inline-flex' : 'none';
+
+            // Reset timer
+            _aiPhaseStart = Date.now();
+            if (_aiStatusTimer) clearInterval(_aiStatusTimer);
+            const timerEl = document.getElementById('ai-phase-timer');
+            timerEl.textContent = '0s';
+            _aiStatusTimer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - _aiPhaseStart) / 1000);
+                timerEl.textContent = elapsed + 's';
+            }, 1000);
+        }
+
+        function clearStreamingCode() {
+            // Cancel any active streaming animation
+            if (_streamingInterval) {
+                clearInterval(_streamingInterval);
+                _streamingInterval = null;
+            }
+            // Clear the test code viewer
+            const viewer = document.getElementById('test-code-viewer');
+            viewer.innerHTML = '<div style="padding:24px;color:var(--text-muted)">⏳ Waiting for new generation...</div>';
+        }
+
+        function streamCode(code, filename, target, isRetry) {
+            if (!code) return;
+
+            // Switch to Test Code tab
+            switchTab('testcode');
+
+            // Update toolbar
+            const toolbar = document.getElementById('testcode-toolbar');
+            const filenameEl = document.getElementById('testcode-filename');
+            toolbar.style.display = 'flex';
+            filenameEl.textContent = filename || 'test_file.py';
+            document.getElementById('btn-copy').textContent = '📋 Copy';
+            document.getElementById('btn-copy').className = 'btn-copy';
+
+            const viewer = document.getElementById('test-code-viewer');
+
+            // If retry, clear first
+            if (isRetry) {
+                viewer.innerHTML = '';
+            }
+
+            // Store the full code for the copy button
+            _currentTestCode = (_currentTestCode || '') + '\n' + code;
+
+            const lines = code.split('\n');
+            let lineIndex = 0;
+
+            // Calculate starting line number from existing content
+            const existingLines = viewer.querySelectorAll('.tcode-line').length;
+
+            // Add a separator comment if there's existing code and this isn't a retry
+            if (existingLines > 0 && !isRetry) {
+                const sepDiv = document.createElement('div');
+                sepDiv.className = 'tcode-line';
+                sepDiv.innerHTML = `<span class="tcode-num">${existingLines + 1}</span><span class="tcode-content"><span class="tok-cmt"># --- ${target} ---</span></span>`;
+                viewer.appendChild(sepDiv);
+            }
+
+            // Cancel any active streaming
+            if (_streamingInterval) {
+                clearInterval(_streamingInterval);
+            }
+
+            const baseLineNum = isRetry ? 1 : existingLines + (existingLines > 0 ? 2 : 1);
+
+            _streamingInterval = setInterval(() => {
+                if (lineIndex >= lines.length) {
+                    clearInterval(_streamingInterval);
+                    _streamingInterval = null;
+                    // Remove cursor from last line
+                    const cursors = viewer.querySelectorAll('.streaming-cursor');
+                    cursors.forEach(c => c.remove());
+                    return;
+                }
+
+                // Remove cursor from previous line
+                const oldCursors = viewer.querySelectorAll('.streaming-cursor');
+                oldCursors.forEach(c => c.remove());
+
+                const line = lines[lineIndex];
+                const lineNum = baseLineNum + lineIndex;
+                const esc = highlightPython(line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+
+                const div = document.createElement('div');
+                div.className = 'tcode-line streaming-reveal';
+                div.innerHTML = `<span class="tcode-num">${lineNum}</span><span class="tcode-content">${esc}<span class="streaming-cursor"></span></span>`;
+                viewer.appendChild(div);
+
+                // Auto-scroll
+                viewer.scrollTop = viewer.scrollHeight;
+                lineIndex++;
+            }, 50); // 50ms per line = ~20 lines/second
+        }
+
+        // ═══════════════════════════════════════════════
+        // LANDING PAGE & CHAT
+        // ═══════════════════════════════════════════════
+
+        function scrollToDashboard() {
+            const dashboard = document.getElementById('dashboard-section');
+            dashboard.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Chat panel
+        function switchChatTab(el, tab) {
+            el.parentElement.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function sendChatMsg() {
+            const input = document.getElementById('chat-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+            input.value = '';
+
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'chat-msg';
+            div.innerHTML = `<div class="msg-sender">👤 You</div>${msg}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+
+            // Auto-reply after short delay
+            setTimeout(() => {
+                const reply = document.createElement('div');
+                reply.className = 'chat-msg';
+                reply.innerHTML = `<div class="msg-sender">🧪 TestMate AI</div>Processing your request...`;
+                container.appendChild(reply);
+                container.scrollTop = container.scrollHeight;
+            }, 800);
+        }
+
+        // Chat enter key
+        document.getElementById('chat-input').addEventListener('keypress', e => {
+            if (e.key === 'Enter') sendChatMsg();
+        });
+
+        // Add chat messages from agent trace
+        function addChatFromTrace(msg, level) {
+            if (!msg || msg.startsWith('─') || msg.startsWith('═') || msg.trim() === '') return;
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'chat-msg';
+            const senderClass = level === 'success' ? '' : level === 'error' ? '' : '';
+            div.innerHTML = `<div class="msg-sender">🤖 Agent</div>${msg.substring(0, 120)}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            // Keep max 30 messages
+            while (container.children.length > 30) container.removeChild(container.firstChild);
+        }
+    </script>
+</body>
+
+</html>
