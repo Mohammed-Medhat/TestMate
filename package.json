@@ -1,0 +1,36 @@
+{
+  "name": "testmate-desktop",
+  "version": "1.0.0",
+  "description": "TestMate — SRS to Test Cases Desktop Application",
+  "main": "out/main/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:raw": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "lucide-react": "^0.446.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.13.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "electron": "^32.1.0",
+    "electron-builder": "^25.0.5",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "vite": "^5.4.8"
+  },
+  "build": {
+    "appId": "com.testmate.desktop",
+    "productName": "TestMate",
+    "directories": { "output": "dist" },
+    "files": ["out/**/*", "srs2testcases/**/*"]
+  }
+}

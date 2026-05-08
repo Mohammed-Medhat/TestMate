@@ -1,0 +1,124 @@
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.Python
+build/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+wheels/
+pip-wheel-metadata/
+.installed.cfg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+srs2testcases/venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# =============================================================================
+# Node.js / Electron
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Build output
+out/
+dist/
+.cache/
+
+# =============================================================================
+# Environment & Secrets
+# =============================================================================
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# =============================================================================
+# ML Models & Large Binary Files
+# =============================================================================
+# Large model weights — download via script instead
+*.safetensors
+*.gguf
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.h5
+*.hdf5
+
+# Model cache directories
+readme_feature_extractor/.cache/
+readme_feature_extractor/models/
+srs2testcases/models/bert-classifier/checkpoint-*/
+
+# =============================================================================
+# Databases
+# =============================================================================
+*.db
+*.sqlite
+*.sqlite3
+
+# =============================================================================
+# Generated / Processed Data
+# =============================================================================
+srs2testcases/data/raw/
+srs2testcases/data/processed/
+srs2testcases/results/
+data/raw/
+data/processed/
+
+# =============================================================================
+# Logs & Temp Files
+# =============================================================================
+*.log
+logs/
+*.tmp
+*.temp
+*.swp
+*.swo
+~$*
+
+# =============================================================================
+# OS Generated
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# IDE
+# =============================================================================
+.idea/
+*.iml
+.project
+.classpath
+*.sublime-project
+*.sublime-workspace

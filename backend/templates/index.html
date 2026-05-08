@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TestMate</title>
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────── */
+    :root {
+      --bg:        #080810;
+      --surface:   #0e0e1a;
+      --surface2:  #121220;
+      --border:    #1e1e38;
+      --accent:    #7c3aed;
+      --accent-hl: #9d5cf7;
+      --hero-text: #d8b4fe;
+      --text:      #e2e8f0;
+      --muted:     #8892a4;
+      --exact:     #10b981;
+      --semantic:  #3b82f6;
+      --fuzzy:     #f59e0b;
+      --predicted: #f97316;
+      --danger:    #ef4444;
+      --radius:    10px;
+    }
+
+    /* ── Reset & base ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* ── Star field ──────────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,.55) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25%  8%, rgba(255,255,255,.40) 0%, transparent 100%),
+        radial-gradient(1px 1px at 40% 30%, rgba(255,255,255,.50) 0%, transparent 100%),
+        radial-gradient(1px 1px at 55% 12%, rgba(255,255,255,.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 22%, rgba(255,255,255,.45) 0%, transparent 100%),
+        radial-gradient(1px 1px at 82%  5%, rgba(255,255,255,.55) 0%, transparent 100%),
+        radial-gradient(1px 1px at 92% 18%, rgba(255,255,255,.40) 0%, transparent 100%),
+        radial-gradient(1px 1px at 15% 45%, rgba(255,255,255,.30) 0%, transparent 100%),
+        radial-gradient(1px 1px at 35% 55%, rgba(255,255,255,.45) 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 48%, rgba(255,255,255,.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 78% 60%, rgba(255,255,255,.50) 0%, transparent 100%),
+        radial-gradient(1px 1px at  5% 70%, rgba(255,255,255,.40) 0%, transparent 100%),
+        radial-gradient(1px 1px at 48% 75%, rgba(255,255,255,.30) 0%, transparent 100%),
+        radial-gradient(1px 1px at 88% 80%, rgba(255,255,255,.45) 0%, transparent 100%),
+        radial-gradient(1px 1px at 20% 88%, rgba(255,255,255,.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 65% 92%, rgba(255,255,255,.40) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 30% 20%, rgba(255,255,255,.60) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 75% 35%, rgba(255,255,255,.55) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 50% 65%, rgba(255,255,255,.50) 0%, transparent 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    nav, .page { position: relative; z-index: 1; }
+
+    /* ── Nav ─────────────────────────────────────────────────────── */
+    nav {
+      background: rgba(8, 8, 16, 0.75);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 2rem;
+      height: 52px;
+      gap: 0.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-right: 1rem;
+      white-space: nowrap;
+    }
+    .nav-tab {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 0.875rem;
+      cursor: pointer;
+      padding: 0.35rem 0.85rem;
+      border-radius: 6px;
+      transition: color .15s, background .15s;
+    }
+    .nav-tab:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .nav-tab.active {
+      color: var(--text);
+      background: rgba(255,255,255,.08);
+    }
+    .nav-tab:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* ── Pages ───────────────────────────────────────────────────── */
+    .page { display: none; flex: 1; }
+    .page.active { display: flex; flex-direction: column; }
+
+    /* ── Home ────────────────────────────────────────────────────── */
+    #home-page {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 5rem 2rem 4rem;
+      gap: 1.5rem;
+    }
+    #home-page h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--hero-text);
+      letter-spacing: -0.02em;
+    }
+    #home-page .subtitle {
+      max-width: 520px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+    .home-btns {
+      display: flex;
+      gap: .85rem;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: .65rem 1.6rem;
+      border-radius: var(--radius);
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .btn-primary:hover { background: var(--accent-hl); transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,.15);
+      padding: .65rem 1.4rem;
+      border-radius: var(--radius);
+      font-size: .95rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .btn-ghost:hover { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.04); }
+    .how-it-works {
+      margin-top: 3.5rem;
+      width: 100%;
+      max-width: 700px;
+    }
+    .how-it-works-header {
+      text-align: left;
+      margin-bottom: 1.5rem;
+      border-left: 3px solid var(--accent);
+      padding-left: .85rem;
+    }
+    .how-it-works-header h2 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .how-it-works-header p  { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
+    .step-cards {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.35rem 1.1rem;
+      width: 155px;
+      text-align: center;
+    }
+    .step-card .icon { font-size: 1.8rem; margin-bottom: .65rem; }
+    .step-card h3 { font-size: .82rem; color: var(--text); font-weight: 600; }
+    .step-card p  { font-size: .75rem; color: var(--muted); margin-top: .3rem; line-height: 1.4; }
+
+    /* ── Upload ──────────────────────────────────────────────────── */
+    #upload-page {
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      gap: 1.5rem;
+    }
+    #upload-page h2 { font-size: 1.6rem; font-weight: 700; }
+    #upload-page p  { color: var(--muted); }
+    .drop-zone {
+      width: 100%;
+      max-width: 500px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      background: var(--surface);
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: #120d20;
+    }
+    .drop-zone .dz-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+    .drop-zone p { color: var(--muted); font-size: .9rem; margin-top: .5rem; }
+    .drop-zone span { color: var(--accent); font-weight: 600; }
+    #file-input { display: none; }
+    .error-banner {
+      background: #2d0e0e;
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+      border-radius: var(--radius);
+      padding: .75rem 1rem;
+      font-size: .875rem;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    /* ── Pipeline ────────────────────────────────────────────────── */
+    #pipeline-page {
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      padding: 4rem 2rem;
+      text-align: center;
+    }
+    .spinner {
+      width: 64px; height: 64px;
+      border: 5px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #pipeline-page h2 { font-size: 1.4rem; font-weight: 600; }
+    #progress-msg { color: var(--muted); font-size: .95rem; }
+    .pipeline-error {
+      color: #fca5a5;
+      background: #2d0e0e;
+      border: 1px solid var(--danger);
+      border-radius: var(--radius);
+      padding: .75rem 1.25rem;
+      font-size: .9rem;
+      max-width: 480px;
+    }
+
+    /* ── Tests ───────────────────────────────────────────────────── */
+    #tests-page { padding: 2rem; gap: 1.5rem; }
+    .tests-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .tests-header h2 { font-size: 1.4rem; font-weight: 700; }
+    .stats-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      padding: .3rem .85rem;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .stat-chip strong { color: var(--text); }
+    .btn-export {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: .6rem 1.4rem;
+      border-radius: var(--radius);
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-export:hover { background: var(--accent-hl); }
+    .btn-export:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Requirement cards ───────────────────────────────────────── */
+    .req-list { display: flex; flex-direction: column; gap: .85rem; }
+    .req-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      transition: border-color .15s;
+    }
+    .req-card:hover { border-color: #3d3d6e; }
+    .req-card-meta {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-bottom: .6rem;
+    }
+    .badge {
+      font-size: .72rem;
+      font-weight: 600;
+      padding: .15rem .55rem;
+      border-radius: 9999px;
+    }
+    .badge-page {
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .badge-exact     { background: #064e3b; color: #6ee7b7; }
+    .badge-semantic  { background: #1e3a8a; color: #93c5fd; }
+    .badge-fuzzy     { background: #451a03; color: #fcd34d; }
+    .badge-predicted { background: #431407; color: #fed7aa; }
+    .badge-unmatched { background: #1e1b4b; color: #a5b4fc; }
+    .score-text {
+      font-size: .72rem;
+      color: var(--muted);
+      margin-left: auto;
+    }
+    .req-textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: .92rem;
+      line-height: 1.55;
+      padding: .6rem .75rem;
+      resize: vertical;
+      min-height: 60px;
+      font-family: inherit;
+      transition: border-color .15s;
+    }
+    .req-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────── -->
+<nav>
+  <span class="nav-logo">TestMate</span>
+  <button class="nav-tab active" data-tab="home">Home</button>
+  <button class="nav-tab" data-tab="upload">Upload</button>
+  <button class="nav-tab" data-tab="pipeline" id="tab-pipeline" disabled>Pipeline</button>
+  <button class="nav-tab" data-tab="tests" id="tab-tests" disabled>Tests</button>
+</nav>
+
+<!-- ── Home ─────────────────────────────────────────────────────── -->
+<section id="home-page" class="page active">
+  <h1>Automated<br>Requirement Extraction</h1>
+  <p class="subtitle">Extract and classify requirements from SRS documents automatically
+     using semantic alignment and AI — ready for test case generation.</p>
+  <div class="home-btns">
+    <button class="btn-primary" onclick="showTab('upload')">🚀 Start Demo</button>
+    <button class="btn-ghost" onclick="showTab('pipeline')">View Pipeline ↗</button>
+  </div>
+
+  <div class="how-it-works">
+    <div class="how-it-works-header">
+      <h2>How It Works</h2>
+      <p>Four intelligent stages to automatically extract requirements</p>
+    </div>
+    <div class="step-cards">
+      <div class="step-card">
+        <div class="icon">📄</div>
+        <h3>Upload</h3>
+        <p>Drop your PDF or DOCX SRS file</p>
+      </div>
+      <div class="step-card">
+        <div class="icon">🔍</div>
+        <h3>Pipeline</h3>
+        <p>Text extraction, segmentation &amp; semantic alignment</p>
+      </div>
+      <div class="step-card">
+        <div class="icon">✅</div>
+        <h3>Review</h3>
+        <p>Edit requirements inline</p>
+      </div>
+      <div class="step-card">
+        <div class="icon">📤</div>
+        <h3>Export</h3>
+        <p>Send JSON to Stage 2</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Upload ────────────────────────────────────────────────────── -->
+<section id="upload-page" class="page">
+  <h2>Upload SRS Document</h2>
+  <p>Supported formats: PDF, DOCX</p>
+
+  <div class="drop-zone" id="drop-zone">
+    <div class="dz-icon">☁️</div>
+    <p><span>Click to browse</span> or drag &amp; drop your file here</p>
+    <p>PDF · DOCX · DOC</p>
+    <input type="file" id="file-input" accept=".pdf,.docx,.doc" />
+  </div>
+
+  <div class="error-banner" id="upload-error" style="display:none;"></div>
+</section>
+
+<!-- ── Pipeline ──────────────────────────────────────────────────── -->
+<section id="pipeline-page" class="page">
+  <div class="spinner"></div>
+  <div>
+    <h2>Processing Document</h2>
+    <p id="progress-msg">Starting…</p>
+  </div>
+  <div class="pipeline-error" id="pipeline-error" style="display:none;"></div>
+</section>
+
+<!-- ── Tests ─────────────────────────────────────────────────────── -->
+<section id="tests-page" class="page">
+  <div class="tests-header">
+    <div>
+      <h2>Extracted Requirements</h2>
+      <div class="stats-row" id="stats-row"></div>
+    </div>
+    <button class="btn-export" id="btn-export" onclick="exportRequirements()" disabled>
+      ⬇ Export for Stage 2
+    </button>
+  </div>
+
+  <div id="req-list-container">
+    <div class="empty-state">
+      <div class="icon">📋</div>
+      <p>No requirements loaded yet. Upload a document first.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── Script ────────────────────────────────────────────────────── -->
+<script>
+  // ── State ──────────────────────────────────────────────────────
+  const state = {
+    jobId: null,
+    status: 'idle',      // idle | uploading | running | done | error
+    requirements: [],    // label==1 items (text may be edited by user)
+    stats: null,
+    pollTimer: null,
+  };
+
+  // ── Tab navigation ─────────────────────────────────────────────
+  function showTab(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(name + '-page').classList.add('active');
+    document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  }
+
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!btn.disabled) showTab(btn.dataset.tab);
+    });
+  });
+
+  // ── File handling ──────────────────────────────────────────────
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+  });
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
+  });
+
+  function handleFileSelect(file) {
+    const allowed = ['.pdf', '.docx', '.doc'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowed.includes(ext)) {
+      showUploadError(`Unsupported file type "${ext}". Please upload a PDF or DOCX.`);
+      return;
+    }
+    hideUploadError();
+    uploadFile(file);
+  }
+
+  function showUploadError(msg) {
+    const el = document.getElementById('upload-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+  function hideUploadError() {
+    document.getElementById('upload-error').style.display = 'none';
+  }
+
+  // ── Upload ─────────────────────────────────────────────────────
+  async function uploadFile(file) {
+    state.status = 'uploading';
+    document.getElementById('tab-pipeline').disabled = false;
+    showTab('pipeline');
+    setProgress('Uploading file…');
+
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) { showPipelineError(data.error || 'Upload failed.'); return; }
+      state.jobId = data.job_id;
+      state.status = 'running';
+      startPolling();
+    } catch (err) {
+      showPipelineError('Network error: ' + err.message);
+    }
+  }
+
+  // ── Polling ─────────────────────────────────────────────────────
+  function startPolling() {
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = setInterval(pollStatus, 1500);
+  }
+
+  async function pollStatus() {
+    try {
+      const res  = await fetch(`/api/status/${state.jobId}`);
+      const data = await res.json();
+
+      if (data.progress_msg) setProgress(data.progress_msg);
+
+      if (data.status === 'done') {
+        clearInterval(state.pollTimer);
+        state.status = 'done';
+        await fetchResults();
+      } else if (data.status === 'error') {
+        clearInterval(state.pollTimer);
+        state.status = 'error';
+        showPipelineError(data.error || 'Pipeline failed.');
+      }
+    } catch (err) {
+      // transient network hiccup — keep polling
+    }
+  }
+
+  function setProgress(msg) {
+    document.getElementById('progress-msg').textContent = msg;
+  }
+
+  function showPipelineError(msg) {
+    const el = document.getElementById('pipeline-error');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+  }
+
+  // ── Fetch results ───────────────────────────────────────────────
+  async function fetchResults() {
+    try {
+      const res  = await fetch(`/api/results/${state.jobId}`);
+      const data = await res.json();
+      if (!res.ok) { showPipelineError(data.error || 'Failed to load results.'); return; }
+
+      state.requirements = data.requirements;
+      state.stats = data.stats;
+      renderStats();
+      renderRequirements();
+
+      document.getElementById('tab-tests').disabled = false;
+      showTab('tests');
+    } catch (err) {
+      showPipelineError('Failed to load results: ' + err.message);
+    }
+  }
+
+  // ── Render stats ────────────────────────────────────────────────
+  function renderStats() {
+    const s = state.stats || {};
+    const row = document.getElementById('stats-row');
+    row.innerHTML = `
+      <span class="stat-chip">📄 <strong>${s.document || 'Document'}</strong></span>
+      <span class="stat-chip">Total sentences: <strong>${s.total_sentences ?? '—'}</strong></span>
+      <span class="stat-chip">Requirements: <strong>${s.requirements ?? state.requirements.length}</strong></span>
+    `;
+    document.getElementById('btn-export').disabled = state.requirements.length === 0;
+  }
+
+  // ── Render requirement cards ────────────────────────────────────
+  function renderRequirements() {
+    const container = document.getElementById('req-list-container');
+
+    if (!state.requirements.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">🔍</div>
+          <p>No requirements found in this document.</p>
+        </div>`;
+      return;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'req-list';
+
+    state.requirements.forEach((req, idx) => {
+      const card = document.createElement('div');
+      card.className = 'req-card';
+
+      const page  = req.page != null ? `p.${req.page}` : '—';
+      const mtype = req.match_type || 'unmatched';
+      const score = req.score != null ? `${Math.round(req.score * 100)}%` : '';
+
+      card.innerHTML = `
+        <div class="req-card-meta">
+          <span class="badge badge-page">${page}</span>
+          <span class="badge badge-${mtype}">${mtype}</span>
+          <span class="score-text">${score}</span>
+        </div>
+        <textarea class="req-textarea" rows="2" data-idx="${idx}">${escapeHtml(req.text)}</textarea>
+      `;
+      list.appendChild(card);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(list);
+
+    // Sync edits back to state
+    container.querySelectorAll('.req-textarea').forEach(ta => {
+      // Auto-resize on load
+      autoResize(ta);
+      ta.addEventListener('input', () => {
+        autoResize(ta);
+        state.requirements[+ta.dataset.idx].text = ta.value;
+      });
+    });
+  }
+
+  function autoResize(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Export ──────────────────────────────────────────────────────
+  async function exportRequirements() {
+    const btn = document.getElementById('btn-export');
+    btn.textContent = 'Downloading…';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirements: state.requirements }),
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        alert('Export failed: ' + (d.error || res.statusText));
+        return;
+      }
+
+      // Trigger browser download via blob
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'stage2_requirements.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Export error: ' + err.message);
+    } finally {
+      btn.textContent = '⬇ Export for Stage 2';
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>

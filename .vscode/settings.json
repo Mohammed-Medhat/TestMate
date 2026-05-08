@@ -1,0 +1,9 @@
+{
+    "python.analysis.extraPaths": [
+        "./srs2testcases/src"
+    ],
+    "python.autoComplete.extraPaths": [
+        "./srs2testcases/src"
+    ],
+    "python.envFile": "${workspaceFolder}/.env"
+}
