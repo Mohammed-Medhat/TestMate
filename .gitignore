@@ -19,4 +19,4 @@ env/
 miniconda3/
 local_run_results.json
 spectrum.json
-coverage.json
+coverage.jsonnode_modules/

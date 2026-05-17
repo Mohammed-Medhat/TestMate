@@ -68,7 +68,7 @@ def api_code():
 @app.route("/api/tests")
 def api_tests():
     r = subprocess.run(
-        ["pytest", str(TEST_FILE), "-v", "--tb=short", "--no-header"],
+         [sys.executable, "-m", "pytest", str(TEST_FILE), "-v", "--tb=short", "--no-header"],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT)
     )
     out = r.stdout + r.stderr
@@ -386,4 +386,4 @@ if __name__ == "__main__":
     print(f"  tests : {TEST_FILE}  {'✅' if TEST_FILE.exists() else '❌ NOT FOUND'}")
     print("  URL   : http://localhost:5000")
     print("=" * 55 + "\n")
-    app.run(debug=True, port=5000, threaded=True, use_reloader=False)
+    app.run(debug=False, port=5000, threaded=True, use_reloader=False)
