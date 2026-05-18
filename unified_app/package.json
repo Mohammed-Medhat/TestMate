@@ -1,0 +1,50 @@
+{
+  "name": "testmate-unified",
+  "version": "1.0.0",
+  "description": "TestMate Unified — AI-Powered Test Generation Desktop App",
+  "type": "module",
+  "main": "./out/main/index.cjs",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "build:win": "npm run build && electron-builder --win --config"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "lucide-react": "^0.294.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-vite": "^2.0.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  },
+  "build": {
+    "appId": "com.testmate.unified",
+    "productName": "TestMate",
+    "directories": { "output": "dist" },
+    "files": ["out/**"],
+    "extraResources": [
+      { "from": "server.py", "to": "server.py" },
+      { "from": "orchestrator.py", "to": "orchestrator.py" },
+      { "from": "model_lifecycle.py", "to": "model_lifecycle.py" },
+      { "from": "../PartA/srs_pipeline", "to": "PartA/srs_pipeline",
+        "filter": ["**/*.py", "data/aligned/**", "!__pycache__/**"] },
+      { "from": "../PartA/readme_extractor", "to": "PartA/readme_extractor",
+        "filter": ["**/*.py", "!__pycache__/**", "!*.db"] },
+      { "from": "../PartB/testgen", "to": "PartB/testgen",
+        "filter": ["**/*.py", "!__pycache__/**", "!*.db"] }
+    ],
+    "win": { "target": ["nsis"] }
+  }
+}

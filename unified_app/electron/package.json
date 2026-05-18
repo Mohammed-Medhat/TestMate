@@ -1,0 +1,76 @@
+{
+  "name": "testmate-unified",
+  "version": "1.0.0",
+  "description": "TestMate — Unified AI Test Generation Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:dir": "electron-builder --dir"
+  },
+  "author": "Mohammed Medhat",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0"
+  },
+  "build": {
+    "appId": "com.testmate.unified",
+    "productName": "TestMate",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "splash.html",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true
+    },
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "unified_app",
+        "filter": [
+          "server.py",
+          "orchestrator.py",
+          "model_lifecycle.py",
+          "templates/**",
+          "static/**"
+        ]
+      },
+      {
+        "from": "../../PartA/srs2testcases",
+        "to": "PartA/srs2testcases",
+        "filter": ["**/*.py", "data/aligned/**", "!__pycache__/**"]
+      },
+      {
+        "from": "../../PartA/readme_feature_extractor",
+        "to": "PartA/readme_feature_extractor",
+        "filter": ["**/*.py", "!__pycache__/**", "!*.db"]
+      },
+      {
+        "from": "../../PartB/testgen",
+        "to": "PartB/testgen",
+        "filter": [
+          "**/*.py",
+          "templates/**",
+          "static/**",
+          "!repos/**",
+          "!generated_tests/**",
+          "!__pycache__/**",
+          "!*.db"
+        ]
+      }
+    ]
+  }
+}

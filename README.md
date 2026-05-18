@@ -53,3 +53,74 @@ Based on key works in:
 
 ---
 
+## Project Structure
+
+```
+TestMate/
+├── PartA/                          # Requirement Extraction & Alignment
+│   ├── srs_pipeline/               # SRS PDF/DOCX → labeled requirements (spaCy + fuzzy match)
+│   │   ├── run_pipeline.py         # CLI entry point
+│   │   ├── pipeline_api.py         # Programmatic API (used by unified_app)
+│   │   └── src/preprocessing/      # PDF, DOCX readers + sentence segmentation + PURE alignment
+│   ├── readme_extractor/           # README → features + test scenarios (FastAPI + Qwen LLM)
+│   │   ├── pipeline_api.py         # Programmatic API (used by unified_app)
+│   │   └── src/                    # API routes, services, models, utils
+│   └── datasets/                   # Input data
+│       ├── srs_documents/          # 80+ SRS documents (PDF/DOCX)
+│       └── pure_annotated/         # PURE dataset CSVs for requirement alignment
+│
+├── PartB/                          # Test Generation & Bug Fixing
+│   ├── agent.py                    # 3-layer RAG orchestrator (main entry)
+│   ├── testgen/                    # Core test generation engine
+│   │   ├── main.py                 # Autonomous self-correcting loop (AST → LLM → test → feedback)
+│   │   ├── api_server.py           # FastAPI server (standalone mode)
+│   │   ├── pipeline_api.py         # Programmatic API (used by unified_app)
+│   │   ├── docker_runner.py        # Sandboxed test execution
+│   │   ├── rag_store.py            # SQLite RAG memory (examples + patterns)
+│   │   ├── build_knowledge_graph.py# AST → knowledge graph
+│   │   ├── intense_mode.py         # DPO multi-iteration mode
+│   │   ├── mutation_testing.py     # Mutmut integration
+│   │   ├── training/               # Kaggle/Colab training & evaluation scripts
+│   │   ├── langchain/              # LangChain-based agent wrappers
+│   │   ├── tools/                  # Demos, debug utilities, reports
+│   │   ├── templates/              # HTML for api_server dashboard
+│   │   └── static/                 # CSS/JS assets
+│   ├── layers/                     # RAG layers
+│   │   ├── docs/                   # Layer 1: external docs + Stack Overflow (FAISS)
+│   │   └── code/                   # Layer 2: code graph navigation (BM25 + embeddings)
+│   ├── models/                     # Trained LoRA adapters
+│   │   └── graphrag_lora/final/    # Production GraphRAG LoRA
+│   ├── value_reasoning_model/      # Value reasoning LoRA adapter
+│   ├── eval_lite/                  # Lightweight evaluation suite
+│   ├── training_data/              # SWE-bench dataset ingestion
+│   ├── tests/                      # Unit tests
+│   └── outputs/                    # Runtime artifacts (generated tests, results, cloned repos)
+│
+└── unified_app/                    # Desktop Application (Electron + React + TypeScript)
+    ├── electron/                   # Electron main process (spawns Python backend)
+    ├── src/                        # React UI (Landing + 3-mode workspace)
+    │   ├── components/             # Landing, LeftSidebar, MainContent, RightSidebar, Modal
+    │   └── App.tsx                 # Root component + all state management
+    └── server.py                   # FastAPI backend (port 8080, all API routes)
+```
+
+## Running the App
+
+### Unified Desktop App (recommended)
+```bash
+cd unified_app
+npm install
+npm run dev        # opens Electron window with hot-reload
+```
+
+### Part A standalone
+```bash
+cd PartA/srs_pipeline
+python run_pipeline.py --input doc.pdf --output results/out.json
+```
+
+### Part B standalone
+```bash
+cd PartB/testgen
+python api_server.py    # FastAPI on :8000
+```

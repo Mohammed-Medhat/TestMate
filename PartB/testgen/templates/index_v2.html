@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestMate — AI-Powered Unit Test Generation</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/v2/styles.css">
+</head>
+<body>
+
+<!-- ═══ LANDING PAGE ═══ -->
+<div class="landing" id="landing-page">
+  <nav class="landing-nav">
+    <div class="nav-logo">🧪 <span>TestMate</span></div>
+    <div class="nav-links">
+      <a href="#">Product</a><a href="#">Features</a><a href="#">Pricing</a>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-cta" onclick="scrollToDashboard()">Get Started</button>
+    </div>
+  </nav>
+  <div class="hero">
+    <div class="hero-text">
+      <h1>TestMate: Agentic Scaffolding for Software Testing</h1>
+      <p>TestMate public website to analyses and antic scaffoldings for software testing.</p>
+      <div class="hero-btns">
+        <button class="btn-cta" onclick="scrollToDashboard()">Get Started</button>
+        <button class="btn-outline">Free Hosting</button>
+      </div>
+    </div>
+    <div class="hero-diagram">
+      <div class="node-center"><div class="node-center-icon">🧬</div><div class="node-center-label">Localized<br>AI model</div></div>
+      <div class="orbit-node n1">AST</div>
+      <div class="orbit-node n2">data</div>
+      <div class="orbit-node n3">node-graph</div>
+      <div class="orbit-node n4">augment</div>
+      <div class="orbit-node n5">prepare</div>
+      <div class="orbit-node n6">engraniment</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="dashboard-section" id="dashboard-section" style="min-height:100vh">
+
+<!-- HITL Review Modal -->
+<div class="review-overlay" id="review-overlay">
+  <div class="review-modal">
+    <div class="review-header">
+      <h3>👤 Human Review — Generated Tests</h3>
+      <button class="modal-close" onclick="submitReview('skip')">&times;</button>
+    </div>
+    <div class="review-stats">
+      <div class="stat">📝 Tests: <strong id="review-test-count">0</strong></div>
+      <div class="stat">📄 Target: <strong id="review-target-file">—</strong></div>
+    </div>
+    <div class="review-code"><textarea id="review-code-editor" spellcheck="false"></textarea></div>
+    <div class="review-actions">
+      <button class="btn-review skip" onclick="submitReview('skip')">⏭️ Skip</button>
+      <button class="btn-review reject" onclick="submitReview('reject')">❌ Reject</button>
+      <button class="btn-review edit" onclick="submitReview('edit')">✏️ Accept Edits</button>
+      <button class="btn-review approve" onclick="submitReview('approve')">✅ Approve All</button>
+    </div>
+  </div>
+</div>
+
+<!-- Config Modal -->
+<div class="config-overlay" id="config-overlay">
+  <div class="config-modal">
+    <div class="config-header">
+      <h3>⚙️ Project Settings</h3>
+      <button class="modal-close" onclick="toggleConfig()">&times;</button>
+    </div>
+    <div class="config-body">
+      <div class="config-group">
+        <label class="toggle-row"><span class="toggle"><input type="checkbox" id="docker-mode"><span class="sl"></span></span>🐳 Docker Isolation <span class="badge" style="margin-left:auto">ACTIVE</span></label>
+      </div>
+      <div class="config-group">
+        <label class="toggle-row"><span class="toggle"><input type="checkbox" id="deep-scan-mode"><span class="sl"></span></span>🔍 Deep Scan <span class="badge" style="margin-left:auto">ACTIVE</span></label>
+      </div>
+      <div class="config-group">
+        <div class="config-label">LLM Model Selection</div>
+        <select class="config-select" id="llm-model">
+          <option>Local Llama 3</option>
+          <option selected>Qwen2.5-Coder-7B</option>
+        </select>
+      </div>
+      <div class="config-group">
+        <div class="config-label">Test Framework</div>
+        <div class="config-checks">
+          <label><input type="radio" name="framework" value="pytest" checked> PyTest</label>
+          <label><input type="radio" name="framework" value="jest"> Jest</label>
+        </div>
+      </div>
+      <div class="config-group">
+        <div class="config-label">Coverage Threshold: <strong id="cov-threshold-val">80</strong>%</div>
+        <input type="range" class="config-range" id="cov-threshold" min="0" max="100" value="80" oninput="document.getElementById('cov-threshold-val').textContent=this.value">
+      </div>
+      <div class="config-group">
+        <div class="config-label">Bug Severity Threshold</div>
+        <div class="config-checks">
+          <label><input type="checkbox" checked> Critical</label>
+          <label><input type="checkbox"> High</label>
+          <label><input type="checkbox"> Medium</label>
+        </div>
+      </div>
+      <div class="config-group">
+        <label class="toggle-row"><span class="toggle"><input type="checkbox" id="hitl-mode" checked><span class="sl"></span></span>👤 Human-in-the-Loop</label>
+      </div>
+      <div class="config-group">
+        <label class="toggle-row"><span class="toggle"><input type="checkbox" id="intense-mode"><span class="sl"></span></span>🔥 Intense Mode (DPO)</label>
+      </div>
+      <div class="config-group">
+        <div class="config-label">Max Retries</div>
+        <select class="config-select" id="max-retries" style="width:80px">
+          <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOP BAR ═══ -->
+<div class="topbar">
+  <div class="topbar-logo">🧪 TestMate</div>
+  <div class="topbar-center">
+    <div class="topbar-tab active" data-view="dashboard">● Active Dashboard</div>
+    <input type="text" class="topbar-search" placeholder="🔍 Search...">
+  </div>
+  <div class="topbar-right">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text" style="color:var(--text3);font-size:.68rem">INITIALIZED</span>
+    <button class="theme-btn" onclick="toggleConfig()" title="Settings">⚙️</button>
+    <button class="theme-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle theme">☀️</button>
+  </div>
+</div>
+
+<!-- ═══ IDE LAYOUT ═══ -->
+<div class="ide">
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-section">
+      <div class="sb-title">📦 Repository</div>
+      <input type="text" class="sb-input" id="repo-url" placeholder="GitHub URL or local path...">
+      <input type="text" class="sb-input" id="repo-branch" placeholder="branch (optional)">
+      <button class="btn btn-primary" id="btn-discover" onclick="discoverFiles()">🔍 Discover Files</button>
+    </div>
+    <div class="sb-section" style="padding-bottom:0;border-bottom:none">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="sb-title" style="margin-bottom:0">📂 Projects</div>
+        <span style="font-size:.64rem;color:var(--green2);cursor:pointer;text-decoration:underline" id="fe-count" onclick="toggleSelectAll()">Select All</span>
+      </div>
+    </div>
+    <div class="file-tree" id="file-list">
+      <div class="ft-empty">Discover a repository to begin</div>
+    </div>
+    <div class="sb-section" style="border-top:1px solid var(--border)">
+      <button class="btn btn-run" id="btn-run" onclick="startEvaluation()">🚀 Generate Test Suite</button>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <div class="center-panel">
+      <!-- Pipeline -->
+      <div class="pipeline" id="pipeline">
+        <div class="step pending" data-stage="scan">📥 Repo Scan</div><span class="step-arrow">→</span>
+        <div class="step pending" data-stage="model">🧠 Model Load</div><span class="step-arrow">→</span>
+        <div class="step pending" data-stage="gen">🤖 Generation</div><span class="step-arrow">→</span>
+        <div class="step pending" data-stage="audit">🔍 Audit</div><span class="step-arrow">→</span>
+        <div class="step pending" data-stage="eval">📊 Evaluation</div>
+      </div>
+      <!-- AI Status -->
+      <div class="ai-bar" id="ai-bar">
+        <div class="ai-dot"></div>
+        <span class="ai-text" id="ai-text">Idle</span>
+        <span class="ai-detail" id="ai-detail"></span>
+        <span class="ai-target" id="ai-target"></span>
+      </div>
+      <!-- Tabs -->
+      <div class="tabs" id="tabs">
+        <div class="tab active" data-tab="heatmap" onclick="switchTab('heatmap')">🔥 Coverage Heatmap</div>
+        <div class="tab" data-tab="testcode" onclick="switchTab('testcode')">📝 Test Code</div>
+        <div class="tab red" data-tab="bugs" onclick="switchTab('bugs')">🐛 Zero-Day Bugs</div>
+        <div class="tab amber" data-tab="blindspots" onclick="switchTab('blindspots')">🛡️ Blind Spots</div>
+        <div class="tab gray" data-tab="discarded" onclick="switchTab('discarded')">🗑️ Discarded</div>
+      </div>
+      <!-- Cov Bar -->
+      <div class="cov-bar" id="cov-bar">
+        <div class="cov-stat"><span class="dot green"></span> Covered: <strong id="cov-covered">0</strong></div>
+        <div class="cov-stat"><span class="dot red"></span> Uncovered: <strong id="cov-uncovered">0</strong></div>
+        <div class="cov-stat"><span class="dot gray"></span> Total: <strong id="cov-total">—</strong></div>
+        <div style="margin-left:auto;font-weight:700;color:var(--green)" id="cov-pct">0%</div>
+      </div>
+      <!-- Workspace -->
+      <div class="workspace">
+        <!-- Welcome -->
+        <div class="tab-panel active" id="tab-welcome">
+          <div class="welcome">
+            <div class="w-icon">🧪</div>
+            <div class="w-text">Generate Your First Test Suite</div>
+            <div class="w-hint">Discover a repository → Select files → Run evaluation</div>
+          </div>
+        </div>
+        <!-- Heatmap -->
+        <div class="tab-panel" id="tab-heatmap"><div class="vscode-editor" id="heatmap-viewer"></div></div>
+        <!-- Test Code -->
+        <div class="tab-panel" id="tab-testcode">
+          <div class="code-toolbar"><span class="code-filename" id="tc-filename">test_*.py</span><button class="btn-copy" id="btn-copy" onclick="copyTestCode()">📋 Copy</button></div>
+          <div class="vscode-editor" id="testcode-viewer"></div>
+        </div>
+        <!-- Bugs -->
+        <div class="tab-panel" id="tab-bugs">
+          <div style="padding:10px 14px"><div class="sb-title">🐛 Zero-Day Bugs</div></div>
+          <table class="bugs-table" id="bugs-table">
+            <thead><tr><th>ID</th><th>Severity</th><th>Description</th><th>Affected</th><th></th></tr></thead>
+            <tbody id="bugs-tbody"></tbody>
+          </table>
+          <div class="ft-empty" id="bugs-empty">No bugs detected yet</div>
+        </div>
+        <!-- Blind Spots -->
+        <div class="tab-panel" id="tab-blindspots"><div class="ft-empty">No blind spots detected</div></div>
+        <!-- Discarded -->
+        <div class="tab-panel" id="tab-discarded"><div class="ft-empty">No discarded hallucinations</div></div>
+      </div>
+    </div>
+    <!-- Terminal -->
+    <div class="terminal">
+      <div class="term-header">
+        <span>▶ TERMINAL</span>
+        <div class="term-progress"><div class="term-progress-fill" id="term-progress"></div></div>
+        <span class="ft-meta" id="term-file"></span>
+        <span class="ft-meta" id="term-count" style="margin-left:auto"></span>
+      </div>
+      <div class="term-body" id="terminal-body"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right">
+    <div class="sb-section"><div class="sb-title">Global metrics</div></div>
+    <!-- Main Ring: Mutation Score -->
+    <div class="metric-ring">
+      <div class="ring-box">
+        <svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="14"/><circle class="ring-fill red" id="ring-mut" cx="18" cy="18" r="14" stroke-dasharray="87.96" stroke-dashoffset="87.96"/></svg>
+        <div class="ring-val" id="ring-mut-val">0%</div>
+      </div>
+      <div class="ring-label">Mutation Score</div>
+    </div>
+    <!-- Mini Metrics Row -->
+    <div class="metrics-row">
+      <div class="mini-metric">
+        <div class="ring-box"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="14"/><circle class="ring-fill green" id="ring-cov" cx="18" cy="18" r="14" stroke-dasharray="87.96" stroke-dashoffset="87.96"/></svg><div class="ring-val" id="ring-cov-val">0%</div></div>
+        <div class="ring-label">Coverage</div>
+      </div>
+      <div class="mini-metric">
+        <div class="ring-box"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="14"/><circle class="ring-fill red" id="ring-bugs" cx="18" cy="18" r="14" stroke-dasharray="87.96" stroke-dashoffset="87.96"/></svg><div class="ring-val" id="ring-bugs-val">0</div></div>
+        <div class="ring-label">Security</div>
+      </div>
+      <div class="mini-metric">
+        <div class="ring-box"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="14"/><circle class="ring-fill cyan" id="ring-pass" cx="18" cy="18" r="14" stroke-dasharray="87.96" stroke-dashoffset="87.96"/></svg><div class="ring-val" id="ring-pass-val">0%</div></div>
+        <div class="ring-label">Pass Rate</div>
+      </div>
+    </div>
+    <!-- Agent Trace -->
+    <div class="sb-section"><div class="sb-title">Agent Trace</div></div>
+    <div style="flex:1;overflow-y:auto;padding:6px 10px" id="agent-trace">
+      <div class="ft-empty" style="font-size:.65rem">Agent activity will appear here</div>
+    </div>
+  </div>
+
+</div><!-- /ide -->
+</div><!-- /dashboard -->
+
+<script src="/static/v2/app.js"></script>
+</body>
+</html>

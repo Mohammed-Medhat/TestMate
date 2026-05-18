@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Segoe UI',system-ui,sans-serif;
+    background:transparent;
+    display:flex;align-items:center;justify-content:center;
+    height:100vh;overflow:hidden;
+    -webkit-app-region:drag;
+  }
+  .splash{
+    width:420px;padding:48px 40px 40px;
+    background:rgba(10,13,12,0.97);
+    border:1px solid rgba(16,185,129,0.2);
+    border-radius:20px;text-align:center;
+    box-shadow:0 0 80px rgba(16,185,129,.12),0 20px 60px rgba(0,0,0,.5);
+    backdrop-filter:blur(20px);
+  }
+  .logo-icon{font-size:2.8rem;margin-bottom:12px;display:block}
+  .logo{
+    font-size:2.2rem;font-weight:800;margin-bottom:6px;
+    background:linear-gradient(135deg,#34d399,#10b981,#059669);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .subtitle{font-size:.82rem;color:#94a3b8;margin-bottom:6px;letter-spacing:.5px}
+  .tagline{font-size:.7rem;color:#4a6460;margin-bottom:32px}
+  .loader{width:200px;height:3px;background:rgba(16,185,129,.15);border-radius:4px;margin:0 auto 20px;overflow:hidden}
+  .loader-bar{
+    width:40%;height:100%;
+    background:linear-gradient(90deg,#10b981,#34d399,#10b981);
+    border-radius:4px;animation:slide 1.8s ease-in-out infinite;
+  }
+  @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+  .status{font-size:.72rem;color:#64748b;letter-spacing:.3px}
+  .status span{color:#10b981;animation:pulse 1.5s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+</head>
+<body>
+<div class="splash">
+  <span class="logo-icon">🧪</span>
+  <div class="logo">TestMate</div>
+  <div class="subtitle">Unified AI Test Platform</div>
+  <div class="tagline">Part A + Part B · Requirement Extraction · Test Generation</div>
+  <div class="loader"><div class="loader-bar"></div></div>
+  <div class="status"><span>●</span> Starting AI Engine...</div>
+</div>
+</body>
+</html>

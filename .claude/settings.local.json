@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pip install spacy PyMuPDF python-docx pandas -q)",
+      "Bash(python -m spacy download en_core_web_sm)",
+      "PowerShell(Move-Item \"D:\\\\TestMate\\\\TestMate\\\\PartA\\\\srs_pipeline\\\\pipeline_api.py\"     \"D:\\\\TestMate\\\\TestMate\\\\PartA\\\\srs_pipeline\\\\srs_api.py\"     -Force)",
+      "PowerShell(Move-Item \"D:\\\\TestMate\\\\TestMate\\\\PartA\\\\readme_extractor\\\\pipeline_api.py\" \"D:\\\\TestMate\\\\TestMate\\\\PartA\\\\readme_extractor\\\\readme_api.py\" -Force)",
+      "PowerShell(Move-Item \"D:\\\\TestMate\\\\TestMate\\\\PartB\\\\testgen\\\\pipeline_api.py\"           \"D:\\\\TestMate\\\\TestMate\\\\PartB\\\\testgen\\\\testgen_api.py\"           -Force)",
+      "PowerShell(\"done\")",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)"
+    ]
+  }
+}

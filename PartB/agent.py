@@ -66,7 +66,7 @@ class SWEBenchAgent:
     def _init_layer1(self, docs_index_path: str = None):
         """Initialize Layer 1: Documentation Retriever."""
         try:
-            from layer1_docs.docs_retriever import DocsRetriever
+            from layers.docs.docs_retriever import DocsRetriever
             self.docs_retriever = DocsRetriever()
             if docs_index_path:
                 self.docs_retriever.load(docs_index_path)
@@ -77,7 +77,7 @@ class SWEBenchAgent:
     def _init_layer2(self, repo_path: str):
         """Initialize Layer 2: Code Navigator for a specific repo."""
         try:
-            from layer2_code.code_navigator import CodeNavigator
+            from layers.code.code_navigator import CodeNavigator
             self.code_navigator = CodeNavigator()
             self.code_navigator.index_repository(repo_path)
             print(f"Layer 2 (Code Navigator) indexed: {self.code_navigator.get_stats()}")

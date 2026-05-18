@@ -1,0 +1,180 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #18181b; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+@keyframes code-line-slide-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.code-line-enter { animation: code-line-slide-in 0.15s ease-out forwards; }
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-modal-in { animation: modal-in 0.2s ease-out forwards; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.animate-pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* ── Landing: animated dot grid background ── */
+.landing-grid {
+  background-image: radial-gradient(circle, #2d3d33 1px, transparent 1px);
+  background-size: 28px 28px;
+  animation: grid-drift 18s ease-in-out infinite alternate;
+}
+@keyframes grid-drift {
+  0%   { background-position: 0 0; }
+  100% { background-position: 14px 14px; }
+}
+
+/* ── Landing: floating orbs ── */
+@keyframes orb-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -40px) scale(1.08); }
+  66%       { transform: translate(-20px, 20px) scale(0.95); }
+}
+@keyframes orb-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%       { transform: translate(-40px, 30px) scale(1.05); }
+  70%       { transform: translate(25px, -20px) scale(0.97); }
+}
+@keyframes orb-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(20px, 35px) scale(1.06); }
+}
+.orb-1 { animation: orb-float-1 12s ease-in-out infinite; }
+.orb-2 { animation: orb-float-2 16s ease-in-out infinite; }
+.orb-3 { animation: orb-float-3 20s ease-in-out infinite; }
+
+/* ── Landing: card hover lift ── */
+.mode-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
+}
+.mode-card:hover {
+  transform: translateY(-6px) scale(1.015);
+}
+
+/* ── Typewriter cursor blink ── */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.typewriter-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: #34d399;
+  margin-left: 3px;
+  vertical-align: middle;
+  animation: cursor-blink 0.8s ease infinite;
+}
+
+/* ── Card icon scale on hover ── */
+.mode-card:hover .card-icon {
+  transform: scale(1.15) rotate(-3deg);
+  transition: transform 0.25s ease;
+}
+.card-icon {
+  transition: transform 0.25s ease;
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Page transition animations (card click → workspace)
+   ────────────────────────────────────────────────────────────────── */
+
+/* The clicked card grows + glows then zooms toward the camera */
+@keyframes card-expand {
+  0%   { transform: scale(1);                box-shadow: 0 0 0 0 rgba(16,185,129,0);     opacity: 1; }
+  35%  { transform: scale(1.10);              box-shadow: 0 0 50px 10px rgba(16,185,129,0.4); opacity: 1; }
+  100% { transform: scale(3.5) translateY(-10%); box-shadow: 0 0 80px 25px rgba(16,185,129,0); opacity: 0; }
+}
+.card-clicked {
+  animation: card-expand 0.55s cubic-bezier(0.5, 0, 0.4, 1) forwards;
+  z-index: 50;
+  position: relative;
+}
+
+/* Non-clicked cards fade away */
+@keyframes card-dim {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+.card-dimmed { animation: card-dim 0.4s ease-out forwards; }
+
+/* The whole landing fades out after the card pop */
+@keyframes landing-fade-out {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+.landing-leaving { animation: landing-fade-out 0.25s ease-out 0.3s forwards; }
+
+/* Workspace entrance */
+@keyframes workspace-enter {
+  0%   { opacity: 0; transform: scale(0.96) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.workspace-entering { animation: workspace-enter 0.35s ease-out forwards; }
+
+/* Landing entrance (when user clicks Home) */
+@keyframes landing-enter {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+.landing-entering { animation: landing-enter 0.3s ease-out forwards; }
+
+/* ──────────────────────────────────────────────────────────────────
+   Pipeline stage animations
+   ────────────────────────────────────────────────────────────────── */
+
+/* Active stage breathes */
+@keyframes stage-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+}
+.stage-active { animation: stage-pulse 1.8s ease-in-out infinite; }
+
+/* AI thinking dots (3 dots bouncing) */
+@keyframes think-dot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1);   opacity: 1; }
+}
+.thinking-dot { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: #34d399; margin: 0 1px; }
+.thinking-dot:nth-child(1) { animation: think-dot 1.2s ease-in-out infinite 0s; }
+.thinking-dot:nth-child(2) { animation: think-dot 1.2s ease-in-out infinite 0.15s; }
+.thinking-dot:nth-child(3) { animation: think-dot 1.2s ease-in-out infinite 0.30s; }
+
+/* Result panel new-content fade-in */
+@keyframes content-fade-in {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.content-fade-in { animation: content-fade-in 0.35s ease-out forwards; }
+
+/* Counter badge pop when count increases */
+@keyframes count-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+.count-pop { animation: count-pop 0.4s ease-out; }

@@ -30,7 +30,7 @@ from peft import PeftModel
 # CONFIGURATION
 # ============================================================
 BASE_MODEL = r"D:\donwloader\Qwen2.5-Coder-7B-Instruct"
-LORA_PATH  = r"D:\TestMate\TestMate\PartB\value_reasoning\kaggle\working\value_reasoning_model\final"
+LORA_PATH  = r"D:\TestMate\TestMate\PartB\value_reasoning_model"
 
 MAX_ITERATIONS   = 15
 MAX_NEW_TOKENS   = 1536   # Increased so the LLM doesn't stop generating halfway through!
@@ -49,12 +49,27 @@ if torch.cuda.is_available():
 # GRAPH-RAG CONTEXT EXTRACTION (identical to training pipeline)
 # ============================================================
 
+_AST_CACHE: dict[str, dict] = {}
+_AST_CACHE_MAX = 32
+
+
 def extract_context_from_code(code: str) -> dict:
-    """Extract CFG paths, raises list, and cyclomatic complexity via AST."""
+    """Extract CFG paths, raises list, and cyclomatic complexity via AST.
+
+    Cached by source hash — same file reparsed in the autocorrect loop is free.
+    """
+    import hashlib as _hashlib
+    _key = _hashlib.md5(code.encode("utf-8", errors="ignore")).hexdigest()
+    if _key in _AST_CACHE:
+        # Return a shallow copy so callers can mutate without poisoning cache
+        cached = _AST_CACHE[_key]
+        return {k: (list(v) if isinstance(v, list) else v) for k, v in cached.items()}
+
     ctx = {"cfg_paths": [], "complexity": None, "raises": [], "callees": [], "classes": []}
     try:
         tree = ast.parse(code)
     except SyntaxError:
+        _AST_CACHE[_key] = ctx
         return ctx
 
     # ── Extract classes, their constructors, and methods ──
@@ -142,7 +157,14 @@ def extract_context_from_code(code: str) -> dict:
                 ctx["callees"].append(node.func.attr)
     ctx["callees"] = list(set(ctx["callees"]))[:10]
 
-    return ctx
+    # Populate cache (LRU-ish: drop oldest if at capacity)
+    if len(_AST_CACHE) >= _AST_CACHE_MAX:
+        try:
+            _AST_CACHE.pop(next(iter(_AST_CACHE)))
+        except StopIteration:
+            pass
+    _AST_CACHE[_key] = ctx
+    return {k: (list(v) if isinstance(v, list) else v) for k, v in ctx.items()}
 
 
 
@@ -487,19 +509,45 @@ def quick_quality_check(test_code: str) -> tuple[bool, str]:
 # MAIN AGENT
 # ============================================================
 
-def load_model():
-    """Load the 4-bit quantized model with LoRA adapter."""
-    print("🧠 Loading Qwen2.5-Coder-7B + LoRA into GPU...")
-    print(f"   Base model: {BASE_MODEL}")
-    print(f"   LoRA path:  {LORA_PATH}")
+def load_model(attn_implementation: str = "sdpa", use_lora: bool = True):
+    """Load the 4-bit quantized model, optionally with the LoRA adapter.
 
-    if not os.path.exists(LORA_PATH):
-        print(f"❌ LoRA path not found: {LORA_PATH}")
-        sys.exit(1)
+    Args:
+        attn_implementation: Attention backend ('sdpa' default, 'eager', 'flash_attention_2').
+                             SDPA gives ~1.3x speedup vs eager with zero extra VRAM cost.
+        use_lora: If True (default), load LoRA from LORA_PATH on top of the base model.
+                  If False, return the raw 4-bit base model only (useful for A/B ablations).
+    """
+    import gc
+    import time as _time
+
+    # ── CRITICAL: Set CUDA allocator config BEFORE any CUDA call ──
+    # This env var is only read once, at first CUDA context creation.
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = (
+        "expandable_segments:True,garbage_collection_threshold:0.6"
+    )
+
+    lora_mode = "with LoRA" if use_lora else "BASE ONLY (no LoRA)"
+    print(f"🧠 Loading Qwen2.5-Coder-7B [{lora_mode}] into GPU...")
+    print(f"   Base model: {BASE_MODEL}")
+    if use_lora:
+        print(f"   LoRA path:  {LORA_PATH}")
 
     if not os.path.exists(BASE_MODEL):
-        print(f"❌ Base model path not found: {BASE_MODEL}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Base model path not found: {BASE_MODEL}")
+
+    # ── Aggressive GPU memory flush ──
+    # When running in a subprocess after a previous run was force-killed,
+    # stale GPU memory may linger. Flush everything before loading.
+    if torch.cuda.is_available():
+        torch.cuda.init()
+        torch.cuda.set_device(0)
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.synchronize()
+        # Brief pause to let GPU memory settle after a force-kill
+        _time.sleep(1)
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -508,32 +556,113 @@ def load_model():
         tokenizer.pad_token = tokenizer.eos_token
         print("   ✅ Tokenizer loaded (fast)")
 
-        bnb = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,  # BF16 > FP16 on Ada Lovelace
-        )
-        import gc
         gc.collect()
         torch.cuda.empty_cache()
-        base = AutoModelForCausalLM.from_pretrained(
-            BASE_MODEL, quantization_config=bnb,
-            device_map={"": 0},
-            trust_remote_code=True,
-            low_cpu_mem_usage=True,
-            attn_implementation="sdpa",  # PyTorch Scaled Dot-Product Attention
-        )
-        print("   ✅ Base model loaded (BF16 + SDPA)")
 
-        model = PeftModel.from_pretrained(base, LORA_PATH)
-        model.eval()
-        print("   ✅ LoRA adapter loaded")
+        # Detect available VRAM and choose dtype accordingly
+        free_vram = torch.cuda.mem_get_info()[0] / 1e9
+        total_vram = torch.cuda.mem_get_info()[1] / 1e9
+        print(f"   📊 VRAM: {free_vram:.1f}GB free / {total_vram:.1f}GB total")
+
+        # Abort early if insufficient VRAM
+        if free_vram < 4.0:
+            raise RuntimeError(
+                f"Insufficient VRAM: {free_vram:.1f}GB free, need ≥4GB. "
+                f"Close other GPU apps or restart the computer to free GPU memory."
+            )
+
+        # BF16 compute needs ~8GB peak during loading, FP16 needs ~6GB
+        # Use FP16 on GPUs with ≤10GB VRAM to avoid OOM segfaults
+        if total_vram <= 10:
+            compute_dtype = torch.float16
+            dtype_label = "FP16"
+            print(f"   📊 Using FP16 compute (≤10GB VRAM detected)")
+        else:
+            compute_dtype = torch.bfloat16
+            dtype_label = "BF16"
+            print(f"   📊 Using BF16 compute (>10GB VRAM detected)")
+
+        # Try 4-bit first, fall back to 8-bit if it fails
+        base = None
+        for quant_mode in ["4bit", "8bit"]:
+            try:
+                if quant_mode == "4bit":
+                    bnb = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=compute_dtype,
+                    )
+                else:
+                    print("   ⚠️  4-bit failed, trying 8-bit fallback...")
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    bnb = BitsAndBytesConfig(load_in_8bit=True)
+
+                extra_kwargs = {}
+                if attn_implementation:
+                    extra_kwargs["attn_implementation"] = attn_implementation
+                    print(f"   📊 Using {attn_implementation} attention (memory-efficient)")
+
+                try:
+                    base = AutoModelForCausalLM.from_pretrained(
+                        BASE_MODEL, quantization_config=bnb,
+                        device_map={"": 0},
+                        trust_remote_code=True,
+                        low_cpu_mem_usage=True,
+                        torch_dtype=compute_dtype,
+                        **extra_kwargs,
+                    )
+                except (ValueError, TypeError, ImportError) as _attn_err:
+                    # Fall back to eager if SDPA/FA2 not supported by this
+                    # transformers version. 100% local and 8GB-safe regardless.
+                    if attn_implementation:
+                        print(f"   ⚠️  {attn_implementation} unsupported → falling back to eager: {_attn_err}")
+                        extra_kwargs.pop("attn_implementation", None)
+                        base = AutoModelForCausalLM.from_pretrained(
+                            BASE_MODEL, quantization_config=bnb,
+                            device_map={"": 0},
+                            trust_remote_code=True,
+                            low_cpu_mem_usage=True,
+                            torch_dtype=compute_dtype,
+                        )
+                    else:
+                        raise
+                torch.cuda.synchronize()  # Ensure model is fully on GPU
+                used = torch.cuda.memory_allocated() / 1e9
+                print(f"   ✅ Base model loaded ({quant_mode} {dtype_label}, {used:.1f}GB VRAM)")
+                break
+            except Exception as e:
+                if quant_mode == "8bit":
+                    raise  # Both failed
+                print(f"   ⚠️  {quant_mode} loading error: {e}")
+                gc.collect()
+                torch.cuda.empty_cache()
+                continue
+
+        if use_lora:
+            if not os.path.exists(LORA_PATH):
+                raise FileNotFoundError(f"LoRA path not found: {LORA_PATH}")
+            model = PeftModel.from_pretrained(base, LORA_PATH)
+            model.eval()
+            torch.cuda.synchronize()
+            adapter_mb = sum(
+                p.numel() * p.element_size()
+                for p in model.parameters() if p.requires_grad
+            ) / 1e6
+            print(f"   ✅ LoRA adapter loaded from {LORA_PATH} ({adapter_mb:.0f} MB trainable)")
+        else:
+            model = base
+            model.eval()
+            print("   ⚠️  LoRA SKIPPED — using raw 4-bit base Qwen2.5-Coder-7B only")
 
     except Exception as e:
         print(f"\n❌ MODEL LOADING FAILED:\n{e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
+        # Clean up GPU on failure
+        gc.collect()
+        torch.cuda.empty_cache()
+        raise RuntimeError(f"Model loading failed: {e}") from e
 
     gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
     vram = torch.cuda.get_device_properties(0).total_memory / 1e9 if torch.cuda.is_available() else 0
@@ -541,29 +670,237 @@ def load_model():
     return model, tokenizer
 
 
+def _compress_srs_requirements(srs_requirements: list, max_items: int = 12) -> str:
+    """Compress SRS requirements to ≤80-char bullets for plan prompt injection."""
+    import re as _re
+    if not srs_requirements:
+        return ""
+    req_only = [r for r in srs_requirements if isinstance(r, dict) and r.get("label") == 1]
+    req_only.sort(key=lambda r: r.get("score", 0), reverse=True)
+    _NOISE = {"the", "system", "shall", "must", "accept", "return", "provide",
+              "support", "allow", "when", "that", "from", "with", "this",
+              "have", "will", "each", "only", "than", "into", "and", "for"}
+    seen, bullets = set(), []
+    for r in req_only:
+        text = r.get("text", "").strip()
+        if not text or len(text) < 10:
+            continue
+        text = _re.sub(r"^REQ-[\d.]+\s*", "", text)
+        text = _re.sub(r"^(The system|A Session|The library|The caller)\s+shall\s+", "", text, flags=_re.I)
+        text = text[:80].rstrip(".").strip()
+        key = text[:35].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        bullets.append(f"  • {text}")
+        if len(bullets) >= max_items:
+            break
+    if not bullets:
+        return ""
+    return ("\n📋 SRS REQUIREMENTS — your plan MUST include test cases for all of these:\n"
+            + "\n".join(bullets) + "\n")
+
+
+def generate_file_test_plan(model, tokenizer, source_code: str,
+                            targets: list, ctx: dict, G,
+                            import_path: str, target_file: str,
+                            probe_cache: dict,
+                            srs_requirements: list = None,
+                            priming_examples: str = "") -> str:
+    """Phase 1 of plan mode: generate a structured test plan for ALL functions in a file.
+
+    Creates one unified plan covering every target function/method before
+    any code generation begins. Uses low temperature (0.3) for determinism.
+    Includes FULL function source and probed runtime values for concrete plans.
+    """
+    # Extract individual function source code directly from AST
+    # This is more reliable than token_budgeted_context which can strip the body
+    func_sources = {}
+    try:
+        tree = ast.parse(source_code)
+        lines = source_code.splitlines()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        key = (node.name, item.name)
+                        start = item.lineno - 1
+                        end = (item.end_lineno or item.lineno)
+                        func_sources[key] = "\n".join(lines[start:end])
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # Only top-level functions (not nested in classes)
+                if not any(isinstance(p, ast.ClassDef) for p in ast.walk(tree)
+                          if node in getattr(p, 'body', [])):
+                    key = (None, node.name)
+                    start = node.lineno - 1
+                    end = (node.end_lineno or node.lineno)
+                    func_sources[key] = "\n".join(lines[start:end])
+    except SyntaxError:
+        pass
+
+    # Build a detailed summary of each target function
+    target_summaries = []
+    for cls_name, method_name in targets:
+        label = f"{cls_name}.{method_name}" if cls_name else method_name
+
+        # Get the FULL function source (not truncated context)
+        func_src = func_sources.get((cls_name, method_name), "")
+        if not func_src:
+            # Fallback to token-budgeted context
+            func_src = build_token_budgeted_context(
+                source_code, cls_name, method_name, G, token_budget=500)
+
+        # Get CFG paths
+        method_paths = get_method_cfg_paths(source_code, cls_name, method_name)
+        path_lines = ""
+        if method_paths:
+            for i, p in enumerate(method_paths[:4]):
+                path_lines += f"    {i+1}. {' → '.join(str(s) for s in p)}\n"
+
+        # Get data flow
+        data_flow = extract_data_flow(source_code, cls_name, method_name)
+
+        # Get probed runtime value — this is CRITICAL for concrete plans
+        target_label_graph = f"{cls_name}.{method_name}" if cls_name else method_name
+        probed = probe_cache.get(target_label_graph, "")
+
+        # RAG examples
+        similar = retrieve_similar(method_name, cls_name or "", top_k=1,
+                                   source_file=os.path.basename(target_file))
+        rag_code = ""
+        if similar:
+            rag_code = similar[0].get("test_code", "")[:300]
+
+        entry = f"""### {label}
+```python
+{func_src[:800]}
+```
+  Execution paths:{chr(10) + path_lines if path_lines else ' single path'}
+  Returns: {data_flow.get('return_type', 'unknown')}
+  Raises: {', '.join(data_flow.get('raises', [])) or 'none'}"""
+
+        if probed and not str(probed).startswith("ERROR"):
+            entry += f"\n  ✅ ACTUAL runtime output: {probed[:120]}"
+        if rag_code:
+            entry += f"\n  📚 Similar test pattern:\n```python\n{rag_code}\n```"
+
+        target_summaries.append(entry)
+
+    targets_block = "\n\n".join(target_summaries)
+    filename = os.path.basename(target_file)
+
+    plan_prompt = f"""READ the source code below and create a CONCRETE test plan for {filename}.
+
+## File: {filename}
+## Import: {import_path or filename}
+
+{targets_block}
+
+═══════════════════════════════════════
+RULES FOR YOUR PLAN (violating = rejected):
+═══════════════════════════════════════
+
+NEVER write vague plans like:
+  ❌ "Define mock inputs x, y, z"
+  ❌ "assert result == expected"
+  ❌ "Try function(None) → raises ValueError"  (unless the code actually raises ValueError)
+
+ALWAYS write concrete plans like:
+  ✅ "Call default_hooks() → returns {{'response': []}}"
+  ✅ "Call dispatch_hook('response', {{'response': [lambda r: r]}}, data) → returns data unchanged"
+  ✅ "Edge: dispatch_hook('missing_key', {{}}, data) → returns data (no hooks to run)"
+
+For EACH function, provide:
+
+### function_name
+[Objective] One sentence about what to prove
+[Requirements] Exact signature with types
+[Test Cases]
+  1. Input: (exact values) → Expected: (exact return value)
+  2. Input: (exact values) → Expected: (exact return value)
+  3. Edge: (boundary input) → Expected: (exact behavior)
+[Mocks needed] List or "none"
+
+READ THE SOURCE CODE to determine the correct expected values.
+If a "✅ ACTUAL runtime output" is shown above, USE THAT as your expected value.
+{_compress_srs_requirements(srs_requirements or [])}
+{priming_examples}
+Return inside <plan>...</plan> tags."""
+
+    messages = [
+        {"role": "system", "content":
+         "You are a test planning expert. You READ source code carefully and "
+         "create plans with EXACT concrete values — never placeholders like "
+         "'expected' or 'x, y, z'. If you see the function returns "
+         "{'response': []}, your plan must say exactly that. "
+         "Every test case must have a real input and real expected output."},
+        {"role": "user", "content": plan_prompt},
+    ]
+
+    # More tokens for file-level plan (covers many functions)
+    max_tokens = max(500, min(1000, 250 * len(targets)))
+    raw = generate_test(model, tokenizer, messages,
+                        max_tokens=max_tokens, temperature=0.3)
+
+    # Extract plan from tags
+    if "<plan>" in raw and "</plan>" in raw:
+        return raw.split("<plan>")[1].split("</plan>")[0].strip()
+    return raw.strip()
+
+
 def generate_test(model, tokenizer, messages: list, max_tokens: int = MAX_NEW_TOKENS,
                   temperature: float = None) -> str:
-    """Generate test code from the current conversation."""
+    """Generate test code from the current conversation.
+
+    Thread-safe: uses CUDA synchronization barriers to prevent
+    access violations when called from daemon threads.
+    """
     _temp = temperature if temperature is not None else TEMPERATURE
     chat = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = tokenizer(chat, return_tensors="pt", truncation=True, max_length=2048).to(model.device)
 
+    # Adaptive cap: never request more new tokens than fit in 4096-ctx with the prompt.
+    # Saves ~10-25% generation time on short prompts with no quality loss.
+    _prompt_len = inputs["input_ids"].shape[1]
+    _ctx_budget = max(256, 4096 - _prompt_len - 16)
+    max_tokens = min(max_tokens, _ctx_budget)
+
     # Use greedy decoding for first attempt (faster), sampling for retries
     _do_sample = _temp > 0.01
 
-    with torch.inference_mode():  # Faster than torch.no_grad()
-        out = model.generate(
-            **inputs,
-            max_new_tokens=max_tokens,
-            do_sample=_do_sample,
-            temperature=_temp if _do_sample else None,
-            top_p=TOP_P if _do_sample else None,
-            repetition_penalty=REPETITION_PENALTY,
-            pad_token_id=tokenizer.eos_token_id,
-            use_cache=True,  # KV cache reuse
-        )
+    try:
+        with torch.inference_mode():  # Faster than torch.no_grad()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()  # Ensure no pending ops from other threads
+            out = model.generate(
+                **inputs,
+                max_new_tokens=max_tokens,
+                do_sample=_do_sample,
+                temperature=_temp if _do_sample else None,
+                top_p=TOP_P if _do_sample else None,
+                repetition_penalty=REPETITION_PENALTY,
+                pad_token_id=tokenizer.eos_token_id,
+                use_cache=True,  # KV cache reuse
+            )
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()  # Wait for completion
+    except torch.cuda.OutOfMemoryError:
+        print("   ⚠️  CUDA OOM — retrying with reduced tokens...")
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        with torch.inference_mode():
+            out = model.generate(
+                **inputs,
+                max_new_tokens=min(max_tokens, 512),
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id,
+                use_cache=True,
+            )
 
     raw = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    # Free GPU memory immediately
+    del inputs, out
     return raw
 
 
@@ -3050,6 +3387,56 @@ assert '-' in token
 """,
 }
 
+def _extract_signature_context(source_code: str, cls_name: str,
+                                method_name: str, import_path: str) -> str:
+    """Extract just imports + function/class signature for lean plan-mode prompts.
+
+    Instead of feeding the full method body (which the plan already digested),
+    this gives the model only what it needs to write syntactically correct code:
+    the import path and the function/class signature.
+    """
+    parts = [f"from {import_path} import *"]
+
+    try:
+        tree = ast.parse(source_code)
+        lines = source_code.splitlines()
+
+        if cls_name:
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name == cls_name:
+                    # Class signature line
+                    parts.append(f"\n{lines[node.lineno - 1]}")
+                    # __init__ signature (for instantiation)
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            if item.name == "__init__":
+                                sig_line = lines[item.lineno - 1]
+                                parts.append(f"    {sig_line.strip()}")
+                                parts.append("        ...")
+                    # Target method signature
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            if item.name == method_name:
+                                sig_line = lines[item.lineno - 1]
+                                parts.append(f"    {sig_line.strip()}")
+                                parts.append("        ...")
+                                break
+                    break
+        else:
+            # Top-level function
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if node.name == method_name:
+                        sig_line = lines[node.lineno - 1]
+                        parts.append(f"\n{sig_line}")
+                        parts.append("    ...")
+                        break
+    except SyntaxError:
+        pass
+
+    return "\n".join(parts)
+
+
 def _section_core(method_context, method_name, cls_name,
                   target_label, invocation_hint,
                   expected_func_name) -> str:
@@ -4189,7 +4576,8 @@ def _log_discarded(discarded_path: str, case: dict, classification: str, reason:
 
 def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     max_targets: int = None, deep_scan: bool = False,
-                    max_retries: int = 3, log_callback=None):
+                    max_retries: int = 3, log_callback=None, plan_mode: bool = False,
+                    srs_requirements: list = None, priming_examples: str = ""):
     """The main self-correcting loop.
     
     Args:
@@ -4336,51 +4724,187 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
     Do NOT call django.setup() again in your tests.
 """
 
-    # ── Stronger system prompt that pre-empts the mocking mistake ──
-    system_prompt = f"""You are an expert Python QA engineer writing pytest unit tests.
+    # ── Merged System Prompt: Two-Phase Planning + Proven Patterns ──
+    system_prompt = f"""You are an expert Python test engineer embedded in the TestMate system.
 
-ABSOLUTE RULES — violating any of these causes test failure:
-1. ALWAYS start with these exact imports:
+Before writing any test, you MUST complete Phase 1 (Planning) first.
+You are prohibited from writing the final test until your plan is complete.
+
+════════════════════════════════════════════════
+PHASE 1 — PLANNING (complete this first)
+════════════════════════════════════════════════
+
+[Objective]
+One sentence: what this test must prove about the target function.
+
+[Requirements]
+- Function signature: (exact parameter types)
+- Return type: (what it returns)
+- Dependencies: (imports, mocks needed)
+- RAG examples available: (yes/no — pattern to follow)
+
+[Step-by-Step Test Logic]
+1. Setup: what objects/variables to create before calling
+2. Call: exact function call with correct types
+3. Assert: exact expected value with correct assertion style
+4. Edge case 1: what breaks this function and expected result
+5. Edge case 2: boundary condition and expected result
+
+[Potential Risks]
+- Type mistakes: (e.g. passing string instead of dict)
+- Wrong assertion: (e.g. asserting None when value expected)
+- Missing import: (e.g. Response not imported)
+- Duplicate case: (e.g. same input tested twice)
+
+════════════════════════════════════════════════
+PHASE 2 — EXECUTION (only after plan is complete)
+════════════════════════════════════════════════
+
+Rules before writing code:
+  ✅ Every type in code matches Phase 1 requirements
+  ✅ Every assertion matches Phase 1 step-by-step logic
+  ✅ No duplicate assertions
+  ✅ No assert == None unless Phase 1 explicitly states None
+  ✅ Each assertion has a comment explaining what it tests
+
+ALWAYS use these imports:
 ```python
 import pytest
 {import_statement}
 ```
-2. NEVER call the real internet, filesystem, or database in tests.
-3. If the code calls `requests.get`, `requests.post`, or any HTTP method, you MUST mock it:
+
+Output format:
+  - Valid Python only, no explanation, no markdown
+  - Start with imports if needed
+  - Then def test_{{target_name}}():
+  - Return ALL test code inside <test>...</test> XML tags
+
+─── REFERENCE PATTERNS (use these exact patterns) ───
+
+PATTERN 1 — Mocking HTTP calls:
+  If code calls requests.get/post/etc, you MUST mock:
 ```python
-   from unittest.mock import patch, MagicMock
-   
-   @patch('requests.get')
-   def test_something(mock_get):
-       mock_get.return_value.status_code = 200
-       mock_get.return_value.json.return_value = {{"temp_celsius": 22.5}}
-       result = get_temperature("London")
-       assert result == 22.5
+from unittest.mock import patch, MagicMock
+
+@patch('requests.get')
+def test_something(mock_get):
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {{"temp_celsius": 22.5}}
+    result = get_temperature("London")
+    assert result == 22.5
 ```
-4. If the code has CLASSES, always instantiate them first:
+
+PATTERN 2 — Class instantiation:
+  ALWAYS create instances first, NEVER call __init__() directly:
 ```python
-   def test_httpbasicauth():
-       auth = HTTPBasicAuth("user", "pass")  # Create instance
-       assert auth.username == "user"        # Check attributes
+def test_httpbasicauth():
+    auth = HTTPBasicAuth("user", "pass")  # Create instance
+    assert auth.username == "user"        # Check attributes
 ```
-   NEVER call `__init__()` or `classname___method()` as standalone functions.
-5. Use `with pytest.raises(SomeError):` to test exceptions.
-6. Return ALL test code inside <test>...</test> XML tags.
-7. NEVER use isinstance() or type() as your only assertion — always assert a specific VALUE or ATTRIBUTE like `assert d['key'] == 'value'`.
-8. MOCK REQUESTS: If a method takes a `request` parameter, create it like:
+
+PATTERN 3 — Mock request parameters:
+  If a method takes a `request` parameter, create a MagicMock:
 ```python
-   from unittest.mock import MagicMock
-   r = MagicMock()
-   r.headers = {{}}
-   result = obj(r)
+from unittest.mock import MagicMock
+r = MagicMock()
+r.headers = {{}}
+result = obj(r)
 ```
-9. DEPENDENCY INVOCATION: If the prompt says 'Required Setup — Call these methods first', you MUST call them BEFORE the target method:
+
+PATTERN 4 — Dependency invocation:
+  If the prompt says 'Required Setup — Call these methods first', you MUST
+  call them BEFORE the target method:
 ```python
-   obj = ClassName('args')
-   obj.setup_method()  # REQUIRED FIRST
-   result = obj.target_method(...)
+obj = ClassName('args')
+obj.setup_method()  # REQUIRED FIRST
+result = obj.target_method(...)
 ```
-   Skipping setup causes AttributeError and test failure.
+
+════════════════════════════════════════════════
+1-SHOT EXAMPLE
+════════════════════════════════════════════════
+
+INPUT GIVEN:
+  Function: dispatch_hook(key, hooks, hook_data)
+  RAG example found: test_arithmetic.py
+
+PHASE 1 — PLANNING:
+
+  [Objective]
+  Verify dispatch_hook correctly applies hook functions
+  to hook_data and handles edge cases safely.
+
+  [Requirements]
+  - key: string ("response")
+  - hooks: dict {{"response": [callable, ...]}}
+  - hook_data: any object (Response)
+  - Returns: modified hook_data or original if hook returns None
+  - Dependencies: Response class from requests library
+  - RAG pattern: assert result == expected_object
+
+  [Step-by-Step Test Logic]
+  1. Setup: r = Response(content="a")
+  2. Call:  dispatch_hook("response", {{"response": [lambda x: x]}}, r)
+  3. Assert: result == r  (identity hook returns same object)
+  4. Edge 1: hook returns None → data unchanged → assert result == r
+  5. Edge 2: empty hook list  → data unchanged → assert result == r
+
+  [Potential Risks]
+  - Type mistake: passing "1234" instead of {{"response": [...]}}
+  - Wrong assertion: asserting == None when result is Response
+  - Duplicate: testing same lambda twice with different content
+
+PHASE 2 — EXECUTION:
+
+```python
+def test_dispatch_hook():
+    # identity hook returns same response unchanged
+    r = Response(content="a")
+    result = dispatch_hook("response", {{"response": [lambda x: x]}}, r)
+    assert result == r
+
+    # hook returning None is ignored, original data preserved
+    assert dispatch_hook("response", {{"response": [lambda x: None]}}, r) == r
+
+    # empty hook list returns data unchanged
+    assert dispatch_hook("response", {{"response": []}}, r) == r
+```
+
+════════════════════════════════════════════════
+HARD RULES — NEVER VIOLATE
+════════════════════════════════════════════════
+  - dict  → {{"key": value}}        never "string"
+  - list  → [lambda x: x]           never "string"
+  - None  → only if plan says None
+  - No duplicate assertions ever
+  - No incomplete edge cases (never write "assert" alone)
+  - Phase 1 must be complete before Phase 2 begins
+  - If code has CLASSES, instantiate with ClassName(args), NEVER call __init__()
+  - Use `with pytest.raises(SomeError):` to test exceptions
+  - NEVER use isinstance() or type() as only assertion — assert specific VALUES
+  - If code makes network/file/DB calls, MUST use @patch from unittest.mock
+  - NEVER call the real internet, filesystem, or database in tests
+{django_hint}"""
+
+    # ── Plan Execution System Prompt (used ONLY when plan mode is active) ──
+    # This replaces the two-phase prompt with a direct execution prompt.
+    # The plan already contains all the context the model needs.
+    plan_exec_system_prompt = f"""You are an expert Python test engineer. A test plan has been pre-approved.
+Your ONLY job is to convert the plan into working pytest code.
+
+════════════════════════════════════════════════
+RULES — EXECUTE THE PLAN
+════════════════════════════════════════════════
+
+1. Implement EVERY test case from the plan — do NOT skip any.
+2. Use the EXACT input values and expected outputs specified in the plan.
+3. Do NOT re-plan or add your own test cases beyond what the plan specifies.
+4. Do NOT do Phase 1 planning — the plan IS Phase 1. Go directly to writing code.
+5. MUTATION-PROOF ASSERTIONS: Use `== exact_value`, never `is not None`.
+6. If code has CLASSES, instantiate with `ClassName(args)`, NEVER call `__init__()`.
+7. If code makes network/file/DB calls, use `@patch` from `unittest.mock`.
+8. Wrap ALL test code inside `<test>...</test>` XML tags.
+9. Write ONLY test functions, no imports (they are provided separately).
 {django_hint}"""
 
     messages = [
@@ -4468,6 +4992,35 @@ import pytest
 
     print("🚀 Probing targets in parallel...")
     probe_cache = probe_all_targets(targets, actual_import, ctx, source_code, import_path)
+
+    # ── Plan Mode: generate file-level test plan BEFORE target loop ──
+    _file_plan = ""
+    if plan_mode:
+        _cb("ai_status", "thinking",
+            f"Planning tests for {os.path.basename(target_file)}...",
+            os.path.basename(target_file))
+        print(f"📋 Generating file-level test plan for {os.path.basename(target_file)} "
+              f"({len(targets)} targets)...")
+        _file_plan = generate_file_test_plan(
+            model, tokenizer, source_code, targets, ctx, G,
+            import_path, target_file, probe_cache,
+            srs_requirements=srs_requirements,
+            priming_examples=priming_examples)
+        print(f"📋 File plan generated ({len(_file_plan)} chars)")
+        # Send plan to GUI for user review/edit
+        target_names = ", ".join(
+            f"{c}.{m}" if c else m for c, m in targets[:8])
+        if len(targets) > 8:
+            target_names += f" (+{len(targets)-8} more)"
+        _cb("plan_request", _file_plan,
+            f"{os.path.basename(target_file)} ({len(targets)} functions)",
+            f"test_{os.path.basename(target_file)}",
+            target_names, "")
+        # Check if the user edited the plan via the GUI callback
+        if hasattr(_cb, '_edited_plan') and _cb._edited_plan is not None:
+            _file_plan = _cb._edited_plan
+            _cb._edited_plan = None
+            print(f"📋 User edited plan applied ({len(_file_plan)} chars)")
 
     print("🚀 Starting Iterative Chunking Loop...\n" + "=" * 60)
 
@@ -4601,7 +5154,71 @@ import pytest
                   f"{probed_value[:60]}")
 
         def build_chunk_prompt(error_logs: str = "",
-                                retry: int = 0) -> str:
+                                retry: int = 0, test_plan: str = "") -> str:
+
+            # ══════════════════════════════════════════════════════════
+            # PLAN MODE: Lean Stage 2 prompt
+            # The plan is the main guidance. Only add:
+            #   1. The plan itself (already has test cases, inputs, expected outputs)
+            #   2. Short context (imports + function signature only)
+            #   3. Target anchoring (function name + expected test name)
+            #   4. Error logs (only on retry)
+            # ══════════════════════════════════════════════════════════
+            if test_plan:
+                # Short context: just the signature, not the full method body
+                short_ctx = _extract_signature_context(
+                    source_code, cls_name, method_name, actual_import)
+
+                base = (
+                    f"═══════════════════════════════════════\n"
+                    f"📋 TEST PLAN — EXECUTE ALL TEST CASES\n"
+                    f"═══════════════════════════════════════\n\n"
+                    f"{test_plan}\n\n"
+                    f"═══════════════════════════════════════\n\n"
+                )
+
+                # Rolling summary to prevent duplicate tests
+                base += _section_rolling_summary(
+                    covered_summary, target_label)
+
+                # Short context: imports + signature only
+                base += (
+                    f"## Context (signature only)\n"
+                    f"```python\n{short_ctx}\n```\n\n"
+                )
+
+                # Target anchoring
+                base += (
+                    f"## Target\n"
+                    f"1. Test ONLY `{target_label}`. "
+                    f"Call `{invocation_hint}`.\n"
+                    f"2. Function name: `def {expected_func_name}():`\n"
+                    f"3. MUTATION-PROOF: Use `== exact_value`, "
+                    f"never `is not None`.\n\n"
+                )
+
+                # Error logs only on retry
+                if error_logs and retry > 0:
+                    base += (
+                        f"## ❌ Previous attempt FAILED:\n"
+                        f"```\n{error_logs[:500]}\n```\n"
+                        f"Fix this error while still following the plan.\n\n"
+                    )
+
+                # Recency bias: reinforce the plan at the end
+                base += (
+                    f"🚨 REMINDER: Implement ALL test cases from the plan above. "
+                    f"Use the EXACT input values and expected outputs. "
+                    f"Do NOT skip any.\n\n"
+                    f"Wrap in <test>...</test>. "
+                    f"Write ONLY the function, no imports."
+                )
+                return base
+
+            # ══════════════════════════════════════════════════════════
+            # NON-PLAN MODE: Full prompt (unchanged)
+            # All context sections included for the model to plan + execute
+            # ══════════════════════════════════════════════════════════
             base = (
                 _section_rolling_summary(
                     covered_summary, target_label)
@@ -4686,7 +5303,9 @@ import pytest
             )
             return base
 
-        chunk_prompt = build_chunk_prompt()
+
+        # Use file-level plan (generated before loop, reviewed by user)
+        chunk_prompt = build_chunk_prompt(test_plan=_file_plan)
 
         # ── Generate with up to 2 attempts per target ──
         test_added = False
@@ -4729,8 +5348,10 @@ import pytest
                 test_func_clean = best_example["test_code"]
             else:
 
+                # Use plan execution system prompt when plan mode is active
+                _active_system_prompt = plan_exec_system_prompt if _file_plan else system_prompt
                 messages = [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": _active_system_prompt},
                     {"role": "user", "content": chunk_prompt},
                 ]
 
@@ -4791,7 +5412,7 @@ import pytest
             qqc_ok, qqc_reason = quick_quality_check(test_func_clean)
             if not qqc_ok:
                 print(f"   ⚠️  Quick Quality Check Failed: {qqc_reason}")
-                chunk_prompt = build_chunk_prompt(error_logs=qqc_reason, retry=retry)
+                chunk_prompt = build_chunk_prompt(error_logs=qqc_reason, retry=retry, test_plan=_file_plan)
                 continue
 
             # Path coverage verification
@@ -4805,7 +5426,7 @@ import pytest
                     hint = "; ".join(_pmissing[:2])
                     print(f"   🔀 Path coverage: {_pcov}/{_ptotal} critical paths ({pct:.0f}%)")
                     chunk_prompt = build_chunk_prompt(
-                        error_logs=f"path coverage gap: {hint}", retry=retry)
+                        error_logs=f"path coverage gap: {hint}", retry=retry, test_plan=_file_plan)
                     # Hard reject on retry 0 when coverage is very low
                     if retry == 0 and pct < 50:
                         print(f"   ❌ Path coverage too low ({pct:.0f}%) — forcing retry")
@@ -4827,9 +5448,9 @@ import pytest
                 if method_paths and tests_for_this_target < len(method_paths):
                     target_path = method_paths[tests_for_this_target]
                     path_str = ' → '.join(str(p) for p in target_path) if isinstance(target_path, (list, tuple)) else str(target_path)
-                    chunk_prompt = build_chunk_prompt(error_logs='duplicate', retry=retry)
+                    chunk_prompt = build_chunk_prompt(error_logs='duplicate', retry=retry, test_plan=_file_plan)
                 else:
-                    chunk_prompt = build_chunk_prompt(error_logs='duplicate', retry=retry)
+                    chunk_prompt = build_chunk_prompt(error_logs='duplicate', retry=retry, test_plan=_file_plan)
                 continue
 
             # ── Fix 2: Programmatic Name Checking (Target Anchoring Guardrail) ──
@@ -4854,7 +5475,7 @@ import pytest
             target_found = any(kw in test_func_clean for kw in target_keywords)
             if not target_found:
                 print(f"   ⚠️  Target drift! LLM ignored `{method_name}`. Forcing retry...")
-                chunk_prompt = build_chunk_prompt(error_logs='target drift', retry=retry)
+                chunk_prompt = build_chunk_prompt(error_logs='target drift', retry=retry, test_plan=_file_plan)
                 continue
 
             # ── Detect and fix duplicate function names ──
@@ -4900,7 +5521,7 @@ import pytest
                                       test_func_clean, f"Quality gate: {reject_msg}",
                                       os.path.basename(target_file),
                                       failure_category="quality_gate", survived_mutants=mutants)
-                    chunk_prompt = build_chunk_prompt(error_logs=reject_msg, retry=retry)
+                    chunk_prompt = build_chunk_prompt(error_logs=reject_msg, retry=retry, test_plan=_file_plan)
                     # Revert file
                     with open(test_file, "w") as f:
                         f.write(accumulated_code)
@@ -4926,7 +5547,7 @@ import pytest
                                       test_func_clean, f"Composite score {composite['composite']:.0f}/100 < {threshold-5}",
                                       os.path.basename(target_file),
                                       failure_category="quality_gate", survived_mutants=mutants)
-                    chunk_prompt = build_chunk_prompt(error_logs='quality limit not reached', retry=retry)
+                    chunk_prompt = build_chunk_prompt(error_logs='quality limit not reached', retry=retry, test_plan=_file_plan)
                     with open(test_file, "w") as f:
                         f.write(accumulated_code)
                     continue
@@ -5279,6 +5900,26 @@ import pytest
         except:
             pass
 
+    # ── QUALITY GATES: apply before final save ──────────────────────────
+    try:
+        from quality_gates import apply_all_gates
+        cleaned, gate_report = apply_all_gates(
+            accumulated_code, source_code, ast_threshold=4, verbose=True
+        )
+        if cleaned is None:
+            print(f"   ⚠️  Quality gate REJECTED entire test file: {gate_report.get('ast_reason', '')}")
+            # Keep the original rather than saving nothing
+        else:
+            if gate_report["tautologies_removed"] or gate_report["duplicates_renamed"] or gate_report["none_strings_fixed"]:
+                print(f"   🛡️  Quality gates: removed {gate_report['tautologies_removed']} tautologies, "
+                      f"renamed {gate_report['duplicates_renamed']} duplicates, "
+                      f"fixed {gate_report['none_strings_fixed']} None-string issues")
+            accumulated_code = cleaned
+            with open(test_file, "w") as f:
+                f.write(accumulated_code)
+    except Exception as _gate_exc:
+        print(f"   ⚠️  Quality gates skipped (error): {_gate_exc}")
+
     return True
 
 # ============================================================
@@ -5287,6 +5928,8 @@ import pytest
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Autonomous Test Generation Agent")
+    parser.add_argument("--plan-mode", action="store_true", default=False,
+                        help="Enable plan‑mode: generate a file‑level test plan and force the model to follow it")
     parser.add_argument("--target", default="calculator.py",
                         help="Python file to generate tests for (default: calculator.py)")
     parser.add_argument("--import-as", default=None,
@@ -5311,8 +5954,13 @@ if __name__ == "__main__":
     print()
 
     model, tokenizer = load_model()
-    success = autonomous_loop(model, tokenizer, args.target, 
-                              import_path=args.import_as,
-                              max_targets=args.max_targets)
+    success = autonomous_loop(
+        model,
+        tokenizer,
+        args.target,
+        import_path=args.import_as,
+        max_targets=args.max_targets,
+        plan_mode=args.plan_mode,
+    )
 
     sys.exit(0 if success else 1)

@@ -148,13 +148,19 @@ def run_tests_locally(repo_dir: str, test_files: list, source_files: list,
 
     env = os.environ.copy()
     if repo_dir:
-        env["PYTHONPATH"] = f"{repo_dir}{os.pathsep}{env.get('PYTHONPATH', '')}"
+        # Add repo root + src/ subdir (for src-layout repos like psf/requests)
+        paths = [repo_dir]
+        src_dir = os.path.join(repo_dir, "src")
+        if os.path.isdir(src_dir):
+            paths.append(src_dir)
+        env["PYTHONPATH"] = os.pathsep.join(paths) + os.pathsep + env.get("PYTHONPATH", "")
 
     try:
         result = subprocess.run(
             pytest_cmd,
             capture_output=True, text=True, timeout=120,
             cwd=os.path.dirname(test_files[0]) if test_files else repo_dir,
+            env=env,
         )
         output = result.stdout + "\n" + result.stderr
     except subprocess.TimeoutExpired:

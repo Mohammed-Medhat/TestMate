@@ -13,8 +13,10 @@ Flow:
 Key constraints for RTX 4060 (8GB VRAM):
   - Only LoRA parameters are updated (tiny % of weights)
   - Gradient checkpointing enabled (halves VRAM at cost of ~30% speed)
-  - AMP autocast for BF16 compute
-  - Max sequence length capped at 1536 tokens for training
+  - AMP autocast for FP16 compute (lower VRAM than BF16)
+  - SDPA (Scaled Dot-Product Attention) for memory-efficient attention
+  - Max sequence length capped at 1024 tokens for training
+  - Gradient accumulation (2 steps) to reduce peak VRAM
   - Gradients freed immediately after each step
 """
 
@@ -30,7 +32,8 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import autocast
+# NOTE: torch.cuda.amp.autocast is deprecated, use torch.amp.autocast instead
+from torch.amp import autocast
 
 # ── Ensure testgen imports work ──
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -45,8 +48,8 @@ INTENSE_DEFAULTS = {
     "learning_rate": 1e-5,      # Small LR — don't overfit to one file
     "dpo_beta": 0.1,            # DPO temperature (lower = stronger preference)
     "target_score": 90,         # Stop when composite score >= this
-    "max_seq_len": 1536,        # Max tokens for training (VRAM safe)
-    "gradient_accumulation": 1, # Accumulate grads (increase if OOM)
+    "max_seq_len": 1024,        # Max tokens for training (was 1536, reduced for 8GB VRAM)
+    "gradient_accumulation": 2, # Accumulate grads over 2 steps (halves peak VRAM)
     "save_checkpoint": True,    # Save improved LoRA weights
     "persistent_learning": False,  # If True: DON'T reset weights after each file
 }
@@ -75,7 +78,7 @@ def get_sequence_logprob(model, tokenizer, prompt: str, response: str,
     prompt_len = prompt_ids["input_ids"].shape[1]
 
     # Forward pass
-    with autocast(dtype=torch.bfloat16):
+    with autocast('cuda', dtype=torch.float16):
         outputs = model(**inputs)
         logits = outputs.logits  # (1, seq_len, vocab_size)
 
@@ -231,8 +234,8 @@ def intense_mode(
         BASE_MODEL, LORA_PATH,
     )
 
-    _log("🧠 Loading model (trainable LoRA)...")
-    model, tokenizer = load_model()
+    _log("🧠 Loading model (trainable LoRA, FP16 + SDPA)...")
+    model, tokenizer = load_model(attn_implementation="sdpa")
 
     # ── Enable training on LoRA parameters only ──
     model.train()
@@ -257,6 +260,14 @@ def intense_mode(
         _log("   ✅ Gradient checkpointing enabled (VRAM safe)")
     except Exception:
         _log("   ⚠️  Gradient checkpointing not available", "warning")
+
+    # ── Report VRAM after setup ──
+    if torch.cuda.is_available():
+        free_vram = torch.cuda.mem_get_info()[0] / 1e9
+        used_vram = torch.cuda.memory_allocated() / 1e9
+        _log(f"   📊 VRAM after setup: {used_vram:.1f}GB used, {free_vram:.1f}GB free")
+        if free_vram < 1.5:
+            _log("   ⚠️  Low VRAM! Training may OOM. Close other GPU apps.", "warning")
 
     # ── Optimizer: only LoRA params ──
     optimizer = torch.optim.AdamW(
@@ -421,6 +432,10 @@ ABSOLUTE RULES:
             if last_failed_response and last_failed_prompt:
                 _log("  📚 DPO update: learning preference (pass > fail)...")
                 try:
+                    # Free VRAM before training step
+                    gc.collect()
+                    torch.cuda.empty_cache()
+
                     dpo_loss = compute_dpo_loss(
                         model, tokenizer,
                         prompt=last_failed_prompt,
@@ -429,24 +444,32 @@ ABSOLUTE RULES:
                         beta=cfg["dpo_beta"],
                         max_len=cfg["max_seq_len"],
                     )
-                    dpo_loss.backward()
+                    # Scale loss for gradient accumulation
+                    scaled_loss = dpo_loss / cfg["gradient_accumulation"]
+                    scaled_loss.backward()
                     torch.nn.utils.clip_grad_norm_(trainable_params, 1.0)
                     optimizer.step()
-                    optimizer.zero_grad()
+                    optimizer.zero_grad(set_to_none=True)  # set_to_none saves VRAM vs zero
                     weights_updated += 1
                     dpo_pairs_trained += 1
                     _log(f"  ✅ DPO loss: {dpo_loss.item():.4f} "
                          f"(weights updated: {weights_updated})")
+                except torch.cuda.OutOfMemoryError:
+                    _log("  ⚠️  DPO OOM — skipping this update, freeing VRAM", "warning")
+                    optimizer.zero_grad(set_to_none=True)
+                    gc.collect()
+                    torch.cuda.empty_cache()
                 except Exception as e:
                     _log(f"  ⚠️  DPO update failed: {e}", "warning")
-                    optimizer.zero_grad()
+                    optimizer.zero_grad(set_to_none=True)
 
                 last_failed_response = None
                 last_failed_prompt = None
 
-                # Free VRAM
+                # Aggressive VRAM cleanup after training step
                 gc.collect()
                 torch.cuda.empty_cache()
+                torch.cuda.synchronize()
 
             # Check if we've reached target score
             if score >= cfg["target_score"]:
@@ -464,6 +487,10 @@ ABSOLUTE RULES:
             # ── Phase 3b: Learn from failure ──
             _log("  📚 Learning from failure (penalizing bad output)...")
             try:
+                # Free VRAM before training step
+                gc.collect()
+                torch.cuda.empty_cache()
+
                 fail_loss = compute_failure_loss(
                     model, tokenizer,
                     prompt=full_prompt,
@@ -471,24 +498,32 @@ ABSOLUTE RULES:
                     error_log=logs[:500],
                     max_len=cfg["max_seq_len"],
                 )
-                fail_loss.backward()
+                # Scale loss for gradient accumulation
+                scaled_loss = fail_loss / cfg["gradient_accumulation"]
+                scaled_loss.backward()
                 torch.nn.utils.clip_grad_norm_(trainable_params, 1.0)
                 optimizer.step()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)  # set_to_none saves VRAM
                 weights_updated += 1
                 _log(f"  ✅ Failure loss: {fail_loss.item():.4f} "
                      f"(weights updated: {weights_updated})")
+            except torch.cuda.OutOfMemoryError:
+                _log("  ⚠️  Failure OOM — skipping this update, freeing VRAM", "warning")
+                optimizer.zero_grad(set_to_none=True)
+                gc.collect()
+                torch.cuda.empty_cache()
             except Exception as e:
                 _log(f"  ⚠️  Failure learning failed: {e}", "warning")
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
 
             # Save for DPO pairing
             last_failed_response = test_code
             last_failed_prompt = full_prompt
 
-            # Free VRAM
+            # Aggressive VRAM cleanup after training step
             gc.collect()
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
     # ── Summary ──
     _log(f"\n{'=' * 60}")

@@ -81,3 +81,26 @@ PartB/testgen_eval_lite/testgen_eval_files/
 # ========================
 PartB/models/graphrag_lora/
 PartB/value_reasoning/kaggle/working/value_reasoning_model/
+# ========================
+# Node / Electron build artifacts
+# ========================
+node_modules/
+out/
+dist/
+
+# ========================
+# Updated LoRA paths after restructure
+# ========================
+PartB/value_reasoning_model/
+
+# ========================
+# Runtime generated outputs
+# ========================
+PartB/outputs/repos/
+PartB/outputs/results/
+unified_app/results/history.json
+
+# ========================
+# Eval benchmark files (large, downloadable)
+# ========================
+PartB/eval_lite/testgen_eval_files/
