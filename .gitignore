@@ -20,3 +20,4 @@ miniconda3/
 local_run_results.json
 spectrum.json
 coverage.jsonnode_modules/
+**/node_modules/
