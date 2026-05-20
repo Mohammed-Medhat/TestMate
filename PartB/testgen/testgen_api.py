@@ -75,21 +75,22 @@ def execute_part_b(
     priming_examples: str = "",
     model: Any = None,
     tokenizer: Any = None,
+    auto_repair: bool = False,
 ) -> dict:
     """
     Run the self-correcting test generation loop for a single target file.
 
     Args:
         target_file:    Absolute path to the Python file to test.
-        requirements:   Part A's labeled requirements (all of them for this project).
-                        They are passed into autonomous_loop's plan prompt directly —
-                        top-12 most relevant will be injected at plan level.
+        requirements:   Part A's labeled requirements.
         import_path:    Package import path (e.g. 'requests.auth').
         deep_scan:      Scan broader repo context.
         max_retries:    Max self-correction iterations.
         log_callback:   GUI callback(event_type, *args).
-        plan_mode:      Generate a test plan before writing code (recommended for SRS).
+        plan_mode:      Generate a test plan before writing code.
         use_base_only:  Skip LoRA — raw 4-bit base Qwen.
+        auto_repair:    If True, invoke PartC on confirmed/suspected bugs
+                        detected after test generation (opt-in).
         model/tokenizer: Pre-loaded model (loaded here if None).
     """
     from main import autonomous_loop, load_model as _load_model
@@ -103,10 +104,9 @@ def execute_part_b(
         _model, _tokenizer = _load_model(use_lora=not use_base_only)
         _loaded_here = True
 
-    # Filter to just requirement-labeled sentences for logging
     req_count = sum(1 for r in (requirements or []) if isinstance(r, dict) and r.get("label") == 1)
-    logger.info("[B] %s: plan_mode=%s, %d/%d SRS requirements available",
-                Path(target_file).name, plan_mode, req_count, len(requirements or []))
+    logger.info("[B] %s: plan_mode=%s, auto_repair=%s, %d/%d SRS requirements",
+                Path(target_file).name, plan_mode, auto_repair, req_count, len(requirements or []))
 
     try:
         GEN_TESTS_DIR.mkdir(exist_ok=True)
@@ -122,29 +122,48 @@ def execute_part_b(
             plan_mode=plan_mode,
             srs_requirements=requirements,
             priming_examples=priming_examples,
+            auto_repair=auto_repair,
         )
 
-        # Locate generated test file
+        # Locate generated test file.
+        # Prefer the _testmate.py naming (PartB's new convention) then fall
+        # back to the legacy test_<stem>.py name for backward compatibility.
         basename = Path(target_file).stem
-        test_filename = f"test_{basename}.py"
         candidates = [
-            GEN_TESTS_DIR / test_filename,
-            Path(target_file).parent / test_filename,
+            GEN_TESTS_DIR / f"test_{basename}_testmate.py",  # new
+            Path(target_file).parent / f"test_{basename}_testmate.py",
+            GEN_TESTS_DIR / f"test_{basename}.py",           # legacy
+            Path(target_file).parent / f"test_{basename}.py",
         ]
         test_path = next((p for p in candidates if p.exists()), None)
+        test_filename = test_path.name if test_path else f"test_{basename}_testmate.py"
         test_code = test_path.read_text(encoding="utf-8") if test_path else ""
 
-        # Requirement coverage check
+        # Read bug reports produced during this run
+        bug_report_path = GEN_TESTS_DIR / "bug_reports.jsonl"
+        bug_reports: list[dict] = []
+        if bug_report_path.exists():
+            for line in bug_report_path.read_text(encoding="utf-8").splitlines():
+                try:
+                    entry = __import__("json").loads(line)
+                    if entry.get("source_file") == Path(target_file).name:
+                        bug_reports.append(entry)
+                except Exception:
+                    pass
+
         coverage = check_requirement_coverage(requirements or [], test_code)
         logger.info("[B] SRS coverage: %d/%d (%.0f%%)",
                     coverage["covered"], coverage["total"], coverage["pct"])
 
         return {
-            "success":    success,
-            "test_file":  test_filename,
-            "test_code":  test_code,
-            "target":     target_file,
+            "success":      success,
+            "test_file":    test_filename,
+            "test_code":    test_code,
+            "test_path":    str(test_path) if test_path else "",
+            "target":       target_file,
             "srs_coverage": coverage,
+            "bug_reports":  bug_reports,
+            "repairs":      [b.get("repair", {}) for b in bug_reports if b.get("repair")],
         }
 
     finally:

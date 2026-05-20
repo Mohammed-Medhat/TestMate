@@ -53,6 +53,21 @@ _AST_CACHE: dict[str, dict] = {}
 _AST_CACHE_MAX = 32
 
 
+def _extract_function_source(source_code: str, func_name: str) -> str:
+    """Extract the full source of a single function from a module source string."""
+    try:
+        tree = ast.parse(source_code)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
+                lines = source_code.splitlines()
+                # end_lineno available in Python 3.8+
+                end = getattr(node, "end_lineno", node.lineno + 20)
+                return "\n".join(lines[node.lineno - 1 : end])
+    except Exception:
+        pass
+    return ""
+
+
 def extract_context_from_code(code: str) -> dict:
     """Extract CFG paths, raises list, and cyclomatic complexity via AST.
 
@@ -528,7 +543,8 @@ def load_model(attn_implementation: str = "sdpa", use_lora: bool = True):
     )
 
     lora_mode = "with LoRA" if use_lora else "BASE ONLY (no LoRA)"
-    print(f"🧠 Loading Qwen2.5-Coder-7B [{lora_mode}] into GPU...")
+    # Note: no emoji here — avoids UnicodeEncodeError on Windows cp1252 terminals
+    print(f"Loading Qwen2.5-Coder-7B [{lora_mode}] into GPU...")
     print(f"   Base model: {BASE_MODEL}")
     if use_lora:
         print(f"   LoRA path:  {LORA_PATH}")
@@ -1875,107 +1891,32 @@ def is_semantically_duplicate(new_test: str,
             return True
     return False
 
-def score_test_quality_legacy(test_code: str) -> tuple[float, list]:
-    score = 0
-    reasons = []
-
-    assert_lines = [l.strip() for l in test_code.splitlines() 
-                    if re.match(r'\s*assert\s', l)]
-
-    # +1: Has at least one non-trivial assertion
-    non_trivial = [l for l in assert_lines 
-                   if l.strip() not in ("assert True", "assert False")]
-    if non_trivial:
-        score += 1
-        reasons.append("✅ Has real assertion")
-    else:
-        reasons.append("❌ Only assert True/False")
-        return 0, reasons  # immediate fail
-
-    # +1: Calls the target method explicitly
-    # Proxy: has a method call with arguments
-    if re.search(r'\w+\.\w+\([^)]+\)', test_code) or \
-       re.search(r'\w+\([^)]+\)', test_code):
-        score += 1
-        reasons.append("✅ Calls method with arguments")
-    else:
-        reasons.append("❌ No method call with arguments")
-
-    # +1: Has multiple assertions OR uses pytest.raises OR 
-    #     asserts a specific string/number value
-    has_multiple = len(assert_lines) >= 2
-    has_raises = "pytest.raises" in test_code
-    has_exact_value = bool(re.search(
-        r'==\s*["\'\d]|==\s*(True|False)\b', test_code
-    ))
-    if has_multiple or has_raises or has_exact_value:
-        score += 1
-        reasons.append("✅ Strong assertion (multiple/raises/exact value)")
-    else:
-        reasons.append("❌ Weak assertion (single, no exact value)")
-
-    return score, reasons
-
-
 def score_assertion_strength(test_code: str) -> float:
-    """Dimension 1: How strong are the assertions? (0-1)
-
-    Checks for:
-    - Real assertions (vs assert True)
-    - Method calls with arguments
-    - Multiple assertions or pytest.raises
-    - Exact value assertions
-    """
-    score = 0.0
-
-    assert_lines = [l.strip() for l in test_code.splitlines()
-                    if re.match(r'\s*assert\s', l)]
-
-    # Check for real assertions (not assert True/False)
-    non_trivial = [l for l in assert_lines
-                   if l.strip() not in ("assert True", "assert False")]
-    if not non_trivial:
-        return 0.0  # Immediate fail
-
-    score += 0.33  # Has real assertions
-
-    # Check for method calls with arguments
-    if re.search(r'\w+\.\w+\([^)]+\)', test_code) or \
-       re.search(r'\w+\([^)]+\)', test_code):
-        score += 0.33  # Calls method
-
-    # Check for strong assertions
-    has_multiple = len(assert_lines) >= 2
-    has_raises = "pytest.raises" in test_code
-    has_exact_value = bool(re.search(
-        r'==\s*["\'\d]|==\s*(True|False)\b', test_code
-    ))
-    if has_multiple or has_raises or has_exact_value:
-        score += 0.34  # Strong assertions
-
+    """Kept for compute_composite_score backward compat. Delegates to BES assertion dim."""
+    try:
+        from bes_scorer import _assertion_quality  # type: ignore[import]
+        return _assertion_quality(test_code)
+    except ImportError:
+        pass
+    # Inline fallback
+    assert_lines = [l for l in test_code.splitlines() if re.match(r'\s*assert\s', l)]
+    non_trivial = [l for l in assert_lines if l.strip() not in ("assert True", "assert False")]
+    if not non_trivial: return 0.0
+    score = 0.33
+    if re.search(r'\w+\([^)]+\)', test_code): score += 0.33
+    if re.search(r'==\s*["\'\d]', test_code) or len(assert_lines) >= 2: score += 0.34
     return min(score, 1.0)
 
 
 def score_input_diversity(test_code: str) -> float:
-    """Dimension 2: Does the test use multiple different inputs? (0-1)
-
-    Counts distinct literal values used as inputs.
-    """
-    # Match string literals (1+ chars) and non-trivial numbers
-    string_lits = re.findall(r'["\']([^"\']{1,})["\']', test_code)
-    number_lits = re.findall(r'\b([1-9]\d*|0\.\d+)\b', test_code)
-
-    # Filter out common non-input strings
-    skip = {"def ", "assert", "pytest", "import", "from", "mock",
-            "MagicMock", "patch", "return", "True", "False", "None"}
-
-    unique = set()
-    for s in string_lits:
-        if s not in skip and len(s) >= 1:
-            unique.add(s)
-    for n in number_lits:
-        unique.add(n)
-
+    """Kept for compute_composite_score backward compat. Delegates to BES variety dim."""
+    try:
+        from bes_scorer import _input_variety  # type: ignore[import]
+        return _input_variety(test_code)
+    except ImportError:
+        pass
+    unique = set(re.findall(r'["\']([^"\']{1,})["\']', test_code) +
+                 re.findall(r'\b([1-9]\d*|0\.\d+)\b', test_code))
     if len(unique) >= 3: return 1.0
     if len(unique) == 2: return 0.5
     if len(unique) == 1: return 0.25
@@ -1983,19 +1924,15 @@ def score_input_diversity(test_code: str) -> float:
 
 
 def score_edge_cases(test_code: str) -> float:
-    """Dimension 3: Does the test cover edge cases? (0-1)
-
-    Looks for: None, empty strings, empty collections, 0, -1, boundary values
-    """
-    edge_markers = ["None", '""', "''", "[]", "{}", "0", "-1"]
-    found = sum(1 for e in edge_markers if e in test_code)
-
-    if found >= 2:
-        return 1.0
-    elif found == 1:
-        return 0.5
-    else:
-        return 0.0
+    """Kept for compute_composite_score backward compat. Delegates to BES boundary dim."""
+    try:
+        from bes_scorer import _boundary_coverage  # type: ignore[import]
+        return _boundary_coverage(test_code)
+    except ImportError:
+        pass
+    markers = ["None", '""', "''", "[]", "{}", "0", "-1"]
+    found = sum(1 for e in markers if e in test_code)
+    return 1.0 if found >= 2 else (0.5 if found == 1 else 0.0)
 
 
 def compute_composite_score(
@@ -4436,31 +4373,42 @@ def _section_deep_scan(repo_ctx: dict) -> str:
 
 def post_run_audit(model, tokenizer, suspicious_tests: list, test_file_path: str):
     """
-    Phase 2: Post-Run Audit System 
-    Executes a 3-gate evaluation over all accumulated failing tests at the end of the run.
+    Post-Run Audit — confidence-scored bug detection.
+
+    Replaces the old 3-variant oracle (which was circular: same model confirming
+    its own tests) with three independent evidence sources:
+      Gate 1  — Syntax check (unchanged)
+      Gate 2  — Flakiness check (unchanged, 10 runs)
+      Gate 3a — Docstring oracle: does the test agree with the function spec?
+      Gate 3b — Existing test cross-reference: do real repo tests also fail?
+      Oracle 4 — Direct execution: run the function, compare real output to assertion
+
+    A confidence score (0–100) is computed; only confirmed (≥70) and
+    suspected (40–69) cases are written to bug_reports.jsonl.
     """
-    import ast
-    
-    discarded_path = os.path.join(os.path.dirname(os.path.abspath(test_file_path)), "discarded_reports.jsonl")
+    import ast as _ast
+    from bug_detector import run_confidence_audit
+
+    discarded_path  = os.path.join(os.path.dirname(os.path.abspath(test_file_path)), "discarded_reports.jsonl")
     bug_report_path = os.path.join(os.path.dirname(os.path.abspath(test_file_path)), "bug_reports.jsonl")
 
+    # ── Gates 1 & 2: syntax + flakiness (fast pre-filters) ──────────────
+    passed_gates_12: list[dict] = []
     for case in suspicious_tests:
-        print(f"\n   🔍 Auditing Suspicious Test: {case['target_name']}")
-        
-        # ── GATE 1: Deterministic Static Validation (Syntax Check) ──
+        func_name = case.get("method_name") or case.get("target_name", "unknown")
+        print(f"\n   🔍 Pre-filter: {func_name}")
+
+        # Gate 1: Syntax
         try:
-            ast.parse(case['test_code'])
+            _ast.parse(case.get("test_code", ""))
         except SyntaxError as e:
-            print(f"      🚪 Gate 1 (Syntax): Failed! SyntaxError detected.")
+            print(f"      🚪 Gate 1 (Syntax): FAILED — {e}")
             _log_discarded(discarded_path, case, "Syntax Hallucination", str(e))
             continue
-        print(f"      ✅ Gate 1 (Syntax): Passed.")
+        print(f"      ✅ Gate 1 (Syntax): passed")
 
-        # ── GATE 2: Flakiness Detection (Stability Check) ──
-        print(f"      🚪 Gate 2 (Flakiness): Evaluating stability across 10 loops...")
-        flaky = False
-        
-        target_file_param = case['target_file']
+        # Gate 2: Flakiness — run the specific test function 10×
+        target_file_param = case.get("target_file", "")
         env = os.environ.copy()
         if target_file_param:
             root = os.path.dirname(os.path.abspath(target_file_param))
@@ -4468,98 +4416,87 @@ def post_run_audit(model, tokenizer, suspicious_tests: list, test_file_path: str
                 root = os.path.dirname(root)
             env["PYTHONPATH"] = f"{root}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
-        # Loop to test stability of the EXACT function generated
-        # We search the accumulated testing codes to run the particular test
-        # Extract the test function name from case['test_code']
-        match = re.search(r'def\s+(test_[a-zA-Z0-9_]+)', case['test_code'])
+        match = re.search(r'def\s+(test_[a-zA-Z0-9_]+)', case.get("test_code", ""))
         if not match:
-            _log_discarded(discarded_path, case, "Syntax Hallucination", "Could not parse test_ name.")
+            _log_discarded(discarded_path, case, "Syntax Hallucination", "Could not parse test_ function name.")
             continue
-        
+
         test_func_name = match.group(1)
+        flaky = False
         for _ in range(10):
-            result = subprocess.run(
+            r = subprocess.run(
                 [sys.executable, "-m", "pytest", f"{test_file_path}::{test_func_name}", "-q", "--disable-warnings"],
-                capture_output=True, text=True, timeout=10, cwd=os.path.dirname(os.path.abspath(test_file_path)), env=env
+                capture_output=True, text=True, timeout=10,
+                cwd=os.path.dirname(os.path.abspath(test_file_path)), env=env,
             )
-            if result.returncode == 0:
+            if r.returncode == 0:
                 flaky = True
                 break
-                
+
         if flaky:
-            print(f"      🚪 Gate 2: Failed! Test flipped occasionally.")
+            print(f"      🚪 Gate 2 (Flakiness): FAILED — test passed sporadically")
             _log_discarded(discarded_path, case, "Flaky / Environmental Noise", "Passed sporadically.")
             continue
-        print(f"      ✅ Gate 2 (Flakiness): Passed. 100% Failure Rate.")
 
-        # ── GATE 3: Behavioral Incoherence (Truth Check) ──
-        print(f"      🚪 Gate 3 (Oracle Simulation): Fuzzing behavior maps...")
-        
-        # We prompt the LLM to generate exactly 3 variant forms of testing logic for this method
-        prompt = (f"Write exactly 3 distinct Python pytest functions verifying `{case['target_name']}`. "
-                  f"Use completely distinct fuzzy inputs and edge cases for each.\n\n"
-                  f"Source:\n```python\n{case['source_code'][:800]}\n```\n\n"
-                  f"Provide ONLY the raw python code using `def test_variant_1():` etc.")
-                  
-        messages = [{"role": "user", "content": prompt}]
-        try:
-            raw_variants = generate_test(model, tokenizer, messages, max_tokens=600)
-            raw_variants = raw_variants.replace("```python", "").replace("```", "").strip()
-        except:
-            raw_variants = ""
-            
-        if not raw_variants.strip() or "def test_" not in raw_variants:
-            _log_discarded(discarded_path, case, "Oracle Generation Error", "Could not map Oracle variants.")
-            continue
-            
-        # Append the variants onto the test script cleanly temporarily
-        with open(test_file_path, "a") as f:
-            f.write("\n\n# ORACLE VARIANTS\n" + raw_variants + "\n")
-            
-        # Parse the variant names generated
-        var_matches = re.finditer(r'def\s+(test_[a-zA-Z0-9_]+)', raw_variants)
-        variant_names = [m.group(1) for m in var_matches]
-        
-        # Test them explicitly
-        incoherent = False
-        variant_results = []
-        for vname in variant_names:
-            v_res = subprocess.run(
-                [sys.executable, "-m", "pytest", f"{test_file_path}::{vname}", "-q", "--disable-warnings"],
-                capture_output=True, text=True, timeout=10, cwd=os.path.dirname(os.path.abspath(test_file_path)), env=env
-            )
-            # If any of the new distinct fuzzy tests strictly pass while others fail, it's an Oracle failure.
-            # If they ALL crash with identical outcomes natively to the 100% bug, it's a SUT Bug.
-            variant_results.append(v_res.returncode)
-            
-        # Strip the variants back off
-        with open(test_file_path, "r") as f:
-            tcode = f.read()
-        with open(test_file_path, "w") as f:
-            f.write(tcode.split("\n\n# ORACLE VARIANTS\n")[0])
-            
-        # Evaluate variance: If array has mixed passes/failures, the target is behaving sporadically with test conditions (Oracle Hallucination)
-        if len(set(variant_results)) > 1 or 0 in variant_results:
-            print(f"      🚪 Gate 3: Failed! Fuzzy evaluation passed arbitrarily. Incoherence detected.")
-            _log_discarded(discarded_path, case, "Oracle Generation Error", f"Variants yielded mixed codes: {variant_results}")
-            continue
-            
-        print(f"      ✅ Gate 3 (Oracle): Passed! 100% distinct fuzzy crash alignment.")
+        print(f"      ✅ Gate 2 (Flakiness): passed — 100% failure rate")
+        passed_gates_12.append(case)
 
-        # ── PHASE 3: CLASSIFICATION ──
-        print(f"   🐛 ZERO-DAY BUG CONFIRMED: {case['target_name']}")
+    if not passed_gates_12:
+        print("   ℹ️  All suspicious tests filtered by Gates 1/2 — no bugs to report.")
+        return
+
+    # ── Gates 3a, 3b, Oracle 4: confidence scoring ────────────────────
+    confirmed = run_confidence_audit(passed_gates_12, model, tokenizer)
+
+    # ── Write bug reports ──────────────────────────────────────────────
+    for result in confirmed:
+        verdict = result.get("verdict", "suspected")
+        confidence_label = "high" if verdict == "confirmed" else "medium"
+        score = result.get("score", 50)
+
         bug_report = {
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "source_file": os.path.basename(case['target_file']),
-            "target": case['target_name'],
-            "bug_type": "logic_error",
-            "confidence": "high",
-            "description": f"Audited batch check validates resilient crash across {len(variant_names)} Oracle variations stably.",
-            "evidence": case['failure_logs'][0][:300],
-            "failure_count": len(case['failure_logs'])
+            "timestamp":     time.strftime("%Y-%m-%d %H:%M:%S"),
+            "source_file":   os.path.basename(result.get("target_file", "")),
+            "target":        result.get("func_name", result.get("target_name", "unknown")),
+            "bug_type":      "logic_error",
+            "confidence":    confidence_label,
+            "confidence_score": score,
+            "verdict":       verdict,
+            "description":   _build_description(result),
+            "evidence":      (result.get("failure_logs") or [""])[0][:300],
+            "failure_count": len(result.get("failure_logs") or []),
+            "test_code":     result.get("test_code", ""),
+            "test_file":     test_file_path,
+            "detection_evidence": result.get("evidence", {}),
         }
         with open(bug_report_path, "a") as f:
             f.write(json.dumps(bug_report) + "\n")
+
+        icon = "🐛" if verdict == "confirmed" else "⚠️"
+        print(f"   {icon} BUG {verdict.upper()} (score={score}): {bug_report['target']}")
+
+
+def _build_description(result: dict) -> str:
+    """Build a human-readable description from detection evidence."""
+    parts = []
+    score = result.get("score", 50)
+    parts.append(f"Confidence score: {score}/100.")
+
+    doc = result.get("evidence", {}).get("docstring", {})
+    if doc.get("consistent") is True:
+        parts.append("Docstring confirms expected behaviour.")
+    elif doc.get("consistent") is False:
+        parts.append(f"Note: docstring may contradict test ({doc.get('reasoning', '')[:60]}).")
+
+    ext = result.get("evidence", {}).get("existing_tests", {})
+    if ext.get("relevant_found"):
+        parts.append("Existing tests also fail." if not ext.get("existing_pass") else "Existing tests pass (lower confidence).")
+
+    exe = result.get("evidence", {}).get("execution", {})
+    if exe.get("executed"):
+        parts.append(f"Direct execution: actual={exe.get('actual')} expected={exe.get('expected')}.")
+
+    return " ".join(parts)
 
 
 def _log_discarded(discarded_path: str, case: dict, classification: str, reason: str):
@@ -4577,15 +4514,18 @@ def _log_discarded(discarded_path: str, case: dict, classification: str, reason:
 def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     max_targets: int = None, deep_scan: bool = False,
                     max_retries: int = 3, log_callback=None, plan_mode: bool = False,
-                    srs_requirements: list = None, priming_examples: str = ""):
+                    srs_requirements: list = None, priming_examples: str = "",
+                    auto_repair: bool = False):
     """The main self-correcting loop.
-    
+
     Args:
-        import_path: Optional package import path (e.g. 'requests.auth')
-                     for files inside installed packages.
+        import_path:  Optional package import path (e.g. 'requests.auth')
+                      for files inside installed packages.
         log_callback: Optional callback for GUI events. Called as:
                       log_callback(event_type, *args)
                       event_type: 'ai_status', 'code_stream', 'code_clear'
+        auto_repair:  If True, automatically invoke PartC on confirmed/suspected
+                      bugs after post_run_audit completes (opt-in).
     """
     def _cb(event_type, *args):
         """Safe callback helper — no-op when running in CLI mode."""
@@ -4645,6 +4585,56 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
     # Otherwise fall back to the plain module name (e.g. 'calculator')
     actual_import = import_path if import_path else module_name
     
+    # ── Existing-test pre-pass ────────────────────────────────────────────────
+    # Before generating anything, check whether real tests already exist for
+    # this file.  The outcome shapes what PartB does next:
+    #   all_pass + full coverage  → skip generation entirely
+    #   all_pass + coverage gaps  → generate only for uncovered functions
+    #   some fail                 → triage (real bug → PartC | stale → update)
+    _prepass_result = {"has_existing": False, "all_pass": False,
+                       "uncovered_funcs": [], "real_bugs_found": 0,
+                       "stale_tests_fixed": 0, "skip_generation": False}
+    try:
+        from existing_test_runner import run_existing_test_prepass  # type: ignore[import]
+        # Use the SAME bug_reports.jsonl path as post_run_audit and repair_pending_bugs.
+        # When import_path is set, tests go into generated_tests/ dir; otherwise they go
+        # next to the source file. The bug_reports.jsonl must be in the same directory.
+        _stem_pre = os.path.splitext(target_name)[0]
+        if import_path:
+            _test_dir_pre = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_tests")
+        else:
+            _test_dir_pre = os.path.dirname(os.path.abspath(target_file))
+        _bug_reports_path = os.path.join(_test_dir_pre, "bug_reports.jsonl")
+        _repo_dir = os.path.dirname(os.path.abspath(target_file))
+        _prepass_result = run_existing_test_prepass(
+            target_file=target_file,
+            actual_import=actual_import,
+            source_code=source_code,
+            repo_dir=_repo_dir,
+            model=model,
+            tokenizer=tokenizer,
+            bug_reports_path=_bug_reports_path,
+            log_callback=log_callback,
+        )
+        if _prepass_result.get("skip_generation") and not _prepass_result.get("real_bugs_found"):
+            print(f"Existing tests cover {target_name} fully and all pass — skipping generation.")
+            return True  # nothing to do, source is healthy
+        if _prepass_result.get("has_existing"):
+            _bugs = _prepass_result["real_bugs_found"]
+            _stale = _prepass_result["stale_tests_fixed"]
+            _uncovered = _prepass_result["uncovered_funcs"]
+            if _bugs:
+                print(f"Pre-pass: {_bugs} real bug(s) confirmed — will route to PartC after generation.")
+            if _stale:
+                print(f"Pre-pass: {_stale} stale test(s) auto-updated.")
+            if _uncovered:
+                print(f"Pre-pass: generating tests for uncovered functions: {_uncovered}")
+            # IMPORTANT: do NOT return early even when bugs found + no gaps.
+            # The auto_repair block below reads bug_reports.jsonl and must run.
+    except Exception as _prepass_err:
+        print(f"  Pre-pass skipped (non-critical): {_prepass_err}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     # Detect private functions (start with _) that import * won't export
     private_names = []
     try:
@@ -4682,14 +4672,21 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
     # CRITICAL: When testing files inside a package (e.g. repos/requests/requests/auth.py),
     # we MUST save the test file OUTSIDE the package directory. Otherwise pytest
     # tries to import it as 'requests.test_auth' which doesn't exist.
+    #
+    # File naming convention: test_<stem>_testmate.py
+    #   - Never overwrites user-written test_<stem>.py files
+    #   - Clear ownership marker: anything ending in _testmate.py is auto-generated
+    _stem = os.path.splitext(target_name)[0]
+    _testmate_name = f"test_{_stem}_testmate.py"
+
     if import_path:
         gen_tests_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_tests")
         os.makedirs(gen_tests_dir, exist_ok=True)
-        test_file = os.path.join(gen_tests_dir, f"test_{target_name}")
+        test_file = os.path.join(gen_tests_dir, _testmate_name)
     else:
         test_file = os.path.join(
             os.path.dirname(os.path.abspath(target_file)),
-            f"test_{target_name}"
+            _testmate_name
         )
 
     ctx = extract_context_from_code(source_code)
@@ -5509,20 +5506,19 @@ RULES — EXECUTE THE PLAN
                 passed, logs, cov_pct, branch_cov_pct, lines_after = False, "pytest timed out", 0.0, 0.0, set()
 
             if passed:
-                # Quality check first
-                test_score, reject_msgs = score_test_quality_legacy(test_func_clean)
-                if test_score == 0:
-                    reject_msg = "; ".join(reject_msgs)
-                    print(f"   ⚠️  Quality gate failed: {reject_msg}")
-                    # Store as bad example so model learns what not to do
+                # Quick syntax/triviality guard (pre-BES — zero cost)
+                _assert_lines = [l.strip() for l in test_func_clean.splitlines() if re.match(r'\s*assert\s', l)]
+                _non_trivial = [l for l in _assert_lines if l not in ("assert True", "assert False")]
+                if not _non_trivial:
+                    reject_msg = "No real assertions (only assert True/False)"
+                    print(f"   Trivial test rejected: {reject_msg}")
                     target_sig = f"{cls_name}.{method_name}" if cls_name else method_name
-                    cat, mutants = categorize_failure("", f"Quality gate: {reject_msg}")
+                    cat, mutants = categorize_failure("", reject_msg)
                     store_bad_example(target_sig, method_name, cls_name or "",
-                                      test_func_clean, f"Quality gate: {reject_msg}",
+                                      test_func_clean, reject_msg,
                                       os.path.basename(target_file),
                                       failure_category="quality_gate", survived_mutants=mutants)
                     chunk_prompt = build_chunk_prompt(error_logs=reject_msg, retry=retry, test_plan=_file_plan)
-                    # Revert file
                     with open(test_file, "w") as f:
                         f.write(accumulated_code)
                     continue
@@ -5531,23 +5527,53 @@ RULES — EXECUTE THE PLAN
                 # Graph RAG CFG paths + is_semantically_duplicate already prevent redundancy.
                 new_lines = set()  # placeholder for RAG storage
             
-                # Gate 3: Composite score must meet threshold
-                composite = compute_composite_score(
-                    test_code=test_func_clean,
-                    per_test=True,  # no branch/mutation here
-                )
-                threshold = max(20, 20 + retry * 10)  # 20, 30, 40
-                if composite["composite"] < threshold - 5:  # acceptance buffer
-                    print(f"   ⚠️  Composite score {composite['composite']:.0f}/100 < {threshold-5} — rejected "
-                          f"(assert:{composite['assertion']:.0f} div:{composite['diversity']:.0f} "
-                          f"edge:{composite['edge_cases']:.0f})")
+                # Gate 3: Bug Exposure Score (BES) — replaces old composite gate
+                try:
+                    from bes_scorer import bes_score, build_retry_hint  # type: ignore[import]
+                    _bes = bes_score(
+                        test_code=test_func_clean,
+                        func_source=source_code,
+                        func_name=method_name or "",
+                    )
+                    _bes_val = _bes["score"]
+                    composite = {  # keep old key names for downstream RAG storage
+                        "composite": _bes_val,
+                        "assertion": _bes["assertion_quality"],
+                        "diversity": _bes["input_variety"],
+                        "edge_cases": _bes["boundary_coverage"],
+                        "branch_cov": 0.0,
+                        "line_cov": 0.0,
+                        "mutation": _bes["mutation_potential"],
+                    }
+                except ImportError:
+                    # Fallback to old scorer if bes_scorer not available
+                    composite = compute_composite_score(test_code=test_func_clean, per_test=True)
+                    _bes = {"score": composite["composite"], "verdict": "accept", "missing": []}
+                    _bes_val = composite["composite"]
+
+                # Threshold scales with retry: 50 → 43 → 36 → 30 (more lenient on each retry)
+                # Max 3 retries before fallback to Layer 1+2 only.
+                threshold = max(30, 50 - retry * 7)
+                if _bes_val < threshold:
+                    _hint = ""
+                    try:
+                        from bes_scorer import build_retry_hint  # type: ignore[import]
+                        _hint = build_retry_hint(_bes)
+                    except ImportError:
+                        pass
+                    print(f"   BES {_bes_val:.0f}/100 < {threshold} — rejected "
+                          f"(spec:{_bes.get('spec_coverage',0):.0f} "
+                          f"variety:{_bes.get('input_variety',0):.0f} "
+                          f"boundary:{_bes.get('boundary_coverage',0):.0f})")
                     target_sig = f"{cls_name}.{method_name}" if cls_name else method_name
-                    cat, mutants = categorize_failure("", f"Composite score {composite['composite']:.0f}/100")
+                    cat, mutants = categorize_failure("", f"BES {_bes_val:.0f}/100")
                     store_bad_example(target_sig, method_name, cls_name or "",
-                                      test_func_clean, f"Composite score {composite['composite']:.0f}/100 < {threshold-5}",
+                                      test_func_clean, f"BES {_bes_val:.0f}/100 < {threshold}",
                                       os.path.basename(target_file),
                                       failure_category="quality_gate", survived_mutants=mutants)
-                    chunk_prompt = build_chunk_prompt(error_logs='quality limit not reached', retry=retry, test_plan=_file_plan)
+                    # Inject the retry hint into the next prompt
+                    _retry_error = _hint or f"BES score too low ({_bes_val:.0f}/100). Use more diverse inputs."
+                    chunk_prompt = build_chunk_prompt(error_logs=_retry_error, retry=retry, test_plan=_file_plan)
                     with open(test_file, "w") as f:
                         f.write(accumulated_code)
                     continue
@@ -5558,8 +5584,8 @@ RULES — EXECUTE THE PLAN
                 accumulated_tests += 1
                 covered_summary.append(target_label)
                 n_funcs = len(re.findall(r'def test_\w+', accumulated_code))
-                score_emoji = "🟢" if composite["composite"] >= 70 else "🟡" if composite["composite"] >= 50 else "🔴"
-                print(f"   ✅ Passed! ({n_funcs} tests accumulated) {score_emoji} Composite: {composite['composite']:.0f}/100 +{len(new_lines)} new lines")
+                score_emoji = "✓" if _bes_val >= 70 else "~" if _bes_val >= 50 else "?"
+                print(f"   Passed! ({n_funcs} tests accumulated) [{score_emoji}] BES: {_bes_val:.0f}/100")
                 test_added = True
                 tests_for_this_target += 1
                 
@@ -5749,18 +5775,77 @@ RULES — EXECUTE THE PLAN
     n_total_funcs = len(re.findall(r'def test_\w+', accumulated_code))
 
     if n_total_funcs == 0:
-        print(f"   ⚠️  No tests generated successfully!")
+        print(f"   No tests generated — running auto_repair on pre-pass bugs if available")
         print(f"{'='*60}")
+        # bug_report_path not yet defined here — compute from test_file which is available
+        _early_bug_report_path = os.path.join(os.path.dirname(os.path.abspath(test_file)), "bug_reports.jsonl")
+        # Before returning, still attempt auto_repair on any pre-pass confirmed bugs
+        if auto_repair and os.path.exists(_early_bug_report_path):
+            bug_report_path = _early_bug_report_path
+            try:
+                from bug_to_partc import repair_pending_bugs  # type: ignore[import]
+                print(f"\nAuto-Repair (pre-pass bugs): invoking PartC...")
+                _early_repairs = repair_pending_bugs(
+                    bug_reports_path=bug_report_path,
+                    repo_dir=os.path.dirname(os.path.abspath(target_file)),
+                    model=model,
+                    tokenizer=tokenizer,
+                    log_callback=log_callback,
+                )
+                if log_callback and _early_repairs:
+                    log_callback("repair_summary", _early_repairs)
+            except Exception as _re:
+                print(f"  Auto-repair failed: {_re}")
         return False
         
-    # Pre-mutation composite (will be updated after mutations below)
-    pre_mutation_composite = compute_composite_score(
-        test_code=accumulated_code,
-        per_test=True,  # no coverage/mutation yet
-    )
-    print(f"   📈 Pre-mutation composite: {pre_mutation_composite['composite']:.0f}/100 "
-          f"(assert:{pre_mutation_composite['assertion']:.0f} div:{pre_mutation_composite['diversity']:.0f} "
-          f"edge:{pre_mutation_composite['edge_cases']:.0f})")
+    # ── Layer 1+2 Amplifier: inject docstring + boundary tests ──────────────
+    # These deterministic tests supplement whatever the LLM generated.
+    # They are appended AFTER the LLM loop so they don't interfere with
+    # the per-test BES gate (they always score well on their own).
+    _amplifier_code = ""
+    try:
+        from docstring_extractor import build_docstring_tests  # type: ignore[import]
+        from boundary_synthesizer import build_boundary_tests  # type: ignore[import]
+
+        for _cls, _meth in targets:
+            _fn_source = _extract_function_source(source_code, _meth)
+            if not _fn_source:
+                continue
+
+            # Layer 1: docstring examples (safe to add — spec-derived, not execution-derived)
+            _doc_tests = build_docstring_tests(_fn_source, _meth, actual_import)
+            if _doc_tests:
+                _new_blocks = []
+                for _block in _doc_tests.split("\n\n"):
+                    if _block.strip() and _block.strip() not in accumulated_code:
+                        _new_blocks.append(_block)
+                if _new_blocks:
+                    _amplifier_code += "\n\n# --- Layer 1: docstring spec examples ---\n"
+                    _amplifier_code += "\n\n".join(_new_blocks)
+
+            # Layer 2 boundary tests are intentionally skipped here.
+            # Boundary tests execute the CURRENT source to derive expected values.
+            # If the source is buggy, boundary assertions will encode the buggy behavior
+            # and poison PartC's repair verification (the fix would appear as a regression).
+            # Layer 2 is safe to run AFTER bugs are confirmed fixed (coverage augmentation phase).
+
+        if _amplifier_code:
+            accumulated_code = accumulated_code.rstrip() + "\n" + _amplifier_code + "\n"
+            _amp_count = len(re.findall(r"def test_\w+", _amplifier_code))
+            print(f"   Amplifier: +{_amp_count} deterministic tests (docstring + boundary)")
+    except Exception as _amp_err:
+        print(f"   Amplifier skipped (non-critical): {_amp_err}")
+
+    # BES summary on final accumulated code
+    try:
+        from bes_scorer import bes_score  # type: ignore[import]
+        _final_bes = bes_score(accumulated_code)
+        print(f"   Final BES: {_final_bes['score']:.0f}/100 "
+              f"(spec:{_final_bes['spec_coverage']:.0f} "
+              f"variety:{_final_bes['input_variety']:.0f} "
+              f"boundary:{_final_bes['boundary_coverage']:.0f})")
+    except Exception:
+        pass
 
     # ── Save final accumulated tests ──
     with open(test_file, "w") as f:
@@ -5821,16 +5906,25 @@ RULES — EXECUTE THE PLAN
                     os.path.basename(target_file),
                     failure_category="mutation_survivor")
                 
-                # Write to bug_reports.jsonl for unified GUI display
+                # Write to bug_reports.jsonl for unified GUI display.
+                # Includes verdict + test_file + test_code so the PartC bridge
+                # (bug_to_partc.repair_pending_bugs) can pick this up and route
+                # it through SBFL-guided repair.
                 bug_report = {
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "timestamp":   time.strftime("%Y-%m-%d %H:%M:%S"),
                     "source_file": os.path.basename(target_file),
-                    "target": target_sig,
-                    "bug_type": "mutation_survivor",
-                    "confidence": "high",
-                    "description": f"Target vulnerable to side effects or improperly asserted.",
-                    "evidence": f"On Line {line_no}: Mutant survived {mut_desc}",
+                    "target":      target_sig,
+                    "bug_type":    "mutation_survivor",
+                    "confidence":  "high",
+                    "confidence_score": 75,        # mutation survivors are real evidence (high but not max)
+                    "verdict":     "suspected",    # PartC will promote/demote based on whether a fix exists
+                    "description": f"Mutation testing exposed unprotected behaviour on line {line_no}: {mut_desc}",
+                    "evidence":    f"On Line {line_no}: Mutant survived {mut_desc}",
                     "failure_count": 1,
+                    # ── Fields needed by bug_to_partc bridge ──────────────────
+                    "test_file":   os.path.abspath(test_file),
+                    "test_code":   method_test[:2000] if method_test else "",
+                    "line_no":     line_no,
                 }
                 bug_report_path = os.path.join(
                     os.path.dirname(os.path.abspath(test_file)),
@@ -5840,21 +5934,34 @@ RULES — EXECUTE THE PLAN
                     f.write(json.dumps(bug_report) + "\n")
                 print(f"   🧠 RAG learned from mutation failure in {target_sig}")
 
-    # Final composite score with real coverage + mutation numbers
+    # Final BES + coverage combined score
+    try:
+        from bes_scorer import bes_score as _bes_fn  # type: ignore[import]
+        _fbes = _bes_fn(accumulated_code, func_source=source_code)
+        _fbes_val = _fbes["score"]
+    except Exception:
+        _fbes = None
+        _fbes_val = 0.0
+
+    # Keep compute_composite_score for backward compat (coverage/mutation fields)
     final_composite = compute_composite_score(
         test_code=accumulated_code,
         line_coverage_pct=final_cov_pct,
         branch_coverage_pct=final_branch_cov_pct,
         mutation_score=mutation_score,
-        per_test=False,  # file-level full score
+        per_test=False,
     )
-    print(f"\n   📈 Final composite quality: {final_composite['composite']:.0f}/100")
-    print(f"      Line cov:   {final_cov_pct:.1f}/100")
-    print(f"      Assertion:  {final_composite['assertion']:.0f}/100")
-    print(f"      Branch cov: {final_composite['branch_cov']:.1f}/100")
-    print(f"      Mutation:   {final_composite['mutation']:.0f}/100")
-    print(f"      Diversity:  {final_composite['diversity']:.0f}/100")
-    print(f"      Edge cases: {final_composite['edge_cases']:.0f}/100")
+    final_composite["composite"] = round(
+        (_fbes_val * 0.5 + final_composite["composite"] * 0.5), 1
+    ) if _fbes else final_composite["composite"]
+
+    print(f"\n   Final quality: BES={_fbes_val:.0f}/100  Coverage={final_cov_pct:.0f}%  Mutation={mutation_score:.0f}%")
+    if _fbes:
+        print(f"      spec:{_fbes['spec_coverage']:.0f} "
+              f"variety:{_fbes['input_variety']:.0f} "
+              f"boundary:{_fbes['boundary_coverage']:.0f} "
+              f"assertion:{_fbes['assertion_quality']:.0f} "
+              f"mutation_potential:{_fbes['mutation_potential']:.0f}")
 
     # Flywheel: save successful tests for future fine-tuning
     # Lowered threshold (was 50/50) to accumulate more training data
@@ -5877,11 +5984,31 @@ RULES — EXECUTE THE PLAN
         print(f"\n🔄 Executing Post-Run Batch Audit on {len(suspicious_tests)} suspicious tests...")
         post_run_audit(model, tokenizer, suspicious_tests, test_file)
 
-    # ── Print bug report summary ──
+    # ── PHASE 4 (opt-in): AUTO-REPAIR via PartC ──────────────────────────
     bug_report_path = os.path.join(
         os.path.dirname(os.path.abspath(test_file)),
         "bug_reports.jsonl"
     )
+    if auto_repair and os.path.exists(bug_report_path):
+        try:
+            from bug_to_partc import repair_pending_bugs  # type: ignore[import]
+            print(f"\n🔧 Auto-Repair: invoking PartC on confirmed/suspected bugs...")
+            repair_results = repair_pending_bugs(
+                bug_reports_path=bug_report_path,
+                repo_dir=os.path.dirname(os.path.abspath(target_file)),
+                model=model,
+                tokenizer=tokenizer,
+                log_callback=log_callback,
+            )
+            # Attach repair results to callback so GUI can display them
+            if log_callback and repair_results:
+                log_callback("repair_summary", repair_results)
+        except Exception as _repair_err:
+            print(f"  Auto-repair failed (non-critical): {_repair_err}")
+            if log_callback:
+                log_callback("log", "warning", f"Auto-repair error: {_repair_err}")
+
+    # ── Print bug report summary ──
     if os.path.exists(bug_report_path):
         try:
             bugs = []

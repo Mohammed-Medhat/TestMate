@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Clock, CheckCircle, XCircle, Link2, FileText, Bot } from 'lucide-react'
+import { Settings, Clock, CheckCircle, XCircle, Link2, FileText, Bot, Wrench } from 'lucide-react'
 import type { Mode, HistoryItem } from '../types'
 
 // ── Typewriter hook ──────────────────────────────────────────────────────────
@@ -51,18 +51,27 @@ const CARDS: {
     glow: 'hover:shadow-[0_8px_32px_rgba(167,139,250,0.18)]',
     iconBg: 'bg-violet-500/10', accent: '#a78bfa', textHover: 'group-hover:text-violet-400',
   },
+  {
+    mode: 'partc', icon: '🔧', title: 'Bug Fixer',
+    desc: 'Automated Program Repair using SBFL fault localization. Pick a buggy file and test suite — the LLM patches the bug and re-verifies.',
+    border: 'border-zinc-800 hover:border-amber-500/60',
+    glow: 'hover:shadow-[0_8px_32px_rgba(251,191,36,0.18)]',
+    iconBg: 'bg-amber-500/10', accent: '#fbbf24', textHover: 'group-hover:text-amber-400',
+  },
 ]
 
 const MODE_ICON: Record<Mode, React.ReactNode> = {
   combined: <Link2 size={11} />,
   parta:    <FileText size={11} />,
   partb:    <Bot size={11} />,
+  partc:    <Wrench size={11} />,
 }
 
 const MODE_LABEL: Record<Mode, string> = {
   combined: 'Full Pipeline',
   parta:    'Part A',
   partb:    'Part B',
+  partc:    'Bug Fixer',
 }
 
 // ── History row ──────────────────────────────────────────────────────────────
@@ -160,7 +169,7 @@ export default function Landing({ onPickMode, onOpenSettings, history }: Props) 
         </section>
 
         {/* Mode cards */}
-        <section className="grid grid-cols-3 gap-5 max-w-5xl mx-auto px-8">
+        <section className="grid grid-cols-2 gap-5 max-w-4xl mx-auto px-8">
           {CARDS.map(card => {
             const isClicked = pickedMode === card.mode
             const isDimmed  = pickedMode !== null && !isClicked

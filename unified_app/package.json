@@ -43,7 +43,12 @@
       { "from": "../PartA/readme_extractor", "to": "PartA/readme_extractor",
         "filter": ["**/*.py", "!__pycache__/**", "!*.db"] },
       { "from": "../PartB/testgen", "to": "PartB/testgen",
-        "filter": ["**/*.py", "!__pycache__/**", "!*.db"] }
+        "filter": ["**/*.py", "!__pycache__/**", "!*.db"] },
+      { "from": "../PartC", "to": "PartC",
+        "filter": ["**/*.py", "models/adapter/adapter_config.json",
+                   "models/adapter/adapter_model.safetensors",
+                   "models/adapter/tokenizer.json", "models/adapter/tokenizer_config.json",
+                   "data/**", "!__pycache__/**", "!*.pt", "!*.pth"] }
     ],
     "win": { "target": ["nsis"] }
   }

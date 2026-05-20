@@ -1,55 +1,108 @@
-# TestMate: Automated Test Generation via Multi-Model Knowledge Distillation and RAG
+# TestMate — AI-Powered Test Generation, Bug Detection & Automated Repair
 
 ## Overview
 
-**TestMate** is an AI-driven system that automates software test generation, refinement, and bug fixing using Large Language Models (LLMs). It integrates **multi-teacher knowledge distillation** and **Retrieval-Augmented Generation (RAG)** to create a lightweight, efficient, and scalable student model that outperforms single-model solutions.
+**TestMate** is an end-to-end AI system that automates the full software quality lifecycle:
+requirements extraction → test generation → bug detection → automated program repair.
 
-## Motivation
+It runs as an **Electron desktop app** (React + TypeScript frontend, FastAPI backend) built around a fine-tuned **Qwen2.5-Coder-7B** student model trained via multi-teacher knowledge distillation.
 
-Manual test case creation is slow, expensive, and often incomplete. Existing LLM-based test generators are powerful but costly and not optimized for continuous integration. TestMate solves these challenges by:
+---
 
-* Distilling knowledge from multiple teacher models (DeepSeek-V3, Qwen 3.5-Coder, Llama 3.1, Mistral Large 2).
-* Building an open, efficient student model (Qwen 3.5 Coder 7B).
-* Integrating RAG for memory and reusability of validated test cases.
-* Combining bug fixing, coverage visualization, and dependency analysis in one system.
+## Architecture — Three Parts
 
-## Objectives
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Part A  — Requirement Extraction                                    │
+│  SRS (PDF/DOCX) or README → labeled requirements + test scenarios   │
+│  Pure NLP (spaCy + difflib) for SRS  │  LLM-based for README        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ requirements (label=1)
+┌──────────────────────────▼──────────────────────────────────────────┐
+│  Part B  — Self-Correcting Test Generation  (3-Layer RAG)           │
+│  Qwen2.5-Coder-7B + LoRA  │  AST → LLM → test → error → retry      │
+│                                                                     │
+│  NEW: Bug Exposure Score (BES)  — 5-dim quality gate                │
+│    1. Spec coverage   (30%) — docstring examples as assertions       │
+│    2. Input variety   (25%) — case / sign / type characteristic mix  │
+│    3. Boundary cov.   (20%) — AST-verified boundary args            │
+│    4. Assertion qual. (15%) — exact ==, raises, distinct targets     │
+│    5. Mutation pot.   (10%) — heuristic mutation-killing signal      │
+│                                                                     │
+│  NEW: Layer 1 — docstring extractor (deterministic spec tests)      │
+│  NEW: Layer 2 — boundary synthesizer (type-aware edge cases)        │
+│  NEW: Pre-pass triage — real bug vs stale test disambiguation        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ confirmed/suspected bugs → bug_reports.jsonl
+┌──────────────────────────▼──────────────────────────────────────────┐
+│  Part C  — Automated Program Repair  (APR)                          │
+│  SBFL fault localisation (Ochiai) → Qwen2.5-Coder-7B + LoRA        │
+│  AST-safe patching → workspace isolation → git branch               │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-* Automatically generate test cases from source code (Python/GitHub).
-* Perform **multi-teacher distillation** and build a **Meta-Student** through output merging.
-* Implement **RAG-based memory** for storing validated tests globally and per user.
-* Integrate **mutation testing**, **coverage heatmaps**, and **Control Flow Graphs (CFGs)**.
-* Add **Automated Program Repair (APR)** for bug fixing.
-* Visualize dependencies using **dependency graphs**.
-* Deliver a functional prototype with a user-friendly interface.
+### Unified Desktop App
+
+```
+unified_app/
+├── src/                     # React + TypeScript (Vite + Tailwind)
+│   ├── App.tsx              # Root — 4 modes: Combined | PartA | PartB | PartC
+│   ├── components/          # Landing, LeftSidebar, MainContent, RightSidebar…
+│   └── types.ts             # Shared TypeScript types (incl. BES + prepass types)
+├── server.py                # FastAPI :8080 — all routes, SSE streaming
+├── orchestrator.py          # Combined pipeline: A→B→C with quality modes
+├── model_lifecycle.py       # GPU context managers + multi-adapter swap (partb/partc)
+├── requirement_matcher.py   # Hybrid keyword + semantic matcher
+└── coverage_analyzer.py     # SRS coverage gap analysis
+```
+
+---
 
 ## Key Features
 
-* **Automated Test Generation** using LLMs and RAG.
-* **Knowledge Distillation Pipeline** with voting and filtering.
-* **Bug Fixing** powered by APR.
-* **Coverage Analysis** via heatmaps.
-* **Visualization** of test paths and dependencies (CFGs & dependency graphs).
-* **Open & Efficient Architecture** optimized for real-world integration.
+### Part A
+- **SRS Pipeline** — PDF/DOCX → spaCy sentence segmentation → PURE dataset fuzzy alignment → heuristic fallback labeler
+- **README Extractor** — cleans README → LLM feature extraction → LLM test scenario generation (subprocess-isolated for VRAM safety)
 
-## Tools & Technologies
+### Part B (Test Generation)
+- **3-Layer RAG** — Layer 1: FAISS external docs · Layer 2: BM25 + semantic code graph · Layer 3: Qwen2.5-Coder-7B + LoRA
+- **Self-correcting loop** — generate → run → capture error → regenerate (max 15 iterations)
+- **Bug Exposure Score (BES)** — replaces old 3-dim composite; detects tests that look good but miss bugs
+- **Layer 1 amplifier** — docstring extractor guarantees spec examples are always present in the test file
+- **Pre-pass triage** — before generating, checks if existing tests already fail; uses LLM to confirm "two independent failures = real bug" and routes directly to PartC
+- **Auto-priming** — scans repo for passing tests and injects as style examples
+- **Testable filter** — skips `__init__`, empty files, and existing test files
+- **Mutation testing** — mutmut integration with bug report generation
 
-* **Languages:** Python
-* **Libraries:** Hugging Face Transformers, LangChain/LangGraph, spaCy, Pytest, Coverage.py, Mutmut
-* **AI Models:** DeepSeek-V3, Qwen 3.5-Coder, Llama 3.1, Mistral Large 2
-* **Vector Store:** FAISS / Weaviate
-* **Bug Fixing:** PyFix (APR)
-* **Visualization:** Matplotlib, Seaborn, Radon, Lizard, NetworkX
-* **Environment:** Jupyter, VSCode, Docker
+### Part C (Automated Program Repair)
+- **SBFL fault localisation** — Ochiai score per line using coverage spectrum
+- **Workspace isolation** — source never modified in place; all repair in `PartC/workspaces/<id>/`
+- **AST-safe patching** — replaces only matching functions; full-file fallback for syntax errors
+- **Multi-adapter GPU sharing** — PartB and PartC adapters loaded simultaneously via PEFT named adapters; cheap hot-swap between them
+- **Git branch creation** — successful patches committed to `testmate-repair-<timestamp>` branch
+- **Verdict update** — PartC success/failure promotes or demotes PartB's bug confidence score
 
-## References
+### Unified App GUI
+- **4 modes** — Full Pipeline (A→B→C) · Part A Only · Part B Only · Bug Fixer (PartC standalone)
+- **SSE streaming** — all long jobs return `job_id` immediately; frontend polls `/stream?job_id=…`
+- **Stale Tests tab** — shows pre-pass results: existing tests found, real bugs confirmed, stale tests auto-updated
+- **Auto-Repair toggle** — opt-in setting; when enabled, confirmed bugs automatically trigger PartC repair
+- **Quality Modes** — Fast (A+B) · Balanced (+gap analysis) · Best (+gap fill)
 
-Based on key works in:
+---
 
-* Knowledge Distillation (Chen et al., 2024)
-* Automated Program Repair (Zhang et al., 2023; Meng et al., 2024)
-* Retrieval-Augmented Generation (Gao et al., 2023; Zhao et al., 2024)
-* Graph-based RAG and Dependency-Aware Reranking (Li et al., 2025)
+## Bug Exposure Score (BES) — New Scoring System
+
+The old scorer (3 dimensions, weighted by literal counts) gave PartB's weak tests 80/100, accepting tests that missed every bug. BES focuses on **what makes a test catch bugs**:
+
+| | Old scorer | New BES |
+|---|---|---|
+| Weak test (all lowercase inputs) | **80/100 → ACCEPTED** | **36.5/100 → REJECTED** |
+| Good test (docstring examples + variety) | 100/100 | **82.5/100 → ACCEPTED** |
+| Bugs detected | 0/5 | 3/5 |
+| Test functions generated | 1 | 13 |
+
+The BES gate forces up to 3 retries with specific hints (`"Add uppercase input — docstring says case-insensitive"`), then falls back to deterministic Layer 1 docstring tests.
 
 ---
 
@@ -57,70 +110,131 @@ Based on key works in:
 
 ```
 TestMate/
-├── PartA/                          # Requirement Extraction & Alignment
-│   ├── srs_pipeline/               # SRS PDF/DOCX → labeled requirements (spaCy + fuzzy match)
-│   │   ├── run_pipeline.py         # CLI entry point
-│   │   ├── pipeline_api.py         # Programmatic API (used by unified_app)
-│   │   └── src/preprocessing/      # PDF, DOCX readers + sentence segmentation + PURE alignment
-│   ├── readme_extractor/           # README → features + test scenarios (FastAPI + Qwen LLM)
-│   │   ├── pipeline_api.py         # Programmatic API (used by unified_app)
-│   │   └── src/                    # API routes, services, models, utils
-│   └── datasets/                   # Input data
-│       ├── srs_documents/          # 80+ SRS documents (PDF/DOCX)
-│       └── pure_annotated/         # PURE dataset CSVs for requirement alignment
+├── PartA/
+│   ├── srs_pipeline/           # SRS → labeled requirements
+│   │   ├── srs_api.py          # execute_part_a_srs()
+│   │   └── run_pipeline.py     # CLI
+│   └── readme_extractor/       # README → features + scenarios
+│       ├── readme_api.py       # execute_part_a_readme()
+│       └── extractor_subprocess.py  # VRAM-isolated subprocess wrapper
 │
-├── PartB/                          # Test Generation & Bug Fixing
-│   ├── agent.py                    # 3-layer RAG orchestrator (main entry)
-│   ├── testgen/                    # Core test generation engine
-│   │   ├── main.py                 # Autonomous self-correcting loop (AST → LLM → test → feedback)
-│   │   ├── api_server.py           # FastAPI server (standalone mode)
-│   │   ├── pipeline_api.py         # Programmatic API (used by unified_app)
-│   │   ├── docker_runner.py        # Sandboxed test execution
-│   │   ├── rag_store.py            # SQLite RAG memory (examples + patterns)
-│   │   ├── build_knowledge_graph.py# AST → knowledge graph
-│   │   ├── intense_mode.py         # DPO multi-iteration mode
-│   │   ├── mutation_testing.py     # Mutmut integration
-│   │   ├── training/               # Kaggle/Colab training & evaluation scripts
-│   │   ├── langchain/              # LangChain-based agent wrappers
-│   │   ├── tools/                  # Demos, debug utilities, reports
-│   │   ├── templates/              # HTML for api_server dashboard
-│   │   └── static/                 # CSS/JS assets
-│   ├── layers/                     # RAG layers
-│   │   ├── docs/                   # Layer 1: external docs + Stack Overflow (FAISS)
-│   │   └── code/                   # Layer 2: code graph navigation (BM25 + embeddings)
-│   ├── models/                     # Trained LoRA adapters
-│   │   └── graphrag_lora/final/    # Production GraphRAG LoRA
-│   ├── value_reasoning_model/      # Value reasoning LoRA adapter
-│   ├── eval_lite/                  # Lightweight evaluation suite
-│   ├── training_data/              # SWE-bench dataset ingestion
-│   ├── tests/                      # Unit tests
-│   └── outputs/                    # Runtime artifacts (generated tests, results, cloned repos)
+├── PartB/
+│   ├── testgen/
+│   │   ├── main.py             # autonomous_loop() — core generation + BES gate
+│   │   ├── testgen_api.py      # execute_part_b() — clean API
+│   │   ├── bes_scorer.py       # NEW: 5-dim Bug Exposure Score
+│   │   ├── docstring_extractor.py  # NEW: Layer 1 spec tests
+│   │   ├── boundary_synthesizer.py # NEW: Layer 2 boundary tests
+│   │   ├── bug_detector.py     # NEW: Oracle 4 + triage confidence scoring
+│   │   ├── bug_to_partc.py     # NEW: PartB→PartC bridge + adapter swap
+│   │   ├── existing_test_runner.py # NEW: pre-pass triage
+│   │   ├── rag_store.py        # SQLite RAG memory (BES-rescored)
+│   │   ├── api_server.py       # Standalone FastAPI :8000
+│   │   └── pipeline_test/      # Test scenario: buggy_calculator.py
+│   ├── models/
+│   │   └── graphrag_lora/final/    # PartB LoRA adapter
+│   └── value_reasoning_model/      # Second LoRA (value reasoning)
 │
-└── unified_app/                    # Desktop Application (Electron + React + TypeScript)
-    ├── electron/                   # Electron main process (spawns Python backend)
-    ├── src/                        # React UI (Landing + 3-mode workspace)
-    │   ├── components/             # Landing, LeftSidebar, MainContent, RightSidebar, Modal
-    │   └── App.tsx                 # Root component + all state management
-    └── server.py                   # FastAPI backend (port 8080, all API routes)
+├── PartC/
+│   ├── api/
+│   │   └── partc_api.py        # execute_part_c() — clean API
+│   ├── core/
+│   │   ├── control_loop.py     # repair_loop() — SBFL → patch → verify
+│   │   ├── run_and_collect.py  # per-test coverage (Ochiai spectrum)
+│   │   ├── sbfl_localiser.py   # Ochiai scoring
+│   │   ├── model_runner.py     # Qwen inference (accepts pre-loaded model)
+│   │   └── inference.py        # 4-bit BitsAndBytes loader
+│   ├── models/adapter/         # PartC LoRA adapter weights
+│   └── training/               # QLoRA fine-tuning scripts
+│
+└── unified_app/
+    ├── src/                    # React + TypeScript (4-mode workspace)
+    ├── server.py               # FastAPI :8080 + SSE streaming
+    ├── orchestrator.py         # 5-phase combined pipeline
+    ├── model_lifecycle.py      # GPU lifecycle + multi-adapter session
+    └── package.json            # npm: dev | build:win
 ```
 
-## Running the App
+---
+
+## Running
 
 ### Unified Desktop App (recommended)
+
 ```bash
 cd unified_app
 npm install
-npm run dev        # opens Electron window with hot-reload
+npm run dev           # Electron + Vite hot-reload
+python server.py      # or run backend standalone on :8080
 ```
 
-### Part A standalone
+### Part B standalone (test generation)
+
+```bash
+cd PartB
+pip install -r testgen/requirements_docker.txt
+python testgen/api_server.py          # FastAPI on :8000
+python testgen/main.py --target path/to/code.py  # single file
+```
+
+### Part C standalone (bug repair)
+
+```bash
+cd PartC
+python web/app.py                     # Flask UI on :5000
+python core/control_loop.py           # CLI mode
+```
+
+### Part A standalone (requirement extraction)
+
 ```bash
 cd PartA/srs_pipeline
-python run_pipeline.py --input doc.pdf --output results/out.json
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+python run_pipeline.py --input doc.pdf --output out.json
 ```
 
-### Part B standalone
+---
+
+## Pipeline Test
+
+A self-contained test scenario is included in `PartB/testgen/pipeline_test/`:
+
+```
+pipeline_test/
+├── buggy_calculator.py          # 5 intentional logic bugs
+├── test_buggy_calculator.py     # human-written tests (13 functions)
+├── verify_calculator.py         # comprehensive verification suite
+└── run_pipeline_test.py         # automated smoke test (6 checks)
+```
+
+Run the smoke test (no GPU needed — mocks the model):
+
 ```bash
 cd PartB/testgen
-python api_server.py    # FastAPI on :8000
+python pipeline_test/run_pipeline_test.py
 ```
+
+Expected output: `6/6 tests passed` — verifies Oracle 4, BES scoring, bug grouping, workspace isolation, verdict transitions.
+
+---
+
+## Critical VRAM Constraint
+
+**PartA and PartB/C models cannot coexist in GPU memory.**
+
+- `model_lifecycle.py` provides context managers that load → yield → delete+flush
+- README extractor runs in a **subprocess** (`extractor_subprocess.py`) because BitsAndBytes 4-bit models on Windows don't release VRAM cleanly with `del+empty_cache` in the same process
+- PartB + PartC share the same Qwen2.5-Coder-7B base; PEFT named adapters (`"partb"`, `"partc"`) allow a cheap hot-swap (~10ms) instead of a full model reload
+
+---
+
+## References
+
+- **KGCompass** (arXiv 2025) — multi-hop graph traversal for code navigation
+- **RAGFix** (NSF/IEEE 2025) — external knowledge retrieval for bug fixing
+- **RAG Traceability** (MCSE 2025) — requirement-code linking
+- **Knowledge Distillation** (arXiv 2025) — efficient training from teacher models
+- Knowledge Distillation (Chen et al., 2024)
+- Automated Program Repair (Zhang et al., 2023; Meng et al., 2024)
+- Retrieval-Augmented Generation (Gao et al., 2023; Zhao et al., 2024)

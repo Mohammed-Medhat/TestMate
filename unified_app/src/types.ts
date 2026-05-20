@@ -1,8 +1,8 @@
 export type View = 'landing' | 'workspace'
-export type Mode = 'combined' | 'parta' | 'partb'
+export type Mode = 'combined' | 'parta' | 'partb' | 'partc'
 export type PartAMode = 'srs' | 'readme' | 'both'
 export type RunStatus = 'idle' | 'running' | 'done' | 'error'
-export type ActiveTab = 'bugs' | 'coverage' | 'mutations' | 'requirements' | 'scenarios' | 'testcode' | 'features'
+export type ActiveTab = 'bugs' | 'coverage' | 'mutations' | 'requirements' | 'scenarios' | 'testcode' | 'features' | 'sbfl' | 'patches' | 'stale'
 
 // ── Matching PartB/gui exactly ──────────────────────────────────────────────
 export interface FileInfo {
@@ -44,6 +44,7 @@ export interface RunSettings {
   planMode: boolean
   useBaseOnly: boolean   // skip value_reasoning LoRA — raw 4-bit Qwen base
   qualityMode: QualityMode  // fast=LoRA+plan | balanced=+gap-analysis | best=+gap-fill
+  autoRepair: boolean    // opt-in: invoke PartC to repair confirmed/suspected bugs
 }
 
 // ── History ─────────────────────────────────────────────────────────────────
@@ -85,4 +86,52 @@ export interface Progress {
   current: number
   total: number
   file: string
+}
+
+// ── Pre-pass (existing test triage) ─────────────────────────────────────────
+export interface StaleDetail {
+  func_name: string
+  test_file: string
+  backup_path: string
+  fresh_code: string
+}
+
+export interface PrepassSummary {
+  source_file: string
+  has_existing: boolean
+  all_pass: boolean
+  uncovered_funcs: string[]
+  real_bugs_found: number
+  stale_tests_fixed: number
+  stale_details: StaleDetail[]
+  skip_generation: boolean
+  existing_test_files: string[]
+}
+
+// ── Part C ──────────────────────────────────────────────────────────────────
+export interface SbflLine {
+  line: number
+  score: number
+  code: string
+}
+
+export interface RepairAttempt {
+  n: number
+  status: 'success' | 'fail'
+  patch: string
+  result: string
+  patched?: string
+  sbfl?: SbflLine[]
+}
+
+export interface PartCResult {
+  success: boolean
+  patched: string
+  original: string
+  attempts: RepairAttempt[]
+  suspicious: SbflLine[]
+  elapsed_sec: number
+  source_file: string
+  test_file: string
+  error?: string
 }

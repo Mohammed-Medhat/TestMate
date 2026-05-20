@@ -1,4 +1,4 @@
-import { X, Zap, Scale, Gem } from 'lucide-react'
+import { X, Zap, Scale, Gem, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import type { RunSettings, QualityMode } from '../types'
 
@@ -44,9 +44,10 @@ export default function ProjectSettingsModal({ onClose, settings, onSave }: Moda
   const [retries,     setRetries]     = useState(settings.maxRetries)
   const [useBaseOnly, setUseBaseOnly] = useState(settings.useBaseOnly ?? false)
   const [qualityMode, setQualityMode] = useState<QualityMode>(settings.qualityMode ?? 'fast')
+  const [autoRepair,  setAutoRepair]  = useState(settings.autoRepair ?? false)
 
   const handleSave = () => {
-    onSave({ docker, deepScan, maxRetries: retries, hitl, intense, planMode, useBaseOnly, qualityMode })
+    onSave({ docker, deepScan, maxRetries: retries, hitl, intense, planMode, useBaseOnly, qualityMode, autoRepair })
     onClose()
   }
 
@@ -121,6 +122,31 @@ export default function ProjectSettingsModal({ onClose, settings, onSave }: Moda
               onChange={() => setUseBaseOnly(!useBaseOnly)}
               color="amber"
             />
+          </div>
+
+          {/* Bug Repair */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+              <Wrench size={14} className="text-amber-400" /> Bug Repair (PartC)
+            </h3>
+            <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-2">
+              <Toggle
+                label="Auto-Repair Confirmed Bugs"
+                desc="After test generation, invoke PartC to automatically repair confirmed and suspected bugs. PartC's success/failure becomes the final verdict. Adds ~1-3 min per buggy file."
+                checked={autoRepair}
+                onChange={() => setAutoRepair(!autoRepair)}
+                color="amber"
+              />
+              {autoRepair && (
+                <p className="text-[11px] text-amber-400/70 pl-1">
+                  Patched files saved to <code className="font-mono bg-amber-500/10 px-1 rounded">PartB/outputs/patched/</code>.
+                  A git branch is created automatically if the repo has a <code className="font-mono bg-amber-500/10 px-1 rounded">.git</code> folder.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3" style={{display:'none'}}>
             <div className="p-3 bg-zinc-800/50 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-zinc-400">Max Retries per Target</span>
@@ -145,6 +171,7 @@ export default function ProjectSettingsModal({ onClose, settings, onSave }: Moda
               {hitl     && <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">HITL</span>}
               {planMode     && <span className="px-2 py-0.5 text-xs rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">Plan Mode</span>}
               {useBaseOnly  && <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">Base Only</span>}
+              {autoRepair   && <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">🔧 Auto-Repair</span>}
               <span className={`px-2 py-0.5 text-xs rounded-full border ${
                 qualityMode === 'best'     ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                 : qualityMode === 'balanced' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'

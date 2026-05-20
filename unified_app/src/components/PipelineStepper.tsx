@@ -1,6 +1,7 @@
 import { Check, X, Loader } from 'lucide-react'
 import type { Mode } from '../types'
 
+
 export type StageStatus = 'pending' | 'active' | 'done' | 'error'
 
 export interface Stage {
@@ -26,8 +27,9 @@ const COMBINED_STAGES_BALANCED: Stage[] = [
 ]
 const COMBINED_STAGES_BEST: Stage[] = [
   ...COMBINED_STAGES_BALANCED.filter(s => s.id !== 'done'),
-  { id: 'gap_fill', label: 'Gap Fill', status: 'pending' },
-  { id: 'done',     label: 'Done',     status: 'pending' },
+  { id: 'gap_fill', label: 'Gap Fill',   status: 'pending' },
+  { id: 'repair',   label: 'Bug Repair', status: 'pending' },
+  { id: 'done',     label: 'Done',       status: 'pending' },
 ]
 
 const STAGES_BY_MODE: Record<Mode, Stage[]> = {
@@ -44,6 +46,14 @@ const STAGES_BY_MODE: Record<Mode, Stage[]> = {
     { id: 'model',    label: 'Load Model',     status: 'pending' },
     { id: 'gen',      label: 'Generate Tests', status: 'pending' },
     { id: 'eval',     label: 'Evaluate',       status: 'pending' },
+    { id: 'done',     label: 'Done',           status: 'pending' },
+  ],
+  partc: [
+    { id: 'discover', label: 'Discover Files', status: 'pending' },
+    { id: 'tests',    label: 'Run Tests',      status: 'pending' },
+    { id: 'sbfl',     label: 'SBFL Localize',  status: 'pending' },
+    { id: 'repair',   label: 'LLM Repair',     status: 'pending' },
+    { id: 'verify',   label: 'Re-test',        status: 'pending' },
     { id: 'done',     label: 'Done',           status: 'pending' },
   ],
 }
@@ -72,7 +82,9 @@ export function detectStageFromLog(mode: Mode, message: string): string | null {
                                                                     return 'gap_analysis'
     if (m.includes('phase 4') || m.includes('gap-fill') || m.includes('gap fill'))
                                                                     return 'gap_fill'
-    if (m.includes('phase 2 complete') || m.includes('phase 4') || m.includes('✅ pipeline'))
+    if (m.includes('auto-repair') || m.includes('🔧 auto-repair') || m.includes('bug repair starting'))
+                                                                    return 'repair'
+    if (m.includes('phase 2 complete') || m.includes('✅ pipeline') || m.includes('repair complete'))
                                                                     return 'done'
   }
   if (mode === 'parta') {
@@ -88,6 +100,14 @@ export function detectStageFromLog(mode: Mode, message: string): string | null {
     if (m.includes('generating') || m.includes('autonomous') || m.includes('test gen')) return 'gen'
     if (m.includes('evaluat') || m.includes('coverage') || m.includes('pytest'))      return 'eval'
     if (m.includes('complete') || m.includes('✅'))                                    return 'done'
+  }
+  if (mode === 'partc') {
+    if (m.includes('discover') || m.includes('workspace'))                    return 'discover'
+    if (m.includes('step 1') || m.includes('running pytest') || m.includes('🧪')) return 'tests'
+    if (m.includes('step 2') || m.includes('sbfl') || m.includes('🔍'))       return 'sbfl'
+    if (m.includes('step 4') || m.includes('calling testmate') || m.includes('🤖')) return 'repair'
+    if (m.includes('step 6') || m.includes('re-running') || m.includes('verify') || m.includes('🔁')) return 'verify'
+    if (m.includes('success') || m.includes('🎉') || m.includes('apr') && m.includes('succeed'))      return 'done'
   }
   return null
 }

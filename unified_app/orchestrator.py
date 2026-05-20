@@ -42,6 +42,7 @@ def execute_combined(
     top_k_requirements: int = 10,
     use_base_only: bool = False,
     quality_mode: str = "fast",          # fast | balanced | best
+    auto_repair: bool = False,           # opt-in: invoke PartC on confirmed bugs
     log_callback: Optional[Callable] = None,
 ) -> dict:
     """
@@ -67,7 +68,7 @@ def execute_combined(
           "summary": { "total_files": N, "succeeded": M, ... },
         }
     """
-    from model_lifecycle import part_a_model, part_b_model
+    from model_lifecycle import part_a_model, part_b_model  # type: ignore[import]
     from requirement_matcher import match_requirements_to_file
 
     sys.path.insert(0, str(_PART_A_SRS))
@@ -243,6 +244,7 @@ def execute_combined(
                     priming_examples  = priming_examples,
                     model             = model,
                     tokenizer         = tokenizer,
+                    auto_repair       = auto_repair,
                 )
                 b_result["file"] = rel_path
                 b_result["matched_requirements_count"] = len(matched_reqs)
@@ -300,6 +302,16 @@ def execute_combined(
                 if log_callback:
                     log_callback("file_result", gr)
 
+    # ── Phase 5: Bug repair happens INSIDE each PartB execute_part_b() call ──
+    # When auto_repair=True, bug_to_partc.repair_pending_bugs() is called
+    # automatically after post_run_audit() within autonomous_loop().
+    # Repair results are embedded in each per_file_result["repairs"] list.
+    # No separate phase needed here — collect them from the per-file results.
+    repair_results = [
+        r for fr in per_file_results
+        for r in (fr.get("repairs") or [])
+    ]
+
     summary = {
         "total_files": total,
         "succeeded":   succeeded,
@@ -309,11 +321,15 @@ def execute_combined(
         "srs_covered":          srs_coverage.get("covered", 0),
         "srs_coverage_pct":     srs_coverage.get("coverage_pct", 0.0),
         "quality_mode":         quality_mode,
+        "auto_repair":          auto_repair,
+        "repairs_attempted":    len(repair_results),
+        "repairs_succeeded":    sum(1 for r in repair_results if r.get("success")),
     }
 
     return {
         "part_a":       a_result,
         "part_b":       per_file_results,
+        "part_c":       repair_results,
         "summary":      summary,
         "srs_coverage": srs_coverage,
     }

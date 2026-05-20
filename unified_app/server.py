@@ -5,6 +5,7 @@ Three tab groups: Combined | Part A Only | Part B Only
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -13,6 +14,13 @@ import threading
 import uuid
 from pathlib import Path
 from typing import Optional
+
+# Force UTF-8 stdout/stderr so emoji in model-loading print() calls
+# don't crash worker threads on Windows terminals.
+if hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stderr, "buffer"):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 import uvicorn
 from fastapi import FastAPI, Request, UploadFile, File, Form
@@ -61,7 +69,11 @@ def _make_log_callback(q: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         evt: dict = {"type": event_type}
         if event_type in ("log", "ai_status", "code_stream", "code_clear",
                           "pipeline_stage", "result", "file_result",
-                          "complete", "error", "progress"):
+                          "complete", "error", "progress",
+                          "repair_start", "repair_file_start", "repair_attempt",
+                          "repair_complete", "repair_summary", "verdict_update",
+                          "sbfl_result", "attempt_complete",
+                          "prepass_result", "stale_fixed"):
             if args:
                 if event_type == "log":
                     evt["level"] = args[0] if len(args) > 1 else "info"
@@ -271,6 +283,7 @@ async def partb_run(request: Request):
                     plan_mode=body.get("plan_mode", False),
                     use_base_only=body.get("use_base_only", False),
                     quality_mode=body.get("quality_mode", "fast"),
+                    auto_repair=body.get("auto_repair", False),
                 )
                 loop.call_soon_threadsafe(q.put_nowait, {
                     "type": "file_result",
@@ -313,6 +326,7 @@ async def combined_run(
     top_k_requirements: int = Form(10),
     use_base_only: bool = Form(False),
     quality_mode: str = Form("fast"),   # fast | balanced | best
+    auto_repair: bool = Form(False),    # opt-in: invoke PartC on confirmed bugs
 ):
     import tempfile, json as _json
 
@@ -368,6 +382,7 @@ async def combined_run(
                 top_k_requirements=top_k_requirements,
                 use_base_only=use_base_only,
                 quality_mode=quality_mode,
+                auto_repair=auto_repair,
                 log_callback=log_cb,
             )
             loop.call_soon_threadsafe(q.put_nowait, {"type": "result", "data": result})
@@ -390,6 +405,76 @@ async def combined_run(
 
 @app.get("/api/combined/stream")
 async def combined_stream(job_id: str):
+    return StreamingResponse(
+        _sse_stream(job_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PART C — APR (Automated Program Repair)
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/partc/run")
+async def partc_run(request: Request):
+    """
+    Body: {
+      "source_file":  "/abs/path/to/source.py",
+      "test_file":    "/abs/path/to/test_source.py",
+      "max_attempts": 3
+    }
+    Returns: { "job_id": "<id>" }  — stream via /api/partc/stream?job_id=<id>
+    """
+    body = await request.json()
+    source_file  = body.get("source_file", "")
+    test_file    = body.get("test_file", "")
+    max_attempts = int(body.get("max_attempts", 3))
+
+    if not source_file or not test_file:
+        return JSONResponse({"error": "source_file and test_file are required"}, status_code=400)
+
+    import os as _os
+    if not _os.path.isfile(source_file):
+        return JSONResponse({"error": f"source_file not found: {source_file}"}, status_code=400)
+    if not _os.path.isfile(test_file):
+        return JSONResponse({"error": f"test_file not found: {test_file}"}, status_code=400)
+
+    loop = asyncio.get_event_loop()
+    job_id, q = _new_job()
+
+    def _worker():
+        log_cb = _make_log_callback(q, loop)
+        try:
+            sys.path.insert(0, str(_ROOT / "PartC" / "api"))
+            sys.path.insert(0, str(_ROOT / "PartC"))
+            from partc_api import execute_part_c  # type: ignore[import]
+            from model_lifecycle import part_c_model  # type: ignore[import]
+
+            with part_c_model() as (model, tokenizer):
+                result = execute_part_c(
+                    source_file=source_file,
+                    test_file=test_file,
+                    model=model,
+                    tokenizer=tokenizer,
+                    max_attempts=max_attempts,
+                    log_callback=log_cb,
+                )
+
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "result", "data": result})
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "complete"})
+        except Exception as exc:
+            logger.exception("partc_run worker failed")
+            loop.call_soon_threadsafe(q.put_nowait, {
+                "type": "error", "message": str(exc)
+            })
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return JSONResponse({"job_id": job_id})
+
+
+@app.get("/api/partc/stream")
+async def partc_stream(job_id: str):
     return StreamingResponse(
         _sse_stream(job_id),
         media_type="text/event-stream",

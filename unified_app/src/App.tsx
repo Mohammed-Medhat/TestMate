@@ -7,14 +7,15 @@ import ProjectSettingsModal from './components/ProjectSettingsModal'
 import { getInitialStages, advanceStages, detectStageFromLog, type Stage } from './components/PipelineStepper'
 import type {
   View, Mode, PartAMode, ActiveTab, RunSettings, FileInfo,
-  ReviewRequest, PlanRequest, Requirement, Scenario, HistoryItem, PartAStats, Progress
+  ReviewRequest, PlanRequest, Requirement, Scenario, HistoryItem, PartAStats, Progress,
+  PartCResult, PrepassSummary, StaleDetail,
 } from './types'
 
 const API = (window as any).api?.baseUrl ?? 'http://127.0.0.1:8080'
 
 const DEFAULT_SETTINGS: RunSettings = {
   docker: false, deepScan: false, maxRetries: 3, hitl: false, intense: false,
-  planMode: false, useBaseOnly: false, qualityMode: 'fast',
+  planMode: false, useBaseOnly: false, qualityMode: 'fast', autoRepair: false,
 }
 
 export default function App() {
@@ -71,6 +72,14 @@ export default function App() {
   const [scenarios, setScenarios]       = useState<Scenario[]>([])
   const [features, setFeatures]         = useState<unknown>(null)
   const [partAStats, setPartAStats]     = useState<PartAStats>({ total:0, requirements:0, non_requirements:0, unlabeled:0 })
+
+  // Part C state
+  const [partcSourceIdx, setPartcSourceIdx] = useState<number | null>(null)
+  const [partcTestIdx,   setPartcTestIdx]   = useState<number | null>(null)
+
+  // Pre-pass state (existing test triage results)
+  const [prepassResults, setPrepassResults] = useState<PrepassSummary[]>([])
+  const [staleDetails,   setStaleDetails]   = useState<StaleDetail[]>([])
 
   // ── Load history on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -186,6 +195,8 @@ export default function App() {
         if (selected.size === 0) { setStatus('idle'); return }
         const selectedFiles = [...selected].map(i => files[i])
         setActiveTab('bugs')
+        setPrepassResults([])
+        setStaleDetails([])
         const res = await fetch(`${API}/api/partb/run`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -194,6 +205,7 @@ export default function App() {
             max_retries: settings.maxRetries, hitl: settings.hitl,
             intense: settings.intense, plan_mode: settings.planMode,
             use_base_only: settings.useBaseOnly, quality_mode: settings.qualityMode,
+            auto_repair: settings.autoRepair,
           }),
         })
         const { job_id } = await res.json()
@@ -217,6 +229,30 @@ export default function App() {
             setResults(msg.data)
             const cov = (msg.data as any)?.coverage_map
             if (cov) setSelectedCovFile(Object.keys(cov)[0] ?? '')
+          }
+          if (msg.type === 'prepass_result') {
+            const p = msg.data as PrepassSummary
+            setPrepassResults(prev => [...prev, p])
+            if (p.stale_tests_fixed > 0) setActiveTab('stale')
+            if (p.real_bugs_found > 0)   addLog(`🐛 Pre-pass: ${p.real_bugs_found} real bug(s) in ${p.source_file} → queued for PartC`)
+            if (p.stale_tests_fixed > 0) addLog(`🔄 Pre-pass: ${p.stale_tests_fixed} stale test(s) updated in ${p.source_file}`)
+            if (p.uncovered_funcs.length > 0) addLog(`📊 Pre-pass: generating tests for ${p.uncovered_funcs.length} uncovered function(s) in ${p.source_file}`)
+          }
+          if (msg.type === 'stale_fixed') {
+            setStaleDetails(prev => [...prev, msg.data as StaleDetail])
+          }
+          if (msg.type === 'repair_start')    addLog(`🔧 Bug Repair starting — ${msg.data?.total_files} file(s)`)
+          if (msg.type === 'repair_complete') {
+            const d = msg.data as any
+            addLog(d?.repair_success ? `✅ Repaired: ${d?.source_file}` : `❌ Could not repair: ${d?.source_file}`)
+            setResults((prev: any) => ({
+              ...prev,
+              part_c: [...(Array.isArray(prev?.part_c) ? prev.part_c : []), d],
+            }))
+          }
+          if (msg.type === 'verdict_update') {
+            const d = msg.data as any
+            addLog(`  ${d?.target}: ${d?.old_verdict} → ${d?.new_verdict}`)
           }
         }, ok => {
           setStatus(ok ? 'done' : 'error'); if (ok) setStages(s => advanceStages(s, 'done'))
@@ -263,11 +299,57 @@ export default function App() {
         saveRun('parta', `Extracted requirements from ${srsFile?.name ?? readme.slice(0, 30) + '…'}`, 'success')
         setStatus('done'); setStages(s => advanceStages(s, 'done'))
 
+      } else if (mode === 'partc') {
+        // Part C: SBFL-guided bug repair
+        if (partcSourceIdx === null || partcTestIdx === null) {
+          addLog('⚠️ Select a source file and a test file first')
+          setStatus('idle')
+          return
+        }
+        const srcFile  = files[partcSourceIdx]
+        const testFile = files[partcTestIdx]
+        setActiveTab('sbfl')
+        addLog(`🔧 Starting APR on ${srcFile.path.split('/').pop()} + ${testFile.path.split('/').pop()}…`)
+
+        const res = await fetch(`${API}/api/partc/run`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_file:  srcFile.abs_path,
+            test_file:    testFile.abs_path,
+            max_attempts: settings.maxRetries,
+          }),
+        })
+        const { job_id, error } = await res.json()
+        if (error) { addLog('❌ ' + error); setStatus('error'); return }
+
+        connectSSE(`${API}/api/partc/stream?job_id=${job_id}`, msg => {
+          if (msg.type === 'log')            addLog(msg.message ?? '')
+          if (msg.type === 'sbfl_result')    setResults((prev: any) => ({ ...prev, suspicious: msg.data }))
+          if (msg.type === 'attempt_complete') {
+            const att = msg.data as any
+            setResults((prev: any) => {
+              const existing = Array.isArray(prev?.attempts) ? prev.attempts : []
+              return { ...prev, attempts: [...existing, att] }
+            })
+            setActiveTab('patches')
+          }
+          if (msg.type === 'result') {
+            setResults(msg.data as PartCResult)
+          }
+        }, ok => {
+          setStatus(ok ? 'done' : 'error')
+          if (ok) setStages(s => advanceStages(s, 'done'))
+          saveRun('partc',
+            `Repaired ${srcFile.path.split('/').pop() ?? 'file'} from ${repoName || 'repo'}`,
+            ok ? 'success' : 'error')
+        })
+
       } else {
         // Combined — multi-file: SRS + README + discovered repo files
         if (selected.size === 0) { addLog('⚠️ Select at least one file to test'); setStatus('idle'); return }
         const selectedFiles = [...selected].map(i => files[i])
         setRequirements([]); setScenarios([]); setActiveTab('requirements')
+        setPrepassResults([]); setStaleDetails([])
         addLog(`Starting full pipeline on ${selectedFiles.length} file(s)…`)
 
         const fd = new FormData()
@@ -279,15 +361,17 @@ export default function App() {
         fd.append('plan_mode', String(settings.planMode))
         fd.append('use_base_only', String(settings.useBaseOnly))
         fd.append('quality_mode', settings.qualityMode ?? 'fast')
+        fd.append('auto_repair', String(settings.autoRepair))
 
         const res = await fetch(`${API}/api/combined/run`, { method: 'POST', body: fd })
         const { job_id, error } = await res.json()
         if (error) { addLog('❌ ' + error); setStatus('error'); return }
         connectSSE(`${API}/api/combined/stream?job_id=${job_id}`, msg => {
-          if (msg.type === 'log')        addLog(msg.message ?? '')
-          if (msg.type === 'progress')   setProgress({ current: msg.current, total: msg.total, file: msg.file })
+          if (msg.type === 'log')         addLog(msg.message ?? '')
+          if (msg.type === 'progress')    setProgress({ current: msg.current, total: msg.total, file: msg.file })
           if (msg.type === 'code_stream') setStream(p => p + (p ? '\n' : '') + (msg.code ?? ''))
-          // Early Part A result (arrives before Part B starts)
+
+          // ── Part A results ────────────────────────────────────────────────
           if (msg.type === 'result') {
             const d = msg.data as any
             if (d?.part_a?.requirements?.length) {
@@ -295,7 +379,6 @@ export default function App() {
               setActiveTab('requirements')
             }
             if (d?.part_a?.scenarios?.length) setScenarios(d.part_a.scenarios)
-            // merge: keep existing part_b array if this is just an early update
             setResults((prev: any) => ({
               ...d,
               part_b: Array.isArray(d.part_b) && d.part_b.length
@@ -303,7 +386,8 @@ export default function App() {
                 : (Array.isArray(prev?.part_b) ? prev.part_b : [])
             }))
           }
-          // Per-file Part B result — append incrementally
+
+          // ── Per-file Part B result ────────────────────────────────────────
           if (msg.type === 'file_result') {
             const fileData = msg.data as any
             setResults((prev: any) => {
@@ -312,14 +396,50 @@ export default function App() {
             })
             setActiveTab('testcode')
           }
+
+          // ── Pre-pass results (existing test triage) ───────────────────────
+          if (msg.type === 'prepass_result') {
+            const p = msg.data as PrepassSummary
+            setPrepassResults(prev => [...prev, p])
+            if (p.real_bugs_found > 0)    addLog(`🐛 Pre-pass: ${p.real_bugs_found} real bug(s) in ${p.source_file} → PartC queued`)
+            if (p.stale_tests_fixed > 0)  addLog(`🔄 Pre-pass: ${p.stale_tests_fixed} stale test(s) updated in ${p.source_file}`)
+            if (p.uncovered_funcs.length) addLog(`📊 Pre-pass: generating for ${p.uncovered_funcs.length} uncovered fn(s)`)
+          }
+          if (msg.type === 'stale_fixed') {
+            setStaleDetails(prev => [...prev, msg.data as StaleDetail])
+          }
+
+          // ── PartC repair events ───────────────────────────────────────────
+          if (msg.type === 'repair_start') {
+            addLog(`🔧 Auto-Repair starting (${msg.data?.total_files ?? '?'} file(s))`)
+            setStages(s => advanceStages(s, 'repair'))
+          }
+          if (msg.type === 'repair_complete') {
+            const d = msg.data as any
+            addLog(d?.repair_success
+              ? `✅ Repaired: ${d?.source_file}`
+              : `❌ Could not repair: ${d?.source_file}`)
+            setResults((prev: any) => ({
+              ...prev,
+              part_c: [...(Array.isArray(prev?.part_c) ? prev.part_c : []), d],
+            }))
+          }
+          if (msg.type === 'verdict_update') {
+            const d = msg.data as any
+            addLog(`  ${d?.target}: ${d?.old_verdict} → ${d?.new_verdict}`)
+          }
+          if (msg.type === 'sbfl_result') {
+            setResults((prev: any) => ({ ...prev, suspicious: msg.data }))
+          }
         }, ok => {
           setStatus(ok ? 'done' : 'error'); if (ok) setStages(s => advanceStages(s, 'done'))
           saveRun('combined', `Full pipeline on ${selectedFiles.length} file(s) from ${repoName || 'repo'}`,
                   ok ? 'success' : 'error')
         })
       }
+
     } catch (e: any) { addLog('❌ ' + e.message); setStatus('error') }
-  }, [mode, selected, files, repoUrl, branch, repoName, settings, partAMode, srsFile, readme, repoNameA, problems, expected, edgeCases, threshold, combSrsFile, combReadme])
+  }, [mode, selected, files, repoUrl, branch, repoName, settings, partAMode, srsFile, readme, repoNameA, problems, expected, edgeCases, threshold, combSrsFile, combReadme, partcSourceIdx, partcTestIdx])
 
   const partAStatsForSidebar = {
     total: partAStats.total,
@@ -335,7 +455,11 @@ export default function App() {
       ) : (
         <div className="flex h-full w-full workspace-entering">
           <LeftSidebar
-            mode={mode} setMode={m => { setMode(m); setActiveTab(m === 'partb' ? 'bugs' : 'requirements'); setStages(getInitialStages(m)) }}
+            mode={mode} setMode={m => {
+              setMode(m)
+              setActiveTab(m === 'partb' ? 'bugs' : m === 'partc' ? 'sbfl' : 'requirements')
+              setStages(getInitialStages(m))
+            }}
             onHome={goHome} onSettings={() => setModal(true)} settings={settings}
             repoUrl={repoUrl} setRepoUrl={setRepoUrl}
             branch={branch} setBranch={setBranch}
@@ -353,6 +477,8 @@ export default function App() {
             combReadme={combReadme} setCombReadme={setCombReadme}
             combTargetFile={combTargetFile} setCombTargetFile={setCombTargetFile}
             combImportPath={combImportPath} setCombImportPath={setCombImportPath}
+            partcSourceIdx={partcSourceIdx} setPartcSourceIdx={setPartcSourceIdx}
+            partcTestIdx={partcTestIdx} setPartcTestIdx={setPartcTestIdx}
             status={status} startRun={startRun}
           />
           <MainContent
@@ -365,8 +491,9 @@ export default function App() {
             reviewRequest={reviewRequest} onReviewDecision={handleReview}
             planRequest={planRequest} onPlanDecision={handlePlan}
             requirements={requirements} scenarios={scenarios} features={features}
+            prepassResults={prepassResults} staleDetails={staleDetails}
           />
-          <RightSidebar mode={mode} results={results} logs={logs} partAStats={partAStatsForSidebar} />
+          <RightSidebar mode={mode} results={results} logs={logs} partAStats={partAStatsForSidebar} prepassResults={prepassResults} />
         </div>
       )}
 

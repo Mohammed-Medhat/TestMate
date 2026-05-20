@@ -1,4 +1,4 @@
-import type { Mode } from '../types'
+import type { Mode, PrepassSummary } from '../types'
 
 function CircularProgress({ percentage = 0, color, size = 60 }: {
   percentage?: number; color: string; size?: number
@@ -40,9 +40,10 @@ interface Props {
   results: any
   logs: string[]
   partAStats?: { total: number; requirements: number; scenarios: number; matchScoreAvg: number }
+  prepassResults?: PrepassSummary[]
 }
 
-export default function RightSidebar({ mode, results, logs, partAStats }: Props) {
+export default function RightSidebar({ mode, results, logs, partAStats, prepassResults = [] }: Props) {
   const traceLogs = logs.filter(l => l && !l.startsWith('─') && !l.startsWith('═')).slice(-20)
 
   // PartB metrics (verbatim from PartB/gui)
@@ -55,13 +56,18 @@ export default function RightSidebar({ mode, results, logs, partAStats }: Props)
 
   const metrics = (() => {
     if (mode === 'partb') {
+      const totalStale    = prepassResults.reduce((s, p) => s + p.stale_tests_fixed, 0)
+      const totalRealBugs = prepassResults.reduce((s, p) => s + p.real_bugs_found, 0)
+      const repairs       = (results?.repairs ?? []) as any[]
+      const repairsOk     = repairs.filter((r: any) => r.success).length
       return [
-        { label: 'Mutation Score', value: `${typeof mutScore === 'number' ? mutScore.toFixed(0) : mutScore}%`, percentage: Math.round(mutScore), color: '#f59e0b' },
-        { label: 'Coverage',       value: `${typeof cov === 'number' ? cov.toFixed(1) : cov}%`,              percentage: Math.round(cov),      color: '#10b981' },
-        { label: 'Security Issues',value: bugsFound > 0 ? `${bugsFound} Found` : 'None',                      color: '#ef4444' },
-        { label: 'Test Results',   value: totalTests > 0 ? `${passedTests}/${totalTests}` : '—',
-          subValue: totalTests > 0 ? `${typeof passRate === 'number' ? passRate.toFixed(0) : passRate}% pass rate` : '',
-          percentage: Math.round(passRate), color: '#6366f1' },
+        { label: 'Mutation Score',  value: `${typeof mutScore === 'number' ? mutScore.toFixed(0) : mutScore}%`, percentage: Math.round(mutScore), color: '#f59e0b' },
+        { label: 'Coverage',        value: `${typeof cov === 'number' ? cov.toFixed(1) : cov}%`,               percentage: Math.round(cov),      color: '#10b981' },
+        { label: 'Bugs Detected',   value: (bugsFound + totalRealBugs) > 0 ? `${bugsFound + totalRealBugs} Found` : 'None', color: '#ef4444' },
+        { label: 'Stale Tests',     value: totalStale > 0 ? `${totalStale} Fixed` : 'None', color: '#f59e0b' },
+        { label: 'Auto-Repairs',    value: repairs.length > 0 ? `${repairsOk}/${repairs.length}` : '—',
+          subValue: repairs.length > 0 ? `${repairsOk === repairs.length ? 'All fixed' : 'Some failed'}` : '',
+          percentage: repairs.length > 0 ? Math.round(repairsOk / repairs.length * 100) : 0, color: '#10b981' },
       ]
     }
     if (mode === 'parta') {

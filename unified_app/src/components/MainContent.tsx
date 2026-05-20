@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronRight, Bug, Shield, FlaskConical, X, Eye, FileCode,
   AlertTriangle, CheckCircle, XCircle, Pencil, Pause, ClipboardList, MessageSquare, Send } from 'lucide-react'
-import type { Mode, ActiveTab, ReviewRequest, PlanRequest, Requirement, Scenario } from '../types'
+import type { Mode, ActiveTab, ReviewRequest, PlanRequest, Requirement, Scenario, PartCResult, PrepassSummary, StaleDetail } from '../types'
 import RequirementsList from './RequirementsList'
 import ScenariosList from './ScenariosList'
 import CodeViewer from './CodeViewer'
@@ -29,6 +29,9 @@ interface Props {
   requirements: Requirement[]
   scenarios: Scenario[]
   features: unknown
+  // Pre-pass results
+  prepassResults?: PrepassSummary[]
+  staleDetails?: StaleDetail[]
 }
 
 /* ── Severity badge ────────────────────────────────────── */
@@ -277,6 +280,7 @@ function PlanReviewPanel({ plan, onDecision }: { plan: PlanRequest; onDecision: 
 /* ── Combined Test Code view (per-file picker + code viewer) ─────────── */
 function CombinedTestCodeView({ results }: { results: any }) {
   const partB = results?.part_b
+  const partC: any[] = Array.isArray(results?.part_c) ? results.part_c : []
   const files: any[] = Array.isArray(partB)
     ? partB
     : (partB && typeof partB === 'object' && partB.test_code)
@@ -292,33 +296,64 @@ function CombinedTestCodeView({ results }: { results: any }) {
   }
 
   const cur = files[Math.min(selectedIdx, files.length - 1)]
-  const matched = cur?.matched_requirements_count
+
+  // Find repair result for current file
+  const curRepair = partC.find((r: any) =>
+    r.source_file && cur?.target && r.source_file === cur.target.split('/').pop()
+  )
+
+  const repairsOk = partC.filter((r: any) => r.repair_success).length
 
   return (
     <div className="flex flex-col h-full">
+
+      {/* Auto-repair summary banner — shown if any repairs ran */}
+      {partC.length > 0 && (
+        <div className={`px-4 py-2 flex items-center gap-3 text-xs shrink-0 border-b ${
+          repairsOk > 0
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          <span className="text-base">{repairsOk > 0 ? '🔧' : '❌'}</span>
+          <span className="font-medium">
+            Auto-Repair: {repairsOk}/{partC.length} file{partC.length !== 1 ? 's' : ''} patched
+          </span>
+          {partC.map((r: any, i: number) => (
+            <span key={i} className={`px-2 py-0.5 rounded-full border text-[10px] ${
+              r.repair_success
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/10 border-red-500/20 text-red-400'
+            }`}>
+              {r.repair_success ? '✅' : '❌'} {r.source_file}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* File picker */}
       <div className="flex items-center gap-2 p-3 border-b border-zinc-800 bg-zinc-900/50 flex-wrap shrink-0">
         <span className="text-[10px] uppercase tracking-wider text-zinc-500 mr-1">
           {files.length} test file{files.length !== 1 ? 's' : ''}
         </span>
-        {files.map((f, i) => (
-          <button key={i} onClick={() => setSelectedIdx(i)}
-            className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-              i === selectedIdx
-                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                : f.success === false
-                  ? 'border-red-500/30 text-red-400 hover:border-red-500/50'
-                  : 'border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
-            }`}>
-            <FileCode size={11} />
-            {f.file?.split('/').pop() ?? f.test_file ?? `test_${i}.py`}
-            {f.success === false && <X size={10} className="text-red-400" />}
-            {f.iterations > 1 && f.success && (
-              <span className="text-[9px] text-zinc-600">{f.iterations}x</span>
-            )}
-          </button>
-        ))}
-        {/* Spinner for files still being generated */}
+        {files.map((f, i) => {
+          const repair = partC.find((r: any) => r.source_file === f.target?.split('/').pop())
+          return (
+            <button key={i} onClick={() => setSelectedIdx(i)}
+              className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                i === selectedIdx
+                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                  : f.success === false
+                    ? 'border-red-500/30 text-red-400 hover:border-red-500/50'
+                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+              }`}>
+              <FileCode size={11} />
+              {f.file?.split('/').pop() ?? f.test_file ?? `test_${i}.py`}
+              {f.success === false && <X size={10} className="text-red-400" />}
+              {repair?.repair_success && <span className="text-[9px] text-emerald-400">🔧</span>}
+              {repair && !repair.repair_success && <span className="text-[9px] text-red-400">❌</span>}
+            </button>
+          )
+        })}
       </div>
 
       {/* Per-file meta */}
@@ -334,16 +369,31 @@ function CombinedTestCodeView({ results }: { results: any }) {
             </span>
           )}
           {cur.error && <span className="text-red-400">❌ {cur.error}</span>}
+          {/* Repair status for this file */}
+          {curRepair?.repair_success && (
+            <span className="text-emerald-400">🔧 Bug auto-repaired by PartC</span>
+          )}
+          {curRepair && !curRepair.repair_success && (
+            <span className="text-red-400">❌ PartC could not repair</span>
+          )}
         </div>
       )}
 
-      {/* Code */}
+      {/* Patched code (if repaired) or generated test code */}
       <div className="flex-1 overflow-auto">
-        {cur?.test_code
-          ? <CodeViewer code={cur.test_code} filename={cur.test_file ?? cur.file ?? 'test.py'} />
-          : <EmptyState icon={<Bug size={32} className="text-zinc-600" />}
-              text="No test code for this file" sub={cur?.error ?? 'Generation may have failed silently.'} />
-        }
+        {curRepair?.repair_success && curRepair.patched ? (
+          <div>
+            <div className="px-4 py-1.5 bg-emerald-500/5 border-b border-emerald-500/20 text-[11px] text-emerald-400">
+              Showing: PartC repaired source code
+            </div>
+            <CodeViewer code={curRepair.patched} filename={curRepair.source_file ?? 'source.py'} />
+          </div>
+        ) : cur?.test_code ? (
+          <CodeViewer code={cur.test_code} filename={cur.test_file ?? cur.file ?? 'test.py'} />
+        ) : (
+          <EmptyState icon={<Bug size={32} className="text-zinc-600" />}
+            text="No test code for this file" sub={cur?.error ?? 'Generation may have failed silently.'} />
+        )}
       </div>
     </div>
   )
@@ -357,22 +407,35 @@ export default function MainContent({
   selectedCoverageFile, setSelectedCoverageFile,
   reviewRequest, onReviewDecision, planRequest, onPlanDecision,
   requirements, scenarios, features,
+  prepassResults = [], staleDetails = [],
 }: Props) {
   const bugs = results?.bug_reports?.filter((b: any) => b.bug_type !== 'mutation_survivor') || []
   const mutations = results?.bug_reports?.filter((b: any) => b.bug_type === 'mutation_survivor') || []
 
+  const partcResult = results as PartCResult | null
+
   // Tabs per mode
+  const totalStale    = prepassResults.reduce((s, p) => s + p.stale_tests_fixed, 0)
+  const totalUncovered = prepassResults.reduce((s, p) => s + p.uncovered_funcs.length, 0)
+  const totalRealBugs  = prepassResults.reduce((s, p) => s + p.real_bugs_found, 0)
+
   const tabs: { key: ActiveTab; label: string; count?: number; icon: React.ReactNode }[] = mode === 'partb'
     ? [
-        { key: 'bugs',      label: 'Zero-Day Bugs', count: bugs.length,      icon: <Bug size={14} /> },
+        { key: 'bugs',      label: 'Zero-Day Bugs', count: bugs.length + totalRealBugs, icon: <Bug size={14} /> },
+        { key: 'stale',     label: 'Stale Tests',   count: totalStale > 0 ? totalStale : undefined, icon: <Pencil size={14} /> },
         { key: 'coverage',  label: 'Coverage',                                icon: <Shield size={14} /> },
-        { key: 'mutations', label: 'Mutations',     count: mutations.length,  icon: <FlaskConical size={14} /> },
+        { key: 'mutations', label: 'Mutations',      count: mutations.length,  icon: <FlaskConical size={14} /> },
       ]
     : mode === 'parta'
     ? [
         { key: 'requirements', label: 'Requirements', count: requirements.length, icon: <FileCode size={14} /> },
         { key: 'scenarios',    label: 'Scenarios',    count: scenarios.length,    icon: <Eye size={14} /> },
         { key: 'features',     label: 'Features',                                  icon: <Shield size={14} /> },
+      ]
+    : mode === 'partc'
+    ? [
+        { key: 'sbfl',    label: 'SBFL',    count: partcResult?.suspicious?.length, icon: <AlertTriangle size={14} /> },
+        { key: 'patches', label: 'Patches', count: partcResult?.attempts?.length,   icon: <Pencil size={14} /> },
       ]
     : [
         { key: 'requirements', label: 'Requirements', icon: <FileCode size={14} /> },
@@ -433,20 +496,60 @@ export default function MainContent({
         {/* Tab content */}
         {!reviewRequest && !planRequest && (
           <div className="flex-1">
+            {/* Part B — Stale Tests tab */}
+            {mode === 'partb' && activeTab === 'stale' && (
+              <StaleTestsView prepassResults={prepassResults} staleDetails={staleDetails} />
+            )}
+
             {/* Part B tabs */}
             {mode === 'partb' && activeTab === 'bugs' && (
               bugs.length === 0
                 ? <EmptyState icon={<Bug size={32} className="text-zinc-600" />} text="No zero-day bugs detected" sub={results ? 'Clean run!' : 'Run evaluation to see results.'} />
                 : <div className="p-4 space-y-2">
-                    {bugs.map((bug: any, i: number) => (
-                      <div key={i} onClick={() => setSelectedBug({ bug, index: i })}
-                        className="flex items-center gap-3 p-3 bg-zinc-900 rounded-lg border border-zinc-800 hover:border-red-500/30 cursor-pointer transition-colors">
-                        <Bug size={16} className="text-red-400 shrink-0" />
-                        <div className="flex-1 min-w-0"><p className="text-sm text-zinc-200 truncate">{bug.description || bug.bug_type}</p><p className="text-xs text-zinc-500 font-mono">{bug.target}</p></div>
-                        <SeverityBadge severity={bug.confidence || 'High'} />
-                        <button className="text-zinc-500 hover:text-zinc-200"><Eye size={14} /></button>
-                      </div>
-                    ))}
+                    {bugs.map((bug: any, i: number) => {
+                      const repair = bug.repair
+                      return (
+                        <div key={i} onClick={() => setSelectedBug({ bug, index: i })}
+                          className={`flex items-center gap-3 p-3 bg-zinc-900 rounded-lg border cursor-pointer transition-colors ${
+                            repair?.success ? 'border-emerald-500/30 hover:border-emerald-500/50'
+                            : repair?.attempted ? 'border-red-500/20 hover:border-red-500/30'
+                            : 'border-zinc-800 hover:border-red-500/30'
+                          }`}>
+                          <Bug size={16} className="text-red-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-zinc-200 truncate">{bug.description || bug.bug_type}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <p className="text-xs text-zinc-500 font-mono">{bug.target}</p>
+                              {/* Bug source type badge */}
+                              {bug.bug_type === 'mutation_survivor' && (
+                                <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">mutmut</span>
+                              )}
+                              {bug.verdict === 'confirmed' && bug.bug_type === 'logic_error' && !bug.repair && (
+                                <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">pre-pass</span>
+                              )}
+                              {bug.confidence_score !== undefined && (
+                                <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-zinc-700">
+                                  {bug.confidence_score}/100
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Repair status badge */}
+                          {repair?.success && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                              🔧 Fixed
+                            </span>
+                          )}
+                          {repair?.attempted && !repair?.success && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
+                              ❌ Unfixable
+                            </span>
+                          )}
+                          <SeverityBadge severity={bug.confidence || 'High'} />
+                          <button className="text-zinc-500 hover:text-zinc-200"><Eye size={14} /></button>
+                        </div>
+                      )
+                    })}
                   </div>
             )}
             {mode === 'partb' && activeTab === 'coverage' && <CoverageView results={results} selectedFile={selectedCoverageFile} setSelectedFile={setSelectedCoverageFile} />}
@@ -470,11 +573,15 @@ export default function MainContent({
             {mode === 'combined' && activeTab === 'scenarios'    && <ScenariosList scenarios={scenarios} />}
             {mode === 'combined' && activeTab === 'testcode'     && <CombinedTestCodeView results={results} />}
 
+            {/* Part C tabs */}
+            {mode === 'partc' && activeTab === 'sbfl' && <SbflView result={partcResult} />}
+            {mode === 'partc' && activeTab === 'patches' && <PatchesView result={partcResult} />}
+
             {/* Idle welcome */}
             {status === 'idle' && !requirements.length && !results && (
               <EmptyState
-                icon={<span className="text-5xl">{mode === 'combined' ? '🔗' : mode === 'parta' ? '📄' : '🤖'}</span>}
-                text={mode === 'combined' ? 'Fill in the sidebar and run the full pipeline' : mode === 'parta' ? 'Configure inputs and run Part A' : 'Discover a repository and generate tests'}
+                icon={<span className="text-5xl">{mode === 'combined' ? '🔗' : mode === 'parta' ? '📄' : mode === 'partb' ? '🤖' : '🔧'}</span>}
+                text={mode === 'combined' ? 'Fill in the sidebar and run the full pipeline' : mode === 'parta' ? 'Configure inputs and run Part A' : mode === 'partb' ? 'Discover a repository and generate tests' : 'Select a buggy file and test suite, then run repair'}
                 sub=""
               />
             )}
@@ -485,6 +592,222 @@ export default function MainContent({
       {/* Bug detail modal */}
       {selectedBug && (
         <BugDetailModal bug={selectedBug.bug} index={selectedBug.index} onClose={() => setSelectedBug(null)} />
+      )}
+    </div>
+  )
+}
+
+/* ── Stale Tests view ─────────────────────────────────── */
+function StaleTestsView({ prepassResults, staleDetails }: {
+  prepassResults: PrepassSummary[]
+  staleDetails: StaleDetail[]
+}) {
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  const filesWithExisting = prepassResults.filter(p => p.has_existing)
+  const totalStale        = prepassResults.reduce((s, p) => s + p.stale_tests_fixed, 0)
+  const totalUncovered    = prepassResults.reduce((s, p) => s + p.uncovered_funcs.length, 0)
+  const totalRealBugs     = prepassResults.reduce((s, p) => s + p.real_bugs_found, 0)
+
+  if (filesWithExisting.length === 0) return (
+    <EmptyState
+      icon={<Pencil size={32} className="text-zinc-600" />}
+      text="No existing tests found"
+      sub="PartB will generate fresh test_<source>_testmate.py files."
+    />
+  )
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Summary row */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Real Bugs Found', value: totalRealBugs, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+          { label: 'Stale Tests Fixed', value: totalStale,   color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+          { label: 'Coverage Gaps',  value: totalUncovered, color: 'text-blue-400',  bg: 'bg-blue-500/10 border-blue-500/20' },
+        ].map(m => (
+          <div key={m.label} className={`rounded-lg border p-3 text-center ${m.bg}`}>
+            <p className={`text-2xl font-bold ${m.color}`}>{m.value}</p>
+            <p className="text-xs text-zinc-500 mt-1">{m.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-file breakdown */}
+      {filesWithExisting.map((p, i) => (
+        <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+          <button
+            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+            onClick={() => setExpanded(expanded === i ? null : i)}
+          >
+            <FileCode size={15} className="text-zinc-400 shrink-0" />
+            <span className="text-sm font-medium text-zinc-200">{p.source_file}</span>
+            <div className="flex items-center gap-2 ml-auto">
+              {p.all_pass && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">All pass</span>}
+              {p.real_bugs_found > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{p.real_bugs_found} bug{p.real_bugs_found > 1 ? 's' : ''}</span>}
+              {p.stale_tests_fixed > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">{p.stale_tests_fixed} stale</span>}
+              {p.uncovered_funcs.length > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">{p.uncovered_funcs.length} gaps</span>}
+              <ChevronRight size={14} className={`text-zinc-500 transition-transform ${expanded === i ? 'rotate-90' : ''}`} />
+            </div>
+          </button>
+
+          {expanded === i && (
+            <div className="px-4 pb-4 space-y-3 border-t border-zinc-800">
+              {/* Existing test files */}
+              <div className="pt-3">
+                <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Existing test files</p>
+                {p.existing_test_files.map(f => (
+                  <span key={f} className="inline-block mr-2 text-xs text-zinc-400 font-mono bg-zinc-800 px-2 py-0.5 rounded">{f}</span>
+                ))}
+              </div>
+
+              {/* Coverage gaps */}
+              {p.uncovered_funcs.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-blue-400 uppercase tracking-wider mb-1">Coverage gaps — generating tests for:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {p.uncovered_funcs.map(fn => (
+                      <span key={fn} className="text-xs text-blue-300 font-mono bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded">{fn}()</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Stale test details */}
+              {p.stale_details?.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-amber-400 uppercase tracking-wider mb-1">Stale tests auto-updated (.testmate.bak backup created)</p>
+                  {p.stale_details.map((sd, j) => (
+                    <div key={j} className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                      <p className="text-xs font-medium text-amber-300">{sd.func_name}() in {sd.test_file}</p>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">Backup: {sd.backup_path}</p>
+                      {sd.fresh_code && (
+                        <pre className="text-[10px] font-mono text-zinc-400 mt-1 overflow-x-auto max-h-20 bg-zinc-950 rounded p-2">
+                          {sd.fresh_code}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── SBFL view ─────────────────────────────────────────── */
+function SbflView({ result }: { result: PartCResult | null }) {
+  const lines = result?.suspicious ?? []
+  if (!lines.length) return (
+    <EmptyState
+      icon={<AlertTriangle size={32} className="text-zinc-600" />}
+      text="No SBFL data yet"
+      sub="Run a repair to see suspicious lines ranked by Ochiai score."
+    />
+  )
+
+  const maxScore = Math.max(...lines.map(l => l.score), 0.001)
+  return (
+    <div className="p-4 space-y-2">
+      <p className="text-xs text-zinc-500 mb-3">Top suspicious lines by Ochiai fault-localization score</p>
+      {lines.map((ln, i) => {
+        const pct = Math.round((ln.score / maxScore) * 100)
+        return (
+          <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-amber-500/30 transition-colors">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-mono">
+                L{ln.line}
+              </span>
+              <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-500 transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-xs text-amber-400 font-mono w-14 text-right">{ln.score.toFixed(3)}</span>
+            </div>
+            <pre className="text-xs text-zinc-300 font-mono bg-zinc-950 rounded px-3 py-2 overflow-x-auto">
+              {ln.code || '(empty line)'}
+            </pre>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ── Patches view ──────────────────────────────────────── */
+function PatchesView({ result }: { result: PartCResult | null }) {
+  const [showDiff, setShowDiff] = useState<number | null>(null)
+  const attempts = result?.attempts ?? []
+
+  if (!attempts.length) return (
+    <EmptyState
+      icon={<Pencil size={32} className="text-zinc-600" />}
+      text="No repair attempts yet"
+      sub="Run a repair to see per-attempt patch history."
+    />
+  )
+
+  return (
+    <div className="p-4 space-y-3">
+      {/* Summary bar */}
+      {result && (
+        <div className={`flex items-center gap-3 p-3 rounded-lg border ${
+          result.success
+            ? 'bg-emerald-500/10 border-emerald-500/30'
+            : 'bg-red-500/10 border-red-500/30'
+        }`}>
+          {result.success
+            ? <CheckCircle size={20} className="text-emerald-400" />
+            : <XCircle size={20} className="text-red-400" />
+          }
+          <div>
+            <p className="text-sm font-medium text-zinc-200">
+              {result.success ? 'Bug fixed!' : 'Repair failed'}
+            </p>
+            <p className="text-xs text-zinc-500">
+              {attempts.length} attempt{attempts.length !== 1 ? 's' : ''} · {result.elapsed_sec}s
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Attempt cards */}
+      {attempts.map((att, i) => (
+        <div key={i} className={`bg-zinc-900 border rounded-lg overflow-hidden ${
+          att.status === 'success' ? 'border-emerald-500/30' : 'border-zinc-800'
+        }`}>
+          <div className="flex items-center gap-3 px-3 py-2 border-b border-zinc-800">
+            {att.status === 'success'
+              ? <CheckCircle size={15} className="text-emerald-400" />
+              : <XCircle size={15} className="text-red-400" />
+            }
+            <span className="text-sm font-medium text-zinc-200">Attempt {att.n}</span>
+            <span className="text-xs text-zinc-500 ml-auto">{att.result}</span>
+            {att.patched && (
+              <button onClick={() => setShowDiff(showDiff === i ? null : i)}
+                className="text-xs text-amber-400 hover:text-amber-300 ml-2">
+                {showDiff === i ? 'Hide' : 'View'} patch
+              </button>
+            )}
+          </div>
+          {showDiff === i && att.patched && (
+            <pre className="text-xs text-zinc-300 font-mono p-3 overflow-x-auto bg-zinc-950 max-h-64">
+              {att.patched}
+            </pre>
+          )}
+        </div>
+      ))}
+
+      {/* Final patched code */}
+      {result?.success && result.patched && (
+        <div className="mt-4">
+          <h3 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Fixed Source</h3>
+          <pre className="text-xs text-zinc-300 font-mono bg-zinc-900 border border-emerald-500/20 rounded-lg p-4 overflow-x-auto max-h-80">
+            {result.patched}
+          </pre>
+        </div>
       )}
     </div>
   )

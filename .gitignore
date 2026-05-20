@@ -33,9 +33,11 @@ repos/
 .coverage
 coverage.json
 output.txt
+spectrum.json
 
 # ========================
 # Model Weights & Checkpoints
+# (too large for git — download separately)
 # ========================
 models/
 *.safetensors
@@ -72,15 +74,54 @@ desktop.ini
 PartA/
 
 # ========================
-# Eval benchmark files (large, downloadable)
+# PartB — eval benchmark files (large, downloadable)
 # ========================
 PartB/testgen_eval_lite/testgen_eval_files/
+PartB/eval_lite/testgen_eval_files/
 
 # ========================
-# LoRA model weights (too large for git)
+# PartB — LoRA model weights
 # ========================
 PartB/models/graphrag_lora/
 PartB/value_reasoning/kaggle/working/value_reasoning_model/
+PartB/value_reasoning_model/
+
+# ========================
+# PartB — runtime outputs
+# ========================
+PartB/outputs/repos/
+PartB/outputs/results/
+PartB/outputs/generated_tests/
+PartB/testgen/repos/
+PartB/testgen/generated_tests/*.py
+PartB/testgen/generated_tests/bug_reports.jsonl
+PartB/testgen/generated_tests/discarded_reports.jsonl
+
+# ========================
+# PartC — workspaces (repair sandboxes, auto-generated)
+# ========================
+PartC/workspaces/
+
+# ========================
+# PartC — LoRA training artifacts (weights committed separately)
+# ========================
+PartC/models/adapter/optimizer.pt
+PartC/models/adapter/rng_state.pth
+PartC/models/adapter/scaler.pt
+PartC/models/adapter/scheduler.pt
+PartC/models/pre_final/
+
+# ========================
+# Pipeline test artifacts (generated during test runs)
+# ========================
+PartB/testgen/pipeline_test/__pycache__/
+PartB/testgen/pipeline_test/.coverage
+PartB/testgen/pipeline_test/bug_reports.jsonl
+PartB/testgen/pipeline_test/discarded_reports.jsonl
+PartB/testgen/pipeline_test/patched/
+PartB/testgen/pipeline_test/test_buggy_calculator_testmate.py
+PartB/testgen/pipeline_test/_*.py
+
 # ========================
 # Node / Electron build artifacts
 # ========================
@@ -89,18 +130,8 @@ out/
 dist/
 
 # ========================
-# Updated LoRA paths after restructure
+# Unified app runtime
 # ========================
-PartB/value_reasoning_model/
-
-# ========================
-# Runtime generated outputs
-# ========================
-PartB/outputs/repos/
-PartB/outputs/results/
 unified_app/results/history.json
-
-# ========================
-# Eval benchmark files (large, downloadable)
-# ========================
-PartB/eval_lite/testgen_eval_files/
+unified_app/flywheel_data.jsonl
+unified_app/testmate_rag.db
