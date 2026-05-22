@@ -59,7 +59,9 @@ class AblationConfig:
     enable_layer2_vector: bool
     enable_rag_memory: bool
     enable_self_correction_loop: bool
-    enable_plan_mode: bool = False                # NEW: explicit plan-first generation
+    enable_plan_mode: bool = False
+    enable_lora: bool = False
+    lora_path: Optional[str] = None
     max_retries: int = 3
     sample_size: Optional[int] = None             # None = use ALL files in eval_lite
     max_new_tokens: int = 1024
@@ -109,6 +111,14 @@ def load_qwen_base_4bit(model_id: str = DEFAULT_MODEL_ID):
         used = torch.cuda.memory_allocated() / 1e9
         print(f"   ✅ Loaded — {used:.1f} GB VRAM in use")
     return model, tokenizer
+
+
+def attach_lora(model, lora_path: str):
+    """Attach a LoRA adapter on top of the base 4-bit model."""
+    from peft import PeftModel
+    posix = Path(lora_path).resolve().as_posix()
+    print(f"🔌 Attaching LoRA adapter from {posix}")
+    return PeftModel.from_pretrained(model, posix)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -222,48 +232,180 @@ def build_rag_context(source_code: str,
     return rag
 
 
+# ─── Cached resources (avoid re-loading per file) ────────────────────────────
+_DOCS_RETRIEVER = None
+_VECTOR_ENCODER = None
+
+
 def _query_layer1_docs(source_code: str, top_k: int = 3) -> list[str]:
+    """FAISS over docs corpus (Django / sklearn / SymPy demo index)."""
+    global _DOCS_RETRIEVER
     try:
-        from layers.docs.docs_retriever import create_demo_index
-        retriever = create_demo_index()
-        results = retriever.retrieve(source_code[:500], top_k=top_k)
-        return [r.chunk.content[:300] for r in results.results]
+        if _DOCS_RETRIEVER is None:
+            from layers.docs.docs_retriever import create_demo_index
+            _DOCS_RETRIEVER = create_demo_index()
+        result_obj = _DOCS_RETRIEVER.retrieve(source_code[:500], top_k=top_k)
+        # `retrieve` returns a RetrievalResults object with `.results`
+        return [r.chunk.content[:300] for r in result_obj.results]
     except Exception as exc:
         logger.warning("Layer 1 docs query failed: %s", exc)
         return []
 
 
 def _query_layer2_graph(file_path: str, source_code: str, top_k: int = 5) -> tuple[list[str], int]:
+    """
+    Build an in-memory call graph from the source code being tested,
+    then take 2-hop neighborhoods of the top public functions.
+    This matches what `PartB/testgen/main.py:build_call_graph` does in production.
+    """
     try:
-        from layers.code.graph_rag import KGCompassGraphRAG
-        graph = KGCompassGraphRAG()
-        graph.add_file_from_source(file_path, source_code)
-        related = graph.find_related_functions(query=source_code[:300], top_k=top_k)
-        # estimate hop depth from graph metadata if available
-        hop_depth = getattr(graph, "last_query_max_hops", 1)
-        return [str(r) for r in related], hop_depth
+        # Make `from main import …` work (PartB/testgen on sys.path)
+        import sys
+        from pathlib import Path
+        testgen_dir = Path(__file__).resolve().parent.parent
+        if str(testgen_dir) not in sys.path:
+            sys.path.insert(0, str(testgen_dir))
+        from main import build_call_graph, get_2hop_subgraph
+    except Exception as exc:
+        logger.warning("Layer 2 graph import failed: %s", exc)
+        return [], 0
+
+    try:
+        G = build_call_graph(source_code)
+        if not G.nodes:
+            return [], 0
+
+        # Pick public top-level functions / methods as seeds (skip dunders)
+        public = [n for n in G.nodes if not n.split(".")[-1].startswith("_")]
+        if not public:
+            return [], 0
+        seeds = sorted(public, key=lambda n: G.nodes[n].get("lineno", 1 << 30))[:top_k]
+
+        out: list[str] = []
+        max_hop = 1
+        for seed in seeds:
+            sub = get_2hop_subgraph(G, seed)
+            callees   = sub["callees"][:5]
+            callers   = sub["callers"][:3]
+            hop2      = sub["callees_of_callees"][:3]
+            parts = [f"# {seed}"]
+            if callers: parts.append(f"  callers: {', '.join(callers)}")
+            if callees: parts.append(f"  callees: {', '.join(callees)}")
+            if hop2:
+                max_hop = 2
+                parts.append(f"  hop-2 callees: {', '.join(hop2)}")
+            if len(parts) > 1:
+                out.append("\n".join(parts))
+        return out, max_hop
     except Exception as exc:
         logger.warning("Layer 2 graph query failed: %s", exc)
         return [], 0
 
 
 def _query_layer2_vector(source_code: str, top_k: int = 3) -> list[str]:
+    """
+    Semantic 'vector RAG over code' for an isolated file: embed each function
+    and find pairs of intra-file functions whose embeddings are most similar.
+    Gives the LLM a hint about which functions in the source are related.
+    """
+    global _VECTOR_ENCODER
     try:
-        from layers.code.code_navigator import CodeNavigator
-        nav = CodeNavigator()
-        results = nav.search_semantic(source_code[:500], top_k=top_k)
-        return [str(r) for r in results]
+        tree = ast.parse(source_code)
+    except SyntaxError:
+        return []
+
+    # Extract (name, snippet) pairs for each top-level def
+    funcs: list[tuple[str, str]] = []
+    src_lines = source_code.splitlines()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            start = node.lineno - 1
+            end   = node.end_lineno or (start + 1)
+            snippet = "\n".join(src_lines[start:end])[:400]
+            funcs.append((node.name, snippet))
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    start = item.lineno - 1
+                    end   = item.end_lineno or (start + 1)
+                    snippet = "\n".join(src_lines[start:end])[:400]
+                    funcs.append((f"{node.name}.{item.name}", snippet))
+
+    if len(funcs) < 2:
+        return []
+
+    try:
+        if _VECTOR_ENCODER is None:
+            from sentence_transformers import SentenceTransformer
+            _VECTOR_ENCODER = SentenceTransformer("all-MiniLM-L6-v2")
+        names    = [f[0] for f in funcs]
+        snippets = [f[1] for f in funcs]
+        embeddings = _VECTOR_ENCODER.encode(snippets, convert_to_numpy=True,
+                                            show_progress_bar=False)
+
+        import numpy as np
+        # Cosine similarity matrix, zero the diagonal so a function isn't paired with itself
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-9
+        normed = embeddings / norms
+        sim = normed @ normed.T
+        np.fill_diagonal(sim, -1.0)
+
+        # Find top-K most similar pairs
+        n = len(names)
+        triu_idx = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        triu_idx.sort(key=lambda ij: sim[ij[0], ij[1]], reverse=True)
+
+        out = []
+        for i, j in triu_idx[:top_k]:
+            out.append(f"# Related-by-semantics: {names[i]} <-> {names[j]} "
+                       f"(sim={sim[i, j]:.2f})")
+        return out
     except Exception as exc:
         logger.warning("Layer 2 vector query failed: %s", exc)
         return []
 
 
 def _query_rag_memory(source_code: str, top_k: int = 3) -> list[str]:
+    """
+    Retrieve good past test examples from the persistent SQLite store.
+    Returns empty list on a fresh Kaggle run (no prior examples yet).
+    """
     try:
-        from rag_store import RAGMemoryStore
-        store = RAGMemoryStore()
-        results = store.search(source_code[:300], top_k=top_k)
-        return [str(r) for r in results]
+        import sys
+        from pathlib import Path
+        testgen_dir = Path(__file__).resolve().parent.parent
+        if str(testgen_dir) not in sys.path:
+            sys.path.insert(0, str(testgen_dir))
+        from rag_store import retrieve_similar, init_db
+        init_db()
+    except Exception as exc:
+        logger.warning("RAG memory import failed: %s", exc)
+        return []
+
+    # Use first public top-level def as a probe identifier
+    try:
+        tree = ast.parse(source_code)
+        method_name = ""
+        class_name = ""
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                    and not node.name.startswith("_"):
+                method_name = node.name
+                break
+            if isinstance(node, ast.ClassDef):
+                class_name = node.name
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                            and not item.name.startswith("_"):
+                        method_name = item.name
+                        break
+                if method_name:
+                    break
+        if not method_name:
+            return []
+        rows = retrieve_similar(method_name, class_name, top_k=top_k)
+        return [f"# Past test for {r.get('method_name', '?')}:\n{r.get('test_code', '')[:300]}"
+                for r in rows if isinstance(r, dict)]
     except Exception as exc:
         logger.warning("RAG memory query failed: %s", exc)
         return []
@@ -755,10 +897,15 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
     print(f"  RAG memory:     {'ON' if config.enable_rag_memory else 'OFF'}")
     print(f"  Plan mode:      {'ON' if config.enable_plan_mode else 'OFF'}")
     print(f"  Loop:           {'ON' if config.enable_self_correction_loop else 'OFF'}")
+    print(f"  LoRA:           {'ON ('+config.lora_path+')' if config.enable_lora else 'OFF'}")
     print(f"  Sample size:    {config.sample_size if config.sample_size else 'ALL'}")
     print("=" * 70)
 
     model, tokenizer = load_qwen_base_4bit()
+    if config.enable_lora:
+        if not config.lora_path:
+            raise ValueError("enable_lora=True but lora_path is empty")
+        model = attach_lora(model, config.lora_path)
     dataset = load_test_dataset(sample_size=config.sample_size)
 
     per_file = []
