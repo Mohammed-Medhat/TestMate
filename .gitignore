@@ -74,10 +74,10 @@ desktop.ini
 PartA/
 
 # ========================
-# PartB — eval benchmark files (large, downloadable)
+# PartB — eval benchmark files
+# (kept under version control so Kaggle clone can run the eval scripts)
 # ========================
 PartB/testgen_eval_lite/testgen_eval_files/
-PartB/eval_lite/testgen_eval_files/
 
 # ========================
 # PartB — LoRA model weights
