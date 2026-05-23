@@ -19,16 +19,23 @@ You will produce **three tables** for the paper:
 
 ## What to upload to Kaggle (one-time)
 
-Zip each folder, then upload each as a separate Kaggle dataset:
+Zip each folder (or single file), then upload each as a separate Kaggle dataset:
 
 | What to upload | Kaggle dataset name | Used by |
 |---------------|--------------------|---------|
 | `PartB/models/graphrag_lora/final/` | `testgen-model` | Table 1 TestMate + Table 3 Part B |
 | `PartC/models/adapter/` | `testmate-partc-adapter` | Table 2 + Table 3 Part C |
 | `PartC/humaneval_eval_dataset.json` | `testmate-humaneval` | Table 2 + Table 3 |
+| **`unified_app/testmate_rag.db`** | **`testmate-rag-db`** | **Conditions with RAG memory enabled (Full RAG, +Loop, +Plan, TestMate)** |
 
 > No knowledge graph upload is needed. The production system builds the graph
 > on the fly per file, and all the evaluation scripts do the same.
+
+> The `testmate-rag-db` upload is a single SQLite file (~220 KB) containing
+> ~39 past good tests, ~116 bad patterns, etc. — gathered from real TestMate
+> runs. The ablation harness auto-detects it on Kaggle and copies it into
+> place before evaluation. If you don't upload it, the RAG memory layer
+> silently returns empty (functionally OFF).
 
 ---
 
@@ -43,8 +50,13 @@ only the last cell changes.
 
 | Condition | Datasets to attach |
 |-----------|---------------------|
-| Baseline / Graph Only / Vector Only / Full RAG / Full RAG + Loop / Full RAG + Plan | *(none — code is cloned at runtime)* |
-| TestMate | `testgen-model` |
+| Baseline / Graph Only / Vector Only | *(none — code is cloned at runtime)* |
+| Full RAG / Full RAG + Loop / Full RAG + Plan | `testmate-rag-db` |
+| TestMate | `testgen-model` + `testmate-rag-db` |
+
+> Conditions that enable the RAG memory layer (Full RAG and above) benefit
+> from `testmate-rag-db`. Without it, the memory layer silently returns
+> empty — script still runs, but you lose one RAG layer's contribution.
 
 ### The 3-cell template
 

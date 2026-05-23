@@ -365,11 +365,62 @@ def _query_layer2_vector(source_code: str, top_k: int = 3) -> list[str]:
         return []
 
 
+# ─── RAG memory DB bootstrap (runs once per process) ────────────────────────
+_RAG_DB_READY = False
+
+
+def _bootstrap_rag_db() -> None:
+    """
+    Copy the populated testmate_rag.db into the working tree if a Kaggle
+    dataset is attached. Tries multiple known account paths. Silently
+    no-ops if none are found (memory layer just returns empty results).
+    """
+    global _RAG_DB_READY
+    if _RAG_DB_READY:
+        return
+    _RAG_DB_READY = True   # set early so we only try once
+
+    import os, shutil
+    from pathlib import Path
+
+    candidate_dbs = [
+        # ↓ add the path for any other Kaggle account here
+        "/kaggle/input/datasets/mohammedmedhat08/testmate-rag-db/testmate_rag.db",
+        "/kaggle/input/datasets/mohammed8medhat/testmate-rag-db/testmate_rag.db",
+        "/kaggle/input/testmate-rag-db/testmate_rag.db",  # plain dataset name fallback
+    ]
+    src = next((p for p in candidate_dbs if os.path.isfile(p)), None)
+    if not src:
+        logger.info("RAG memory DB: no uploaded DB found, using fresh empty DB")
+        return
+
+    # Copy into both locations rag_store.py might use: the testgen folder
+    # (relative to module) and the CWD (since DB_PATH = "testmate_rag.db").
+    testgen_dir = Path(__file__).resolve().parent.parent
+    targets = [
+        testgen_dir / "testmate_rag.db",
+        Path.cwd()  / "testmate_rag.db",
+    ]
+    for dst in targets:
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.exists() or dst.stat().st_size < 50_000:
+                shutil.copy2(src, dst)
+                logger.info("RAG memory DB: copied %s -> %s (%.0f KB)",
+                            src, dst, dst.stat().st_size / 1024)
+        except Exception as exc:
+            logger.warning("RAG memory DB copy failed (%s): %s", dst, exc)
+
+
 def _query_rag_memory(source_code: str, top_k: int = 3) -> list[str]:
     """
     Retrieve good past test examples from the persistent SQLite store.
-    Returns empty list on a fresh Kaggle run (no prior examples yet).
+
+    On Kaggle, if a `testmate-rag-db` dataset is attached, the populated
+    DB is copied into place at first call. Otherwise this returns an
+    empty list (memory layer effectively off).
     """
+    _bootstrap_rag_db()
     try:
         import sys
         from pathlib import Path
