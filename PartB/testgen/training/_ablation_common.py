@@ -304,64 +304,132 @@ def _query_layer2_graph(file_path: str, source_code: str, top_k: int = 5) -> tup
 
 def _query_layer2_vector(source_code: str, top_k: int = 3) -> list[str]:
     """
-    Semantic 'vector RAG over code' for an isolated file: embed each function
-    and find pairs of intra-file functions whose embeddings are most similar.
-    Gives the LLM a hint about which functions in the source are related.
+    Semantic vector RAG over an external corpus of past test examples
+    (the `test_examples` table inside testmate_rag.db).
+
+    Strategy:
+      1. Embed the input source code with all-MiniLM-L6-v2
+      2. Compute cosine sim against every stored test's embedding
+      3. Return the top-K matched test snippets (with their method/class context)
+
+    Falls back to intra-file similarity if the DB isn't attached
+    (so the layer is never silently empty).
     """
     global _VECTOR_ENCODER
+    _bootstrap_rag_db()   # copy uploaded DB into place if available
+
+    # --- 1. External corpus path (preferred — real vector RAG) ----------------
+    try:
+        import sys
+        from pathlib import Path
+        testgen_dir = Path(__file__).resolve().parent.parent
+        if str(testgen_dir) not in sys.path:
+            sys.path.insert(0, str(testgen_dir))
+        from rag_store import DB_PATH as _DB_PATH
+
+        import sqlite3, pickle
+        db_paths = [
+            _DB_PATH,
+            str(testgen_dir / "testmate_rag.db"),
+            "testmate_rag.db",
+        ]
+        db_path = next((p for p in db_paths if Path(p).is_file()
+                        and Path(p).stat().st_size > 50_000), None)
+        if db_path:
+            conn = sqlite3.connect(db_path)
+            rows = conn.execute(
+                "SELECT method_name, class_name, target_signature, test_code, embedding "
+                "FROM test_examples WHERE embedding IS NOT NULL"
+            ).fetchall()
+            conn.close()
+
+            if rows:
+                if _VECTOR_ENCODER is None:
+                    from sentence_transformers import SentenceTransformer
+                    _VECTOR_ENCODER = SentenceTransformer("all-MiniLM-L6-v2")
+
+                import numpy as np
+                query_emb = _VECTOR_ENCODER.encode(source_code[:1500],
+                                                    convert_to_numpy=True,
+                                                    show_progress_bar=False)
+                qn = query_emb / (np.linalg.norm(query_emb) + 1e-9)
+
+                scored = []
+                for method, klass, sig, test_code, emb_blob in rows:
+                    emb = None
+                    # Try raw float32 buffer first (how rag_store actually writes it)
+                    try:
+                        emb = np.frombuffer(emb_blob, dtype=np.float32)
+                        if emb.size == 0:
+                            emb = None
+                    except Exception:
+                        emb = None
+                    # Fall back to pickle (older rows might be pickled)
+                    if emb is None:
+                        try:
+                            emb = np.asarray(pickle.loads(emb_blob), dtype=np.float32)
+                        except Exception:
+                            continue
+                    try:
+                        en = emb / (np.linalg.norm(emb) + 1e-9)
+                        sim = float(qn @ en)
+                    except Exception:
+                        continue
+                    scored.append((sim, method, klass, test_code))
+
+                if scored:
+                    scored.sort(reverse=True, key=lambda x: x[0])
+                    out = []
+                    for sim, method, klass, test_code in scored[:top_k]:
+                        head = f"# Past test (sim={sim:.2f}) "
+                        head += f"for {klass}.{method}" if klass else f"for {method}"
+                        out.append(f"{head}\n{(test_code or '')[:400]}")
+                    return out
+    except Exception as exc:
+        logger.warning("Layer 2 vector (DB) query failed: %s", exc)
+
+    # --- 2. Fallback: intra-file similarity (no DB attached) -----------------
     try:
         tree = ast.parse(source_code)
     except SyntaxError:
         return []
 
-    # Extract (name, snippet) pairs for each top-level def
     funcs: list[tuple[str, str]] = []
     src_lines = source_code.splitlines()
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             start = node.lineno - 1
             end   = node.end_lineno or (start + 1)
-            snippet = "\n".join(src_lines[start:end])[:400]
-            funcs.append((node.name, snippet))
+            funcs.append((node.name, "\n".join(src_lines[start:end])[:400]))
         elif isinstance(node, ast.ClassDef):
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     start = item.lineno - 1
                     end   = item.end_lineno or (start + 1)
-                    snippet = "\n".join(src_lines[start:end])[:400]
-                    funcs.append((f"{node.name}.{item.name}", snippet))
-
+                    funcs.append((f"{node.name}.{item.name}",
+                                  "\n".join(src_lines[start:end])[:400]))
     if len(funcs) < 2:
         return []
-
     try:
         if _VECTOR_ENCODER is None:
             from sentence_transformers import SentenceTransformer
             _VECTOR_ENCODER = SentenceTransformer("all-MiniLM-L6-v2")
+        import numpy as np
         names    = [f[0] for f in funcs]
         snippets = [f[1] for f in funcs]
         embeddings = _VECTOR_ENCODER.encode(snippets, convert_to_numpy=True,
                                             show_progress_bar=False)
-
-        import numpy as np
-        # Cosine similarity matrix, zero the diagonal so a function isn't paired with itself
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-9
         normed = embeddings / norms
         sim = normed @ normed.T
         np.fill_diagonal(sim, -1.0)
-
-        # Find top-K most similar pairs
         n = len(names)
-        triu_idx = [(i, j) for i in range(n) for j in range(i + 1, n)]
-        triu_idx.sort(key=lambda ij: sim[ij[0], ij[1]], reverse=True)
-
-        out = []
-        for i, j in triu_idx[:top_k]:
-            out.append(f"# Related-by-semantics: {names[i]} <-> {names[j]} "
-                       f"(sim={sim[i, j]:.2f})")
-        return out
+        triu_idx = sorted([(i, j) for i in range(n) for j in range(i + 1, n)],
+                          key=lambda ij: sim[ij[0], ij[1]], reverse=True)
+        return [f"# Related-by-semantics: {names[i]} <-> {names[j]} (sim={sim[i, j]:.2f})"
+                for i, j in triu_idx[:top_k]]
     except Exception as exc:
-        logger.warning("Layer 2 vector query failed: %s", exc)
+        logger.warning("Layer 2 vector (intra-file) query failed: %s", exc)
         return []
 
 
