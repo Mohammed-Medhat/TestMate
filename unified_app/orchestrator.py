@@ -239,7 +239,7 @@ def execute_combined(
                     deep_scan         = deep_scan,
                     max_retries       = max_retries,
                     log_callback      = log_callback,
-                    plan_mode         = True,
+                    plan_mode         = False,
                     use_base_only     = use_base_only,
                     priming_examples  = priming_examples,
                     model             = model,

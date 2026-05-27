@@ -66,6 +66,7 @@ class AblationConfig:
     sample_size: Optional[int] = None             # None = use ALL files in eval_lite
     max_new_tokens: int = 1024
     temperature: float = 0.3
+    skip_bes_gate: bool = False                   # testmate_no_bes ablation only
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -149,8 +150,14 @@ def load_test_dataset(eval_dir: Path = _EVAL_DIR,
         try:
             src = f.read_text(encoding="utf-8", errors="ignore")
             ast.parse(src)
+            # Sanitize stem so it's always a valid Python identifier.
+            # Files like "0_serializer.py" would cause LLM to generate
+            # `from 0_serializer import …` → SyntaxError at test collection.
+            raw_stem = f.stem
+            safe_stem = re.sub(r'^(\d)', r'm\1', raw_stem)
             dataset.append({
-                "id":          f.stem,
+                "id":          raw_stem,
+                "module_id":   safe_stem,
                 "filename":    f.name,
                 "abs_path":    str(f),
                 "source_code": src,
@@ -591,11 +598,12 @@ def build_prompt(file_info: dict, ast_ctx: dict, rag: RAGContext,
 
     plan_section = f"TEST PLAN (follow this strictly):\n{plan.strip()}\n\n" if plan else ""
 
+    module_name = file_info.get("module_id", file_info["id"]) + ".py"
     return PROMPT_TEMPLATE.format(
         ast_summary=ast_summary,
         rag_section=rag_section,
         plan_section=plan_section,
-        filename=file_info["filename"],
+        filename=module_name,
         source_code=file_info["source_code"][:6000],
     )
 
@@ -608,8 +616,9 @@ def generate_plan(model, tokenizer, file_info: dict,
                   max_new_tokens: int = 400, temperature: float = 0.3) -> tuple[str, int, int]:
     """One-shot plan generation. Returns (plan_text, prompt_tokens, completion_tokens)."""
     import torch
+    module_name = file_info.get("module_id", file_info["id"]) + ".py"
     prompt = PLAN_PROMPT_TEMPLATE.format(
-        filename=file_info["filename"],
+        filename=module_name,
         source_code=file_info["source_code"][:6000],
     )
     messages = [
@@ -651,28 +660,65 @@ def generate_single_shot(model, tokenizer, prompt: str,
     return _strip_markdown_fences(text_out), pt, ct
 
 
+_RETRY_TEMPS = [0.3, 0.5, 0.7]  # temperatures for attempt 0, 1, 2+
+
+_ERROR_HINTS = {
+    "import": (
+        "The previous attempt failed with an ImportError. "
+        "Make sure all imports are correct. Do NOT use relative imports (`from .x import y`). "
+        "Import only from the standard library or from the module shown in SOURCE FILE."
+    ),
+    "syntax": (
+        "The previous attempt failed with a SyntaxError. "
+        "Output only valid Python. No markdown fences. No prose outside of code."
+    ),
+    "assertion": (
+        "The previous attempt failed with an AssertionError. "
+        "Check the expected values — they may be wrong. Add a try/except or relax assertions."
+    ),
+    "runtime": (
+        "The previous attempt raised a runtime exception. "
+        "Add try/except blocks or fix the incorrect assumptions about the API."
+    ),
+}
+
+
 def generate_with_loop(model, tokenizer, file_info: dict, prompt: str,
                        max_retries: int = 3) -> tuple[str, int, int, int, str]:
     """
-    Loop: generate → run pytest → if fails, regenerate with error feedback.
+    Loop: generate → validate → run pytest → if fails, regenerate with classified feedback.
     Returns (final_test_code, total_pt, total_ct, iterations, first_try_test_code).
     The first_try_test_code is preserved so we can evaluate Pass@1 separately.
     """
     total_pt, total_ct = 0, 0
-    test_code, pt, ct = generate_single_shot(model, tokenizer, prompt)
+    temperature = _RETRY_TEMPS[0]
+    test_code, pt, ct = generate_single_shot(model, tokenizer, prompt, temperature=temperature)
     total_pt += pt; total_ct += ct
     first_try_test_code = test_code   # snapshot for Pass@1
 
     for i in range(max_retries):
-        feedback = _run_test_get_error(test_code, file_info)
-        if feedback is None:
-            return test_code, total_pt, total_ct, i + 1, first_try_test_code
+        # Reject output that contains no pytest functions at all
+        if not re.search(r"\bdef test_\w+", test_code):
+            feedback = "NO_TESTS: the output contained no `def test_*` functions. Output only runnable pytest code."
+            error_type = "syntax"
+        else:
+            feedback = _run_test_get_error(test_code, file_info)
+            if feedback is None:
+                return test_code, total_pt, total_ct, i + 1, first_try_test_code
+            error_type = _classify_error(feedback)
+
+        hint = _ERROR_HINTS.get(error_type, "")
+        temperature = _RETRY_TEMPS[min(i + 1, len(_RETRY_TEMPS) - 1)]
         correction_prompt = (
             prompt
-            + f"\n\n## PREVIOUS ATTEMPT FAILED ##\nGenerated test:\n```python\n{test_code}\n```\n\n"
-            + f"Error:\n{feedback[:2000]}\n\nFix the test:"
+            + f"\n\n## PREVIOUS ATTEMPT FAILED ({error_type.upper()}) ##\n"
+            + (f"{hint}\n\n" if hint else "")
+            + f"Generated test:\n```python\n{test_code}\n```\n\n"
+            + f"Error:\n{feedback[:1500]}\n\nFix the test (temperature will be higher this round):"
         )
-        test_code, pt, ct = generate_single_shot(model, tokenizer, correction_prompt)
+        test_code, pt, ct = generate_single_shot(
+            model, tokenizer, correction_prompt, temperature=temperature
+        )
         total_pt += pt; total_ct += ct
 
     return test_code, total_pt, total_ct, max_retries + 1, first_try_test_code
@@ -683,13 +729,30 @@ def _strip_markdown_fences(text: str) -> str:
     return m.group(1).strip() if m else text.strip()
 
 
+def _classify_error(feedback: str) -> str:
+    """Classify pytest error output into: import | syntax | assertion | runtime | unknown."""
+    fb = feedback.lower()
+    if "importerror" in fb or "modulenotfounderror" in fb or "attempted relative import" in fb:
+        return "import"
+    if "syntaxerror" in fb or "indentationerror" in fb:
+        return "syntax"
+    if "assertionerror" in fb or "assert " in fb:
+        return "assertion"
+    return "runtime"
+
+
 def _run_test_get_error(test_code: str, file_info: dict) -> Optional[str]:
+    mid = file_info.get("module_id", file_info["id"])
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        src = tmp / file_info["filename"]
+        src = tmp / f"{mid}.py"
         src.write_text(file_info["source_code"], encoding="utf-8")
-        tst = tmp / f"test_{file_info['id']}.py"
+        tst = tmp / f"test_{mid}.py"
         tst.write_text(test_code, encoding="utf-8")
+        # Inject conftest.py so relative-import-style source files can be found
+        (tmp / "conftest.py").write_text(
+            "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent))\n"
+        )
         try:
             r = subprocess.run(
                 ["python", "-m", "pytest", str(tst), "-x", "--tb=short", "-q"],
@@ -933,12 +996,17 @@ def evaluate_test(test_code: str,
         metrics["plan_adherence"]    = measure_plan_adherence(plan_text, test_code)
 
     # 3. Execution + coverage
+    mid = file_info.get("module_id", file_info["id"])
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        src = tmp / file_info["filename"]
+        src = tmp / f"{mid}.py"
         src.write_text(file_info["source_code"], encoding="utf-8")
-        tst = tmp / f"test_{file_info['id']}.py"
+        tst = tmp / f"test_{mid}.py"
         tst.write_text(test_code, encoding="utf-8")
+        # Conftest ensures tempdir is on sys.path so relative-import-style source can be found
+        (tmp / "conftest.py").write_text(
+            "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent))\n"
+        )
 
         # 3a. Collection
         try:
@@ -956,11 +1024,11 @@ def evaluate_test(test_code: str,
 
         metrics["tests_runnable"] = True
 
-        # 3b. Run with coverage
+        # 3b. Run with coverage — use absolute path to SUT so --cov finds the module
         try:
             r = subprocess.run(
                 ["python", "-m", "pytest", str(tst),
-                 f"--cov={src.stem}", "--cov-report=json",
+                 f"--cov={str(src)}", "--cov-report=json",
                  "--tb=no", "-q"],
                 cwd=tmp, capture_output=True, text=True, timeout=120,
             )
@@ -976,7 +1044,7 @@ def evaluate_test(test_code: str,
             if cov_file.exists():
                 cov_data = json.loads(cov_file.read_text())
                 for fname, fdata in cov_data.get("files", {}).items():
-                    if file_info["filename"] in fname:
+                    if mid in fname or file_info["filename"] in fname:
                         metrics["line_coverage"] = round(fdata["summary"]["percent_covered"], 2)
                         break
         except subprocess.TimeoutExpired:
@@ -990,6 +1058,54 @@ def evaluate_test(test_code: str,
 # ──────────────────────────────────────────────────────────────────────────
 # 9. MAIN: PHASE 1 (generation)
 # ──────────────────────────────────────────────────────────────────────────
+
+def _run_production_autonomous_loop(
+    model, tokenizer, file_info: dict, config: AblationConfig
+) -> tuple[str, int, int, int]:
+    """
+    Delegate generation to the real autonomous_loop() from production main.py.
+    This is used exclusively for the 'testmate' ablation variant so that the
+    ablation actually measures the full stack (BES gate, quality_gates,
+    docstring amplifier, pre-pass triage) rather than the harness's stripped-
+    down generate_with_loop.
+
+    Returns (test_code, prompt_tokens, completion_tokens, iterations).
+    Token counts are 0 because autonomous_loop does not expose them.
+    """
+    import sys
+    # Ensure PartB/testgen is on sys.path so we can import main.py
+    _testgen_dir = str(Path(__file__).parent.parent)
+    if _testgen_dir not in sys.path:
+        sys.path.insert(0, _testgen_dir)
+
+    from main import autonomous_loop  # type: ignore[import]
+
+    mid = file_info.get("module_id", file_info["id"])
+    stats: dict = {}
+    with tempfile.TemporaryDirectory() as _tmp:
+        tmp = Path(_tmp)
+        src = tmp / f"{mid}.py"
+        src.write_text(file_info["source_code"], encoding="utf-8")
+
+        autonomous_loop(
+            model,
+            tokenizer,
+            str(src),
+            max_retries=config.max_retries,
+            plan_mode=config.enable_plan_mode,
+            stats_out=stats,
+            skip_bes_gate=getattr(config, "skip_bes_gate", False),
+        )
+
+        # autonomous_loop writes test_{stem}_testmate.py in the same dir as src
+        test_path = tmp / f"test_{mid}_testmate.py"
+        if not test_path.exists():
+            test_path = tmp / f"test_{mid}.py"   # legacy fallback
+        test_code = test_path.read_text(encoding="utf-8") if test_path.exists() else ""
+
+    iterations = stats.get("iterations", config.max_retries)
+    return test_code, 0, 0, iterations
+
 
 def _save_checkpoint(per_file: list, config: AblationConfig, output_path: str) -> None:
     """Write a partial JSON so a crash doesn't lose progress."""
@@ -1049,7 +1165,15 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
 
             # Generate
             first_try_test = None
-            if config.enable_self_correction_loop:
+            if config.variant == "testmate":
+                # Use the real production pipeline (BES gate, quality gates,
+                # docstring amplifier, pre-pass triage) so this cell honestly
+                # measures the full TestMate stack.
+                test_code, pt, ct, iterations = _run_production_autonomous_loop(
+                    model, tokenizer, file_info, config
+                )
+                first_try_test = test_code  # autonomous_loop already self-corrected
+            elif config.enable_self_correction_loop:
                 test_code, pt, ct, iterations, first_try_test = generate_with_loop(
                     model, tokenizer, file_info, prompt, config.max_retries,
                 )
@@ -1087,7 +1211,8 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
                 "any_pass_1":        any_pass_1,
                 "all_pass_1":        all_pass_1,
                 "plan_text":         plan_text if plan_text is not None else "",
-                "test_code_preview": test_code[:200],
+                "test_code":         test_code,          # full code (needed for Phase 2 mutation)
+                "test_code_preview": test_code[:200],   # legacy: kept for backwards-compat readers
                 **metrics,
             }
             per_file.append(entry)
@@ -1230,31 +1355,67 @@ def _save_phase2_checkpoint(data: dict, out_path: Path) -> None:
 
 def _run_mutmut_on_pair(entry: dict) -> float:
     """
-    Run mutmut on source file using the generated test. Returns % killed.
-    Requires `pip install mutmut`. Falls back to 0.0 on any error.
+    Run mutation testing on source file + generated test. Returns % killed.
+
+    Uses the production `run_mutation_testing()` from main.py (which works on
+    Windows; the public `mutmut` package does not). The production helper applies
+    a fixed set of mutation operators, runs pytest against each mutant, and
+    returns a feedback string that includes the kill percentage.
     """
-    test_code = entry.get("test_code_preview")
-    # We need the FULL test_code — but we only saved preview. Re-read from a sidecar?
-    # For now, we cannot re-run mutations without the full test code.
-    # In practice, save the full test_code in Phase 1 then read here.
-    full_test = entry.get("test_code") or test_code or ""
+    full_test = entry.get("test_code") or entry.get("test_code_preview") or ""
     if not full_test:
         return 0.0
 
-    # NOTE: this is a placeholder integration. Full mutmut wiring is more involved
-    # (config file, src layout). We approximate with a basic mutmut CLI run.
-    # If mutmut is not available or fails, return 0.0 silently.
+    # Re-read the source from the original eval dir
+    src_name = entry.get("file")
+    if not src_name:
+        return 0.0
+    src_disk_path = _EVAL_DIR / src_name
+    if not src_disk_path.exists():
+        return 0.0
+    source_code = src_disk_path.read_text(encoding="utf-8", errors="ignore")
+
+    # Compute module_id (sanitised stem) — must match how Phase 1 named files
+    raw_stem = Path(src_name).stem
+    mid = re.sub(r'^(\d)', r'm\1', raw_stem)
+
+    # Ensure PartB/testgen is importable so we can call the production helper
+    import sys
+    _testgen_dir = str(Path(__file__).parent.parent)
+    if _testgen_dir not in sys.path:
+        sys.path.insert(0, _testgen_dir)
     try:
-        import mutmut  # noqa: F401
-    except ImportError:
+        from main import run_mutation_testing as _production_mutation_test  # type: ignore[import]
+    except Exception:
         return 0.0
 
-    # Implementation note: full integration would write source+test to a temp dir
-    # with a mutmut_config.py and parse `mutmut results --output-json`. For brevity
-    # and to keep this harness lightweight, we leave the actual mutation run as
-    # a stub that always returns 0.0 — users can fill in their preferred mutmut
-    # invocation here.
-    return 0.0
+    with tempfile.TemporaryDirectory() as _tmp:
+        tmp = Path(_tmp)
+        src_path = tmp / f"{mid}.py"
+        tst_path = tmp / f"test_{mid}.py"
+        src_path.write_text(source_code, encoding="utf-8")
+        tst_path.write_text(full_test, encoding="utf-8")
+        # Same conftest as Phase 1 so the test can import the source
+        (tmp / "conftest.py").write_text(
+            "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent))\n"
+        )
+
+        try:
+            all_killed, feedback = _production_mutation_test(str(src_path), str(tst_path))
+        except Exception as exc:
+            print(f"   ⚠️  Mutation run failed: {exc}")
+            return 0.0
+
+        if all_killed:
+            return 100.0
+        # Feedback string looks like: "Mutation score: 60% (2 survived: ...)"
+        m = re.search(r"(\d+(?:\.\d+)?)\s*%", feedback or "")
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                return 0.0
+        return 0.0
 
 
 # ──────────────────────────────────────────────────────────────────────────

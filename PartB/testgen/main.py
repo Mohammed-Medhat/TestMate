@@ -4515,7 +4515,8 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     max_targets: int = None, deep_scan: bool = False,
                     max_retries: int = 3, log_callback=None, plan_mode: bool = False,
                     srs_requirements: list = None, priming_examples: str = "",
-                    auto_repair: bool = False):
+                    auto_repair: bool = False, stats_out: dict = None,
+                    skip_bes_gate: bool = False):
     """The main self-correcting loop.
 
     Args:
@@ -4526,7 +4527,16 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                       event_type: 'ai_status', 'code_stream', 'code_clear'
         auto_repair:  If True, automatically invoke PartC on confirmed/suspected
                       bugs after post_run_audit completes (opt-in).
+        stats_out:    Optional dict to receive runtime stats (mutated in place).
+                      Keys filled: 'iterations' (total retries across targets),
+                      'targets_processed'. Pass an empty dict to opt in.
+        skip_bes_gate: If True, bypass the BES quality gate. Used by the
+                      `testmate_no_bes` ablation to isolate BES contribution.
     """
+    # Stats collection (opt-in via stats_out kwarg)
+    if stats_out is not None:
+        stats_out.setdefault("iterations", 0)
+        stats_out.setdefault("targets_processed", 0)
     def _cb(event_type, *args):
         """Safe callback helper — no-op when running in CLI mode."""
         if log_callback:
@@ -5331,7 +5341,11 @@ RULES — EXECUTE THE PLAN
             has_rag_examples=bool(similar_examples),
         )
 
+        if stats_out is not None:
+            stats_out["targets_processed"] = stats_out.get("targets_processed", 0) + 1
         for retry in range(_effective_retries):
+            if stats_out is not None:
+                stats_out["iterations"] = stats_out.get("iterations", 0) + 1
             if tests_for_this_target >= 3:
                 print(f"   🛑 Reached soft cap of 3 tests for {target_label}.")
                 break
@@ -5554,6 +5568,10 @@ RULES — EXECUTE THE PLAN
                 # Threshold scales with retry: 50 → 43 → 36 → 30 (more lenient on each retry)
                 # Max 3 retries before fallback to Layer 1+2 only.
                 threshold = max(30, 50 - retry * 7)
+                # Ablation: skip_bes_gate bypasses this gate entirely so we can
+                # measure how much the BES gate contributes vs. lets through.
+                if skip_bes_gate:
+                    _bes_val = threshold  # force-pass the check below
                 if _bes_val < threshold:
                     _hint = ""
                     try:
@@ -5805,7 +5823,6 @@ RULES — EXECUTE THE PLAN
     _amplifier_code = ""
     try:
         from docstring_extractor import build_docstring_tests  # type: ignore[import]
-        from boundary_synthesizer import build_boundary_tests  # type: ignore[import]
 
         for _cls, _meth in targets:
             _fn_source = _extract_function_source(source_code, _meth)
@@ -5823,11 +5840,6 @@ RULES — EXECUTE THE PLAN
                     _amplifier_code += "\n\n# --- Layer 1: docstring spec examples ---\n"
                     _amplifier_code += "\n\n".join(_new_blocks)
 
-            # Layer 2 boundary tests are intentionally skipped here.
-            # Boundary tests execute the CURRENT source to derive expected values.
-            # If the source is buggy, boundary assertions will encode the buggy behavior
-            # and poison PartC's repair verification (the fix would appear as a regression).
-            # Layer 2 is safe to run AFTER bugs are confirmed fixed (coverage augmentation phase).
 
         if _amplifier_code:
             accumulated_code = accumulated_code.rstrip() + "\n" + _amplifier_code + "\n"
