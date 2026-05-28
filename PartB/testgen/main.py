@@ -4516,7 +4516,7 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     max_retries: int = 3, log_callback=None, plan_mode: bool = False,
                     srs_requirements: list = None, priming_examples: str = "",
                     auto_repair: bool = False, stats_out: dict = None,
-                    skip_bes_gate: bool = False):
+                    skip_bes_gate: bool = False, max_seconds: float = None):
     """The main self-correcting loop.
 
     Args:
@@ -4532,11 +4532,17 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                       'targets_processed'. Pass an empty dict to opt in.
         skip_bes_gate: If True, bypass the BES quality gate. Used by the
                       `testmate_no_bes` ablation to isolate BES contribution.
+        max_seconds:  Optional hard wall-clock cap for this file. When the
+                      deadline is reached, the loop bails out of remaining
+                      targets/retries. Prevents pathological files from
+                      consuming hours of compute in batch ablations.
     """
     # Stats collection (opt-in via stats_out kwarg)
     if stats_out is not None:
         stats_out.setdefault("iterations", 0)
         stats_out.setdefault("targets_processed", 0)
+    # Per-file deadline (None = no limit)
+    file_deadline = (time.time() + max_seconds) if max_seconds else None
     def _cb(event_type, *args):
         """Safe callback helper — no-op when running in CLI mode."""
         if log_callback:
@@ -5038,6 +5044,10 @@ RULES — EXECUTE THE PLAN
         f.write(accumulated_code)
 
     for idx, (cls_name, method_name) in enumerate(targets, 1):
+        # Per-file deadline: skip remaining targets if budget exhausted
+        if file_deadline is not None and time.time() > file_deadline:
+            print(f"\n⏱️  File deadline reached — skipping remaining {len(targets) - idx + 1} targets")
+            break
         if cls_name:
             target_label = f"{cls_name}.{method_name}"
         else:
@@ -5343,9 +5353,16 @@ RULES — EXECUTE THE PLAN
 
         if stats_out is not None:
             stats_out["targets_processed"] = stats_out.get("targets_processed", 0) + 1
+        # Initialize so the post-loop "FAILING TEST" block (line ~5783) has a value
+        # even when every retry iteration hit the "No valid test extracted" continue.
+        test_func_clean = ""
         for retry in range(_effective_retries):
             if stats_out is not None:
                 stats_out["iterations"] = stats_out.get("iterations", 0) + 1
+            # Per-file deadline: break out if we've already burnt the budget for this file
+            if file_deadline is not None and time.time() > file_deadline:
+                print(f"   ⏱️  File deadline reached — aborting remaining retries for {target_label}")
+                break
             if tests_for_this_target >= 3:
                 print(f"   🛑 Reached soft cap of 3 tests for {target_label}.")
                 break

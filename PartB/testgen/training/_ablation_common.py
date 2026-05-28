@@ -67,6 +67,11 @@ class AblationConfig:
     max_new_tokens: int = 1024
     temperature: float = 0.3
     skip_bes_gate: bool = False                   # testmate_no_bes ablation only
+    # Hard wall-clock cap per file (seconds). Default 900s = 15min.
+    # Partial-run data showed pathological files burning 5h+ on single targets.
+    # The fastest passing file in that run was 698s, so 900s is a reasonable cap.
+    # For full 102-file runs on Kaggle's 9h T4 budget, also lower sample_size.
+    max_file_seconds: float = 900.0
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1024,11 +1029,13 @@ def evaluate_test(test_code: str,
 
         metrics["tests_runnable"] = True
 
-        # 3b. Run with coverage — use absolute path to SUT so --cov finds the module
+        # 3b. Run with coverage — pytest-cov takes a module name (importable via
+        # sys.path) OR a directory path. A .py file path is NOT valid; use module
+        # name (mid). Conftest.py above already puts tmp on sys.path.
         try:
             r = subprocess.run(
                 ["python", "-m", "pytest", str(tst),
-                 f"--cov={str(src)}", "--cov-report=json",
+                 f"--cov={mid}", "--cov-report=json",
                  "--tb=no", "-q"],
                 cwd=tmp, capture_output=True, text=True, timeout=120,
             )
@@ -1095,6 +1102,7 @@ def _run_production_autonomous_loop(
             plan_mode=config.enable_plan_mode,
             stats_out=stats,
             skip_bes_gate=getattr(config, "skip_bes_gate", False),
+            max_seconds=getattr(config, "max_file_seconds", None),
         )
 
         # autonomous_loop writes test_{stem}_testmate.py in the same dir as src

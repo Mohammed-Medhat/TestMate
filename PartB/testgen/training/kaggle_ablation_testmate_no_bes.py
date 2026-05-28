@@ -47,8 +47,9 @@ config = AblationConfig(
     enable_plan_mode            = False,
     enable_lora                 = True,
     lora_path                   = LORA_PATH,
-    sample_size                 = None,
-    skip_bes_gate               = True,   # the ONLY difference vs testmate
+    sample_size                 = 30,        # match testmate's validation sample
+    max_file_seconds            = 900.0,
+    skip_bes_gate               = True,      # the ONLY difference vs testmate
 )
 
 if __name__ == "__main__":

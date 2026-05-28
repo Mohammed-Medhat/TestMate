@@ -57,7 +57,10 @@ config = AblationConfig(
     enable_plan_mode            = False,
     enable_lora                 = True,
     lora_path                   = LORA_PATH,
-    sample_size                 = None,   # ALL files
+    # 102 files × 900s cap = 25.5h worst-case → does not fit in Kaggle's 9h T4.
+    # Sample 30 files for the validation run; bump up after fixes are verified.
+    sample_size                 = 30,
+    max_file_seconds            = 900.0,
 )
 
 if __name__ == "__main__":
