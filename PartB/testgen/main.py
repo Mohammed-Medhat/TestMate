@@ -948,8 +948,28 @@ def generate_test(model, tokenizer, messages: list, max_tokens: int = MAX_NEW_TO
     return raw
 
 
-def run_pytest(test_file: str, target_file: str = None) -> tuple[bool, str]:
-    """Run pytest on the test file. Returns (passed, output)."""
+def run_pytest(test_file: str, target_file: str = None, deadline_ts: float = None,
+               docker_image: str = None) -> tuple[bool, str]:
+    """Run pytest on the test file. Returns (passed, output).
+
+    deadline_ts: optional Unix timestamp. When provided, pytest's subprocess
+    timeout is capped so the call cannot run past the file-level deadline.
+
+    docker_image: optional pre-built repo image tag. When provided, runs pytest
+    inside that container (env-isolated from host) instead of host pytest.
+    """
+    if docker_image:
+        try:
+            from docker_runner import run_pytest_in_image  # type: ignore[import]
+            return run_pytest_in_image(
+                docker_image, test_file, target_file or test_file,
+                with_coverage=False, deadline_ts=deadline_ts,
+            )
+        except Exception as exc:
+            # Soft-fail to host pytest if Docker is mid-failure — better than
+            # silently producing zero results in production.
+            print(f"   ⚠️  Docker pytest fell back to host: {exc}")
+
     env = os.environ.copy()
     if target_file:
         # Walk up from target_file until no __init__.py is found to find the repo root
@@ -958,23 +978,45 @@ def run_pytest(test_file: str, target_file: str = None) -> tuple[bool, str]:
             root = os.path.dirname(root)
         env["PYTHONPATH"] = f"{root}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
+    _timeout = 30
+    if deadline_ts is not None:
+        _timeout = max(5, min(_timeout, int(deadline_ts - time.time()) - 2))
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", test_file, "-x", "--tb=short", "--no-header", "-q"],
-        capture_output=True, text=True, timeout=30, cwd=os.path.dirname(os.path.abspath(test_file)),
+        capture_output=True, text=True, timeout=_timeout, cwd=os.path.dirname(os.path.abspath(test_file)),
         env=env
     )
     output = result.stdout + "\n" + result.stderr
     return result.returncode == 0, output
 
 
-def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str = None, need_lines=True) -> tuple[bool, str, float, float, set]:
+def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str = None,
+                             need_lines=True, deadline_ts: float = None,
+                             docker_image: str = None) -> tuple[bool, str, float, float, set]:
     """Run pytest with coverage including branch coverage.
 
     Returns (passed, output, line_coverage_pct, branch_coverage_pct, covered_lines).
 
     cov_module: module import path (e.g. 'requests.structures') for --cov flag.
                 Using a file path with --cov silently fails on installed packages.
+    deadline_ts: optional Unix timestamp. When provided, pytest's subprocess
+                 timeout is capped so the call cannot run past the file deadline.
+    docker_image: optional pre-built repo image tag. When provided, runs the
+                  coverage pass inside that container.  Note: covered_lines set
+                  is empty in Docker mode (would require docker-cp of cov.json
+                  per call); use the percentages instead.
     """
+    if docker_image:
+        try:
+            from docker_runner import run_pytest_in_image  # type: ignore[import]
+            return run_pytest_in_image(
+                docker_image, test_file, source_file,
+                with_coverage=True, cov_module=cov_module,
+                deadline_ts=deadline_ts,
+            )
+        except Exception as exc:
+            print(f"   ⚠️  Docker coverage pytest fell back to host: {exc}")
     # Use module name if available (works for installed packages),
     # fall back to source directory (works for local files)
     if cov_module:
@@ -999,9 +1041,13 @@ def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str =
             root = os.path.dirname(root)
         env["PYTHONPATH"] = f"{root}{os.pathsep}{env.get('PYTHONPATH', '')}"
 
+    _timeout = 60
+    if deadline_ts is not None:
+        _timeout = max(5, min(_timeout, int(deadline_ts - time.time()) - 2))
+
     result = subprocess.run(
         flags,
-        capture_output=True, text=True, timeout=60,
+        capture_output=True, text=True, timeout=_timeout,
         cwd=test_dir, env=env
     )
     output = result.stdout + "\n" + result.stderr
@@ -3030,9 +3076,25 @@ def get_method_from_line(source_code: str, line_no: int) -> tuple:
 # Fix 14: Module-level cache for resolve_base_classes
 _base_classes_cache = {}
 
+_DJANGO_BASE_APPS = ['django.contrib.contenttypes', 'django.contrib.auth']
+_DJANGO_CONTRIB_RE = re.compile(r'django\.contrib\.([a-zA-Z_][a-zA-Z_0-9]*)')
+
+
+def _discover_django_apps(source_code: str) -> list[str]:
+    """Fix A — Source-driven INSTALLED_APPS. Auto-picks up any
+    `django.contrib.X` the source references; no hardcoded contrib list."""
+    apps = list(_DJANGO_BASE_APPS)
+    for match in _DJANGO_CONTRIB_RE.finditer(source_code):
+        full = f'django.contrib.{match.group(1)}'
+        if full not in apps:
+            apps.append(full)
+    return apps
+
+
 def detect_framework_setup(source_code: str) -> str:
     """Return setup code needed for the file's framework."""
     if 'from django' in source_code or 'import django' in source_code:
+        apps = _discover_django_apps(source_code)
         header = (
             "import django\n"
             "from django.conf import settings\n"
@@ -3040,8 +3102,7 @@ def detect_framework_setup(source_code: str) -> str:
             "    settings.configure(\n"
             "        DATABASES={'default': {'ENGINE': "
             "'django.db.backends.sqlite3', 'NAME': ':memory:'}},\n"
-            "        INSTALLED_APPS=['django.contrib.contenttypes',"
-            "'django.contrib.auth'],\n"
+            f"        INSTALLED_APPS={apps!r},\n"
             "        USE_TZ=True, USE_L10N=False,\n"
             "        USE_THOUSAND_SEPARATOR=False, USE_I18N=True,\n"
             "        LANGUAGE_CODE='en-us',\n"
@@ -3049,6 +3110,11 @@ def detect_framework_setup(source_code: str) -> str:
             "        SECRET_KEY='test-secret-key-for-testing-only',\n"
             "        DEFAULT_HASHING_ALGORITHM='sha256',\n"
             "        PASSWORD_RESET_TIMEOUT=259200,\n"
+            "        ROOT_URLCONF='django.contrib.staticfiles.urls',\n"
+            "        MIDDLEWARE=[],\n"
+            "        TEMPLATES=[{'BACKEND': "
+            "'django.template.backends.django.DjangoTemplates',\n"
+            "                    'DIRS': [], 'APP_DIRS': True, 'OPTIONS': {}}],\n"
             "    )\n"
             "    django.setup()\n\n"
         )
@@ -4549,10 +4615,11 @@ def _log_discarded(discarded_path: str, case: dict, classification: str, reason:
 
 def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     max_targets: int = None, deep_scan: bool = False,
-                    max_retries: int = 3, log_callback=None, plan_mode: bool = False,
+                    max_retries: int = 2, log_callback=None, plan_mode: bool = False,
                     srs_requirements: list = None, priming_examples: str = "",
                     auto_repair: bool = False, stats_out: dict = None,
-                    skip_bes_gate: bool = False, max_seconds: float = None):
+                    skip_bes_gate: bool = False, max_seconds: float = None,
+                    docker_image: str = None):
     """The main self-correcting loop.
 
     Args:
@@ -4564,8 +4631,10 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
         auto_repair:  If True, automatically invoke PartC on confirmed/suspected
                       bugs after post_run_audit completes (opt-in).
         stats_out:    Optional dict to receive runtime stats (mutated in place).
-                      Keys filled: 'iterations' (total retries across targets),
-                      'targets_processed'. Pass an empty dict to opt in.
+                      Keys filled: 'iterations', 'targets_processed',
+                      'prompt_tokens', 'completion_tokens', 'accepted_bes_scores',
+                      and 'target_timings' (dict mapping target_label -> seconds).
+                      Pass an empty dict to opt in.
         skip_bes_gate: If True, bypass the BES quality gate. Used by the
                       `testmate_no_bes` ablation to isolate BES contribution.
         max_seconds:  Optional hard wall-clock cap for this file. When the
@@ -5079,6 +5148,9 @@ RULES — EXECUTE THE PLAN
 
     # Initialize coverage tracking
     covered_lines_so_far = set()
+    # O7: per-target start times — recorded once per iteration so we can later
+    # compute (next_start - this_start) for the duration of each target.
+    _target_start_times: list[tuple[str, float]] = []
     # Write initial empty test file to get baseline
     with open(test_file, "w") as f:
         f.write(accumulated_code)
@@ -5093,6 +5165,7 @@ RULES — EXECUTE THE PLAN
         else:
             target_label = method_name
 
+        _target_start_times.append((target_label, time.time()))
         print(f"\n--- Target {idx}/{len(targets)}: {target_label} ---")
         _cb("ai_status", "analyzing", f"Extracting context for {target_label}", target_label)
 
@@ -5374,6 +5447,7 @@ RULES — EXECUTE THE PLAN
         failure_logs_for_target = []
         
         _last_error_summary = ""
+        _last_category = None
 
         # Adaptive retry count based on method complexity
         _effective_retries = max_retries
@@ -5443,6 +5517,21 @@ RULES — EXECUTE THE PLAN
                 if not test_func or "def test_" not in test_func:
                     print(f"   ⚠️  No valid test extracted, skipping...")
                     continue
+
+                # O5: pre-pytest symbol validation — catches hallucinated
+                # `from {actual_import} import <unknown_or_private>` lines
+                # before we spend tokens on a retry triggered by an ImportError.
+                try:
+                    from symbol_validator import validate_test_imports, format_warnings_for_prompt  # type: ignore[import]
+                    _sym_warnings = validate_test_imports(test_func, actual_import, source_code)
+                    if _sym_warnings:
+                        _hint = format_warnings_for_prompt(_sym_warnings)
+                        print(f"   ⚠️  Symbol validator: {len(_sym_warnings)} suspect import(s)")
+                        # Feed warnings into the NEXT retry's prompt as error_logs
+                        _last_error_summary = (_last_error_summary or "") + _hint
+                        _last_category = "import_error"
+                except Exception:
+                    pass  # validator must never block the generation flow
 
                 # Strip imports from the chunk — we already have them
                 func_lines = []
@@ -5600,7 +5689,8 @@ RULES — EXECUTE THE PLAN
             try:
                 # Fast path: only run_pytest during the loop
                 # Coverage is collected ONCE at the end for speed
-                passed, logs = run_pytest(test_file, target_file)
+                passed, logs = run_pytest(test_file, target_file, deadline_ts=file_deadline,
+                                          docker_image=docker_image)
                 cov_pct = 0.0
                 branch_cov_pct = 0.0
                 lines_after = covered_lines_so_far
@@ -5825,6 +5915,17 @@ RULES — EXECUTE THE PLAN
                 feedback_test_rejected(target_label_graph)
                 feedback_bad_didnt_help(target_label_graph, category)
 
+                # Fix 2: Category-aware bail. Different retries often produce
+                # slightly different error strings (different missing symbols),
+                # so the exact-string check above misses repeated import errors.
+                # Two consecutive import_error retries means no test for this
+                # target will ever collect — stop wasting retry budget.
+                if category == "import_error" and _last_category == "import_error":
+                    print(f"   ⏭️  Repeated import_error category — bailing on {target_label}")
+                    _last_category = category
+                    break
+                _last_category = category
+
                 # Extract the FULL pytest E-lines (actual vs expected values)
                 e_lines = [l.strip() for l in logs.split("\n") if l.strip().startswith("E ")]
                 e_block = "\n".join(e_lines[:5]) if e_lines else ""
@@ -5883,6 +5984,16 @@ RULES — EXECUTE THE PLAN
             candidate_failure = accumulated_code + "\n\n# FAILING TEST (exhausted retries): Potential Bug\n" + test_func_clean + "\n"
             with open(test_file, "w") as f:
                 f.write(candidate_failure)
+
+    # O7: compute per-target wall time as (next_start - this_start),
+    # with the final target's end being now.
+    if stats_out is not None and _target_start_times:
+        _end_of_loop = time.time()
+        _timings: dict[str, float] = {}
+        for _i, (_label, _t0) in enumerate(_target_start_times):
+            _next = _target_start_times[_i + 1][1] if _i + 1 < len(_target_start_times) else _end_of_loop
+            _timings[_label] = round(_next - _t0, 2)
+        stats_out["target_timings"] = _timings
 
     # ── Summary ──
     print(f"\n{'='*60}")
@@ -5965,7 +6076,10 @@ RULES — EXECUTE THE PLAN
 
     # Get final coverage from last successful run or a new quick run
     try:
-        _, _, final_cov_pct, final_branch_cov_pct, _ = run_pytest_with_coverage(test_file, target_file, actual_import, need_lines=False)
+        _, _, final_cov_pct, final_branch_cov_pct, _ = run_pytest_with_coverage(
+            test_file, target_file, actual_import, need_lines=False,
+            deadline_ts=file_deadline, docker_image=docker_image,
+        )
     except:
         final_cov_pct = 0.0
         final_branch_cov_pct = 0.0

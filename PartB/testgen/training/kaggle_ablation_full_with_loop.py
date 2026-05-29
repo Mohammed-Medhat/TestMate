@@ -10,7 +10,7 @@ Components ON:
   ✓ Layer 2 (knowledge graph)
   ✓ Layer 2 (vector / semantic search)
   ✓ RAG memory
-  ✓ Self-correction loop (max_retries=3)
+  ✓ Self-correction loop (max_retries=2)
 Components OFF:
   ✗ Plan mode
 
@@ -27,7 +27,7 @@ config = AblationConfig(
     enable_rag_memory           = True,
     enable_self_correction_loop = True,    # ← ON
     enable_plan_mode            = False,
-    max_retries                 = 3,
+    max_retries                 = 2,
     sample_size                 = None,
 )
 

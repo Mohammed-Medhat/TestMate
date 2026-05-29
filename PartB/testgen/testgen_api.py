@@ -76,6 +76,7 @@ def execute_part_b(
     model: Any = None,
     tokenizer: Any = None,
     auto_repair: bool = False,
+    use_docker: bool = False,
 ) -> dict:
     """
     Run the self-correcting test generation loop for a single target file.
@@ -91,6 +92,10 @@ def execute_part_b(
         use_base_only:  Skip LoRA — raw 4-bit base Qwen.
         auto_repair:    If True, invoke PartC on confirmed/suspected bugs
                         detected after test generation (opt-in).
+        use_docker:     If True, build a per-repo Docker image and run every
+                        pytest invocation inside it (env isolation — solves
+                        host-package version mismatches).  Falls back to host
+                        pytest if Docker is unavailable or the build fails.
         model/tokenizer: Pre-loaded model (loaded here if None).
     """
     from main import autonomous_loop, load_model as _load_model
@@ -105,8 +110,29 @@ def execute_part_b(
         _loaded_here = True
 
     req_count = sum(1 for r in (requirements or []) if isinstance(r, dict) and r.get("label") == 1)
-    logger.info("[B] %s: plan_mode=%s, auto_repair=%s, %d/%d SRS requirements",
-                Path(target_file).name, plan_mode, auto_repair, req_count, len(requirements or []))
+    logger.info("[B] %s: plan_mode=%s, auto_repair=%s, use_docker=%s, %d/%d SRS requirements",
+                Path(target_file).name, plan_mode, auto_repair, use_docker, req_count, len(requirements or []))
+
+    # Build (or reuse cached) Docker image when use_docker=True so the inner
+    # loop can mount the test file at runtime without per-iteration builds.
+    docker_image: Optional[str] = None
+    if use_docker:
+        try:
+            from docker_runner import ensure_repo_image  # type: ignore[import]
+            # Walk up from target_file until __init__.py disappears — that's
+            # the repo root pytest sees.
+            _root = str(Path(target_file).parent.resolve())
+            while (Path(_root) / "__init__.py").exists():
+                _parent = str(Path(_root).parent)
+                if _parent == _root:
+                    break
+                _root = _parent
+            _repo_name = Path(_root).name or "project"
+            docker_image = ensure_repo_image(_root, _repo_name)
+            logger.info("[B] Docker enabled: image=%s repo=%s", docker_image, _root)
+        except Exception as _docker_err:
+            logger.warning("[B] Docker setup failed (%s) — falling back to host pytest", _docker_err)
+            docker_image = None
 
     try:
         GEN_TESTS_DIR.mkdir(exist_ok=True)
@@ -123,6 +149,7 @@ def execute_part_b(
             srs_requirements=requirements,
             priming_examples=priming_examples,
             auto_repair=auto_repair,
+            docker_image=docker_image,
         )
 
         # Locate generated test file.

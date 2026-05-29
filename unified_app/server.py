@@ -284,6 +284,7 @@ async def partb_run(request: Request):
                     use_base_only=body.get("use_base_only", False),
                     quality_mode=body.get("quality_mode", "fast"),
                     auto_repair=body.get("auto_repair", False),
+                    use_docker=body.get("use_docker", False),
                 )
                 loop.call_soon_threadsafe(q.put_nowait, {
                     "type": "file_result",
@@ -327,6 +328,7 @@ async def combined_run(
     use_base_only: bool = Form(False),
     quality_mode: str = Form("fast"),   # fast | balanced | best
     auto_repair: bool = Form(False),    # opt-in: invoke PartC on confirmed bugs
+    use_docker: bool = Form(False),     # opt-in: pytest in per-repo Docker image
 ):
     import tempfile, json as _json
 
@@ -383,6 +385,7 @@ async def combined_run(
                 use_base_only=use_base_only,
                 quality_mode=quality_mode,
                 auto_repair=auto_repair,
+                use_docker=use_docker,
                 log_callback=log_cb,
             )
             loop.call_soon_threadsafe(q.put_nowait, {"type": "result", "data": result})

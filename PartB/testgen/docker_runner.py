@@ -14,6 +14,7 @@ import subprocess
 import json
 import shutil
 import tempfile
+import time
 
 # ── Coverage data store (populated after each run) ──
 # Maps filename → {covered_lines: [...], uncovered_lines: [...], source: "..."}
@@ -926,3 +927,199 @@ def _extract_section(text: str, start_marker: str, end_marker: str) -> str:
     if start_idx == -1 or end_idx == -1:
         return ""
     return text[start_idx + len(start_marker):end_idx].strip()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Inner-loop Docker helpers (used by autonomous_loop via run_pytest)
+# ──────────────────────────────────────────────────────────────────────────
+
+import hashlib
+
+# Per-process cache of image tags we've already verified exist.
+# Key: (repo_dir_realpath, requirements_hash) -> image tag.
+_IMAGE_CACHE: dict[tuple, str] = {}
+
+
+def _hash_requirements(repo_dir: str) -> str:
+    """Hash whatever dependency manifest exists in the repo.
+    Image-cache key changes whenever the manifest does, so users get a fresh
+    image after editing requirements.txt without us having to track timestamps."""
+    h = hashlib.sha256()
+    for cand in ("requirements.txt", "requirements-dev.txt",
+                 "pyproject.toml", "setup.py", "setup.cfg"):
+        p = os.path.join(repo_dir, cand)
+        if os.path.exists(p):
+            try:
+                h.update(cand.encode())
+                with open(p, "rb") as f:
+                    h.update(f.read())
+            except OSError:
+                continue
+    return h.hexdigest()[:12]
+
+
+def _image_exists(tag: str) -> bool:
+    try:
+        r = subprocess.run(
+            ["docker", "image", "inspect", tag],
+            capture_output=True, text=True, timeout=10,
+        )
+        return r.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def ensure_repo_image(repo_dir: str, repo_name: str = "project") -> str:
+    """Build (or reuse) a Docker image that has the repo + its deps installed.
+
+    Returns the image tag.  Subsequent inner-loop pytest calls bind-mount the
+    test file at runtime, so this image is reused for every retry — image
+    builds are not paid per-iteration.
+
+    Raises RuntimeError if Docker is unavailable or build fails.
+    """
+    if not _check_docker():
+        raise RuntimeError("Docker is not available — is Docker Desktop running?")
+
+    repo_dir = os.path.realpath(repo_dir)
+    cache_key = (repo_dir, _hash_requirements(repo_dir))
+    if cache_key in _IMAGE_CACHE:
+        tag = _IMAGE_CACHE[cache_key]
+        if _image_exists(tag):
+            return tag  # still cached on disk
+
+    # Stable per-repo tag — survives across processes (docker checks disk).
+    tag_seed = hashlib.sha256(f"{repo_dir}|{cache_key[1]}".encode()).hexdigest()[:12]
+    safe_name = re.sub(r"[^a-z0-9_-]+", "-", repo_name.lower())[:30] or "project"
+    image_tag = f"testmate-repo-{safe_name}-{tag_seed}"
+
+    if _image_exists(image_tag):
+        _IMAGE_CACHE[cache_key] = image_tag
+        return image_tag
+
+    print(f"   🐳 Building Docker image for {repo_name} (one-time)...")
+    with tempfile.TemporaryDirectory(prefix="testmate_repoimg_") as build_ctx:
+        repo_dest = os.path.join(build_ctx, "repo")
+        shutil.copytree(repo_dir, repo_dest,
+                        ignore=shutil.ignore_patterns(
+                            '.git', '__pycache__', '*.pyc', 'node_modules',
+                            '.tox', '.eggs', 'build', 'dist',
+                        ))
+
+        install_lines = ["RUN pip install --no-cache-dir pytest pytest-cov"]
+        if os.path.exists(os.path.join(repo_dest, "pyproject.toml")) or \
+           os.path.exists(os.path.join(repo_dest, "setup.py")):
+            install_lines.append(
+                "RUN pip install --no-cache-dir -e /workspace/repo 2>/dev/null || true"
+            )
+        for req in ("requirements.txt", "requirements-dev.txt"):
+            if os.path.exists(os.path.join(repo_dest, req)):
+                install_lines.append(
+                    f"RUN pip install --no-cache-dir -r /workspace/repo/{req} 2>/dev/null || true"
+                )
+        install_block = "\n".join(install_lines)
+
+        dockerfile = (
+            "FROM python:3.11-slim\n"
+            "WORKDIR /workspace\n"
+            "COPY repo/ /workspace/repo/\n"
+            f"{install_block}\n"
+            'CMD ["python", "-c", "print(\\"image ready\\")"]\n'
+        )
+        with open(os.path.join(build_ctx, "Dockerfile"), "w", encoding="utf-8") as f:
+            f.write(dockerfile)
+
+        r = subprocess.run(
+            ["docker", "build", "-t", image_tag, build_ctx],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=600,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"Docker build failed: {r.stderr[-500:]}")
+
+    _IMAGE_CACHE[cache_key] = image_tag
+    print(f"   ✓ Image built: {image_tag}")
+    return image_tag
+
+
+def run_pytest_in_image(
+    image_tag: str,
+    test_file: str,
+    target_file: str,
+    *,
+    with_coverage: bool = False,
+    cov_module: str | None = None,
+    deadline_ts: float | None = None,
+) -> tuple:
+    """Run pytest inside the cached repo image.  Test file is bind-mounted at
+    runtime so it can change between retries without rebuilding.
+
+    Returns:
+        with_coverage=False: (passed: bool, output: str)
+        with_coverage=True:  (passed, output, line_coverage_pct, branch_coverage_pct, covered_lines_set)
+
+    On any container-level failure returns the same shape with passed=False.
+    """
+    test_dir = os.path.dirname(os.path.abspath(test_file))
+    test_basename = os.path.basename(test_file)
+
+    timeout = 30 if not with_coverage else 60
+    if deadline_ts is not None:
+        timeout = max(5, min(timeout, int(deadline_ts - time.time()) - 2))
+
+    cmd = [
+        "docker", "run", "--rm",
+        "-v", f"{test_dir}:/tests:ro",
+        "-w", "/workspace",
+        image_tag,
+        "pytest", f"/tests/{test_basename}", "-v", "--tb=short", "--no-header",
+    ]
+    if with_coverage:
+        cmd += [
+            f"--cov={cov_module or '/workspace/repo'}",
+            "--cov-branch",
+            "--cov-report=term-missing",
+            "--cov-report=json:/tmp/cov.json",
+        ]
+
+    try:
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        if with_coverage:
+            return False, "Docker pytest timed out", 0.0, 0.0, set()
+        return False, "Docker pytest timed out"
+
+    output = (r.stdout or "") + "\n" + (r.stderr or "")
+    passed = r.returncode == 0
+
+    if not with_coverage:
+        return passed, output
+
+    # Best-effort: try to extract coverage from the terminal output (the cov
+    # JSON is inside the container; copying it back would add another docker
+    # cp call per iteration, which is expensive).  Terminal-table parse is
+    # cheap and good enough for the inner loop's coverage estimate; the final
+    # accurate coverage still comes from the post-loop run_pytest_with_coverage.
+    line_cov = 0.0
+    branch_cov = 0.0
+    for raw in output.splitlines():
+        s = raw.strip()
+        if "TOTAL" in s:
+            cols = s.split()
+            try:
+                # TOTAL  Stmts  Miss  Branch  BrPart  Cover
+                stmts = int(cols[1]); miss = int(cols[2])
+                branches = int(cols[3]); br_part = int(cols[4])
+                if stmts > 0:
+                    line_cov = round((stmts - miss) / stmts * 100, 1)
+                if branches > 0:
+                    branch_cov = round((branches - br_part) / branches * 100, 1)
+            except (ValueError, IndexError):
+                m = re.search(r"(\d+)%", s)
+                if m:
+                    line_cov = float(m.group(1))
+            break
+    return passed, output, line_cov, branch_cov, set()

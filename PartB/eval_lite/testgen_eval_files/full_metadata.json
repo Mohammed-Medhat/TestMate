@@ -1,0 +1,802 @@
+[
+  {
+    "dataset_id": 0,
+    "instance_id": "django__django-17087",
+    "repo": "django/django",
+    "version": "5.0",
+    "code_file": "django/db/migrations/serializer.py",
+    "lines": 400
+  },
+  {
+    "dataset_id": 2,
+    "instance_id": "django__django-14017",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/db/models/query_utils.py",
+    "lines": 324
+  },
+  {
+    "dataset_id": 3,
+    "instance_id": "django__django-11422",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/utils/autoreload.py",
+    "lines": 596
+  },
+  {
+    "dataset_id": 5,
+    "instance_id": "django__django-14915",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/forms/models.py",
+    "lines": 1427
+  },
+  {
+    "dataset_id": 6,
+    "instance_id": "sympy__sympy-22005",
+    "repo": "sympy/sympy",
+    "version": "1.9",
+    "code_file": "sympy/solvers/polysys.py",
+    "lines": 400
+  },
+  {
+    "dataset_id": 7,
+    "instance_id": "pytest-dev__pytest-5221",
+    "repo": "pytest-dev/pytest",
+    "version": "4.4",
+    "code_file": "src/_pytest/python.py",
+    "lines": 1483
+  },
+  {
+    "dataset_id": 8,
+    "instance_id": "sympy__sympy-17022",
+    "repo": "sympy/sympy",
+    "version": "1.5",
+    "code_file": "sympy/printing/pycode.py",
+    "lines": 763
+  },
+  {
+    "dataset_id": 9,
+    "instance_id": "django__django-15996",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/db/migrations/serializer.py",
+    "lines": 395
+  },
+  {
+    "dataset_id": 10,
+    "instance_id": "django__django-15252",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/db/migrations/executor.py",
+    "lines": 385
+  },
+  {
+    "dataset_id": 12,
+    "instance_id": "django__django-11797",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/models/lookups.py",
+    "lines": 550
+  },
+  {
+    "dataset_id": 13,
+    "instance_id": "django__django-16046",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/utils/numberformat.py",
+    "lines": 106
+  },
+  {
+    "dataset_id": 14,
+    "instance_id": "django__django-11583",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/utils/autoreload.py",
+    "lines": 604
+  },
+  {
+    "dataset_id": 15,
+    "instance_id": "django__django-15738",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/db/migrations/autodetector.py",
+    "lines": 1730
+  },
+  {
+    "dataset_id": 18,
+    "instance_id": "django__django-11620",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/views/debug.py",
+    "lines": 523
+  },
+  {
+    "dataset_id": 20,
+    "instance_id": "scikit-learn__scikit-learn-13779",
+    "repo": "scikit-learn/scikit-learn",
+    "version": "0.22",
+    "code_file": "sklearn/ensemble/voting.py",
+    "lines": 490
+  },
+  {
+    "dataset_id": 21,
+    "instance_id": "django__django-16041",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/forms/formsets.py",
+    "lines": 577
+  },
+  {
+    "dataset_id": 23,
+    "instance_id": "sympy__sympy-20442",
+    "repo": "sympy/sympy",
+    "version": "1.8",
+    "code_file": "sympy/physics/units/util.py",
+    "lines": 199
+  },
+  {
+    "dataset_id": 24,
+    "instance_id": "sympy__sympy-20049",
+    "repo": "sympy/sympy",
+    "version": "1.7",
+    "code_file": "sympy/physics/vector/point.py",
+    "lines": 596
+  },
+  {
+    "dataset_id": 25,
+    "instance_id": "django__django-14411",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/contrib/auth/forms.py",
+    "lines": 443
+  },
+  {
+    "dataset_id": 26,
+    "instance_id": "django__django-13447",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/contrib/admin/sites.py",
+    "lines": 570
+  },
+  {
+    "dataset_id": 27,
+    "instance_id": "django__django-12856",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/db/models/base.py",
+    "lines": 1988
+  },
+  {
+    "dataset_id": 28,
+    "instance_id": "scikit-learn__scikit-learn-10949",
+    "repo": "scikit-learn/scikit-learn",
+    "version": "0.20",
+    "code_file": "sklearn/utils/validation.py",
+    "lines": 954
+  },
+  {
+    "dataset_id": 29,
+    "instance_id": "django__django-14787",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/utils/decorators.py",
+    "lines": 179
+  },
+  {
+    "dataset_id": 30,
+    "instance_id": "django__django-11815",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/migrations/serializer.py",
+    "lines": 340
+  },
+  {
+    "dataset_id": 33,
+    "instance_id": "django__django-15388",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/template/autoreload.py",
+    "lines": 56
+  },
+  {
+    "dataset_id": 34,
+    "instance_id": "django__django-11179",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/db/models/deletion.py",
+    "lines": 328
+  },
+  {
+    "dataset_id": 36,
+    "instance_id": "sympy__sympy-24213",
+    "repo": "sympy/sympy",
+    "version": "1.12",
+    "code_file": "sympy/physics/units/unitsystem.py",
+    "lines": 205
+  },
+  {
+    "dataset_id": 37,
+    "instance_id": "django__django-15781",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/core/management/base.py",
+    "lines": 678
+  },
+  {
+    "dataset_id": 39,
+    "instance_id": "django__django-13710",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/contrib/admin/options.py",
+    "lines": 2220
+  },
+  {
+    "dataset_id": 40,
+    "instance_id": "django__django-13925",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/db/models/base.py",
+    "lines": 2144
+  },
+  {
+    "dataset_id": 42,
+    "instance_id": "pytest-dev__pytest-7373",
+    "repo": "pytest-dev/pytest",
+    "version": "5.4",
+    "code_file": "src/_pytest/mark/evaluate.py",
+    "lines": 124
+  },
+  {
+    "dataset_id": 46,
+    "instance_id": "django__django-13551",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/contrib/auth/tokens.py",
+    "lines": 109
+  },
+  {
+    "dataset_id": 47,
+    "instance_id": "django__django-14155",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/urls/resolvers.py",
+    "lines": 701
+  },
+  {
+    "dataset_id": 48,
+    "instance_id": "django__django-13933",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/forms/models.py",
+    "lines": 1404
+  },
+  {
+    "dataset_id": 49,
+    "instance_id": "sympy__sympy-21055",
+    "repo": "sympy/sympy",
+    "version": "1.8",
+    "code_file": "sympy/assumptions/refine.py",
+    "lines": 407
+  },
+  {
+    "dataset_id": 50,
+    "instance_id": "django__django-13660",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/core/management/commands/shell.py",
+    "lines": 103
+  },
+  {
+    "dataset_id": 51,
+    "instance_id": "django__django-16527",
+    "repo": "django/django",
+    "version": "5.0",
+    "code_file": "django/contrib/admin/templatetags/admin_modify.py",
+    "lines": 150
+  },
+  {
+    "dataset_id": 53,
+    "instance_id": "mwaskom__seaborn-3010",
+    "repo": "mwaskom/seaborn",
+    "version": "0.12",
+    "code_file": "seaborn/_stats/regression.py",
+    "lines": 50
+  },
+  {
+    "dataset_id": 54,
+    "instance_id": "django__django-12700",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/views/debug.py",
+    "lines": 527
+  },
+  {
+    "dataset_id": 55,
+    "instance_id": "sympy__sympy-11400",
+    "repo": "sympy/sympy",
+    "version": "1.0",
+    "code_file": "sympy/printing/ccode.py",
+    "lines": 415
+  },
+  {
+    "dataset_id": 56,
+    "instance_id": "sympy__sympy-23117",
+    "repo": "sympy/sympy",
+    "version": "1.11",
+    "code_file": "sympy/tensor/array/ndim_array.py",
+    "lines": 597
+  },
+  {
+    "dataset_id": 59,
+    "instance_id": "django__django-15498",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/views/static.py",
+    "lines": 142
+  },
+  {
+    "dataset_id": 60,
+    "instance_id": "django__django-12453",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/backends/base/creation.py",
+    "lines": 302
+  },
+  {
+    "dataset_id": 61,
+    "instance_id": "django__django-14999",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/db/migrations/operations/models.py",
+    "lines": 885
+  },
+  {
+    "dataset_id": 62,
+    "instance_id": "sympy__sympy-13480",
+    "repo": "sympy/sympy",
+    "version": "1.1",
+    "code_file": "sympy/functions/elementary/hyperbolic.py",
+    "lines": 1403
+  },
+  {
+    "dataset_id": 64,
+    "instance_id": "sympy__sympy-15011",
+    "repo": "sympy/sympy",
+    "version": "1.2",
+    "code_file": "sympy/utilities/lambdify.py",
+    "lines": 939
+  },
+  {
+    "dataset_id": 66,
+    "instance_id": "sphinx-doc__sphinx-7975",
+    "repo": "sphinx-doc/sphinx",
+    "version": "3.2",
+    "code_file": "sphinx/environment/adapters/indexentries.py",
+    "lines": 180
+  },
+  {
+    "dataset_id": 68,
+    "instance_id": "django__django-14534",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/forms/boundfield.py",
+    "lines": 284
+  },
+  {
+    "dataset_id": 69,
+    "instance_id": "sympy__sympy-14396",
+    "repo": "sympy/sympy",
+    "version": "1.1",
+    "code_file": "sympy/polys/polyoptions.py",
+    "lines": 779
+  },
+  {
+    "dataset_id": 73,
+    "instance_id": "django__django-15789",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/utils/html.py",
+    "lines": 423
+  },
+  {
+    "dataset_id": 75,
+    "instance_id": "sympy__sympy-24066",
+    "repo": "sympy/sympy",
+    "version": "1.12",
+    "code_file": "sympy/physics/units/unitsystem.py",
+    "lines": 205
+  },
+  {
+    "dataset_id": 77,
+    "instance_id": "django__django-14752",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/contrib/admin/views/autocomplete.py",
+    "lines": 110
+  },
+  {
+    "dataset_id": 78,
+    "instance_id": "sympy__sympy-18835",
+    "repo": "sympy/sympy",
+    "version": "1.6",
+    "code_file": "sympy/utilities/iterables.py",
+    "lines": 2732
+  },
+  {
+    "dataset_id": 79,
+    "instance_id": "django__django-17051",
+    "repo": "django/django",
+    "version": "5.0",
+    "code_file": "django/db/models/query.py",
+    "lines": 2647
+  },
+  {
+    "dataset_id": 80,
+    "instance_id": "sympy__sympy-12171",
+    "repo": "sympy/sympy",
+    "version": "1.0",
+    "code_file": "sympy/printing/mathematica.py",
+    "lines": 127
+  },
+  {
+    "dataset_id": 83,
+    "instance_id": "pytest-dev__pytest-7168",
+    "repo": "pytest-dev/pytest",
+    "version": "5.4",
+    "code_file": "src/_pytest/_io/saferepr.py",
+    "lines": 103
+  },
+  {
+    "dataset_id": 84,
+    "instance_id": "django__django-12747",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/models/deletion.py",
+    "lines": 447
+  },
+  {
+    "dataset_id": 85,
+    "instance_id": "django__django-15695",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/db/migrations/operations/models.py",
+    "lines": 1108
+  },
+  {
+    "dataset_id": 88,
+    "instance_id": "django__django-15851",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/db/backends/postgresql/client.py",
+    "lines": 64
+  },
+  {
+    "dataset_id": 90,
+    "instance_id": "django__django-14608",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/forms/formsets.py",
+    "lines": 499
+  },
+  {
+    "dataset_id": 92,
+    "instance_id": "django__django-16873",
+    "repo": "django/django",
+    "version": "5.0",
+    "code_file": "django/template/defaultfilters.py",
+    "lines": 983
+  },
+  {
+    "dataset_id": 97,
+    "instance_id": "django__django-12286",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/core/checks/translation.py",
+    "lines": 64
+  },
+  {
+    "dataset_id": 98,
+    "instance_id": "django__django-11910",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/migrations/autodetector.py",
+    "lines": 1327
+  },
+  {
+    "dataset_id": 101,
+    "instance_id": "django__django-11133",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/http/response.py",
+    "lines": 558
+  },
+  {
+    "dataset_id": 106,
+    "instance_id": "sympy__sympy-15345",
+    "repo": "sympy/sympy",
+    "version": "1.4",
+    "code_file": "sympy/printing/mathematica.py",
+    "lines": 134
+  },
+  {
+    "dataset_id": 107,
+    "instance_id": "django__django-13590",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/db/models/sql/query.py",
+    "lines": 2473
+  },
+  {
+    "dataset_id": 108,
+    "instance_id": "django__django-13757",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/db/models/fields/json.py",
+    "lines": 537
+  },
+  {
+    "dataset_id": 109,
+    "instance_id": "django__django-16379",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/core/cache/backends/filebased.py",
+    "lines": 170
+  },
+  {
+    "dataset_id": 110,
+    "instance_id": "django__django-13768",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/dispatch/dispatcher.py",
+    "lines": 303
+  },
+  {
+    "dataset_id": 112,
+    "instance_id": "django__django-14580",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/db/migrations/serializer.py",
+    "lines": 357
+  },
+  {
+    "dataset_id": 114,
+    "instance_id": "sympy__sympy-12419",
+    "repo": "sympy/sympy",
+    "version": "1.0",
+    "code_file": "sympy/matrices/expressions/matexpr.py",
+    "lines": 550
+  },
+  {
+    "dataset_id": 115,
+    "instance_id": "django__django-12125",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/migrations/serializer.py",
+    "lines": 340
+  },
+  {
+    "dataset_id": 116,
+    "instance_id": "sympy__sympy-24152",
+    "repo": "sympy/sympy",
+    "version": "1.12",
+    "code_file": "sympy/physics/quantum/tensorproduct.py",
+    "lines": 423
+  },
+  {
+    "dataset_id": 120,
+    "instance_id": "scikit-learn__scikit-learn-11040",
+    "repo": "scikit-learn/scikit-learn",
+    "version": "0.20",
+    "code_file": "sklearn/neighbors/base.py",
+    "lines": 826
+  },
+  {
+    "dataset_id": 121,
+    "instance_id": "django__django-11099",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/contrib/auth/validators.py",
+    "lines": 25
+  },
+  {
+    "dataset_id": 122,
+    "instance_id": "django__django-16816",
+    "repo": "django/django",
+    "version": "5.0",
+    "code_file": "django/contrib/admin/checks.py",
+    "lines": 1353
+  },
+  {
+    "dataset_id": 123,
+    "instance_id": "django__django-13265",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/db/migrations/autodetector.py",
+    "lines": 1316
+  },
+  {
+    "dataset_id": 124,
+    "instance_id": "django__django-16139",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/contrib/auth/forms.py",
+    "lines": 487
+  },
+  {
+    "dataset_id": 125,
+    "instance_id": "scikit-learn__scikit-learn-10297",
+    "repo": "scikit-learn/scikit-learn",
+    "version": "0.20",
+    "code_file": "sklearn/linear_model/ridge.py",
+    "lines": 1387
+  },
+  {
+    "dataset_id": 126,
+    "instance_id": "django__django-14016",
+    "repo": "django/django",
+    "version": "4.0",
+    "code_file": "django/db/models/query_utils.py",
+    "lines": 324
+  },
+  {
+    "dataset_id": 129,
+    "instance_id": "matplotlib__matplotlib-24265",
+    "repo": "matplotlib/matplotlib",
+    "version": "3.6",
+    "code_file": "lib/matplotlib/style/core.py",
+    "lines": 274
+  },
+  {
+    "dataset_id": 130,
+    "instance_id": "django__django-13448",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/db/backends/base/creation.py",
+    "lines": 314
+  },
+  {
+    "dataset_id": 131,
+    "instance_id": "django__django-12908",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/db/models/query.py",
+    "lines": 1978
+  },
+  {
+    "dataset_id": 132,
+    "instance_id": "sphinx-doc__sphinx-8627",
+    "repo": "sphinx-doc/sphinx",
+    "version": "3.5",
+    "code_file": "sphinx/util/typing.py",
+    "lines": 469
+  },
+  {
+    "dataset_id": 133,
+    "instance_id": "sympy__sympy-14317",
+    "repo": "sympy/sympy",
+    "version": "1.1",
+    "code_file": "sympy/printing/latex.py",
+    "lines": 2348
+  },
+  {
+    "dataset_id": 136,
+    "instance_id": "pydata__xarray-5131",
+    "repo": "pydata/xarray",
+    "version": "0.12",
+    "code_file": "xarray/core/groupby.py",
+    "lines": 1015
+  },
+  {
+    "dataset_id": 137,
+    "instance_id": "django__django-11019",
+    "repo": "django/django",
+    "version": "3.0",
+    "code_file": "django/forms/widgets.py",
+    "lines": 1079
+  },
+  {
+    "dataset_id": 139,
+    "instance_id": "django__django-15790",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/core/checks/templates.py",
+    "lines": 75
+  },
+  {
+    "dataset_id": 140,
+    "instance_id": "django__django-12497",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/db/models/fields/related.py",
+    "lines": 1696
+  },
+  {
+    "dataset_id": 144,
+    "instance_id": "sympy__sympy-19007",
+    "repo": "sympy/sympy",
+    "version": "1.6",
+    "code_file": "sympy/matrices/expressions/blockmatrix.py",
+    "lines": 579
+  },
+  {
+    "dataset_id": 145,
+    "instance_id": "django__django-12308",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/contrib/admin/utils.py",
+    "lines": 550
+  },
+  {
+    "dataset_id": 147,
+    "instance_id": "django__django-11848",
+    "repo": "django/django",
+    "version": "3.1",
+    "code_file": "django/utils/http.py",
+    "lines": 478
+  },
+  {
+    "dataset_id": 148,
+    "instance_id": "django__django-15347",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/contrib/messages/storage/cookie.py",
+    "lines": 169
+  },
+  {
+    "dataset_id": 151,
+    "instance_id": "django__django-14997",
+    "repo": "django/django",
+    "version": "4.1",
+    "code_file": "django/db/backends/ddl_references.py",
+    "lines": 232
+  },
+  {
+    "dataset_id": 152,
+    "instance_id": "sympy__sympy-24909",
+    "repo": "sympy/sympy",
+    "version": "1.13",
+    "code_file": "sympy/physics/units/prefixes.py",
+    "lines": 219
+  },
+  {
+    "dataset_id": 153,
+    "instance_id": "django__django-13220",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/core/exceptions.py",
+    "lines": 213
+  },
+  {
+    "dataset_id": 154,
+    "instance_id": "sympy__sympy-21614",
+    "repo": "sympy/sympy",
+    "version": "1.9",
+    "code_file": "sympy/core/function.py",
+    "lines": 3393
+  },
+  {
+    "dataset_id": 155,
+    "instance_id": "django__django-15902",
+    "repo": "django/django",
+    "version": "4.2",
+    "code_file": "django/forms/formsets.py",
+    "lines": 576
+  },
+  {
+    "dataset_id": 158,
+    "instance_id": "scikit-learn__scikit-learn-14894",
+    "repo": "scikit-learn/scikit-learn",
+    "version": "0.22",
+    "code_file": "sklearn/svm/base.py",
+    "lines": 955
+  },
+  {
+    "dataset_id": 159,
+    "instance_id": "django__django-12983",
+    "repo": "django/django",
+    "version": "3.2",
+    "code_file": "django/utils/text.py",
+    "lines": 425
+  }
+]

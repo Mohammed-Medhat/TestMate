@@ -14,6 +14,7 @@ import json
 import logging
 import subprocess
 import sys
+from contextlib import nullcontext as _nullcontext
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -43,6 +44,7 @@ def execute_combined(
     use_base_only: bool = False,
     quality_mode: str = "fast",          # fast | balanced | best
     auto_repair: bool = False,           # opt-in: invoke PartC on confirmed bugs
+    use_docker: bool = False,            # opt-in: pytest in per-repo Docker image
     log_callback: Optional[Callable] = None,
 ) -> dict:
     """
@@ -83,7 +85,40 @@ def execute_combined(
     # ── Phase 1: Part A (runs once for the whole project) ────────────────
     _log("=== Phase 1: Part A — Requirement Extraction ===", log_callback)
 
-    # 1a. SRS pipeline (no GPU needed)
+    # 1b. README extractor — start FIRST as a background subprocess so SRS (CPU)
+    #     can run in parallel with README's GPU model load + inference.
+    #     We still .wait() before Phase 2 so VRAM is fully freed before Part B
+    #     loads its model (subprocess exit reclaims VRAM on Windows).
+    _readme_proc = None
+    _readme_payload: str | None = None
+    if readme_content:
+        _log("  README extraction (subprocess, ~2-3 min) — launched in background", log_callback)
+        _log("    Extracting project features (LLM 1/2)...", log_callback)
+        _log("    Generating test scenarios (LLM 2/2)...", log_callback)
+
+        _extractor_script = _PART_A_README / "extractor_subprocess.py"
+        _readme_payload = json.dumps({
+            "content":    readme_content,
+            "repo_name":  "combined_pipeline",
+            "user_input": user_input or {},
+        }, ensure_ascii=False)
+
+        try:
+            _readme_proc = subprocess.Popen(
+                [sys.executable, str(_extractor_script)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env={**__import__("os").environ,
+                     "PYTHONIOENCODING": "utf-8",
+                     "PYTHONUTF8": "1"},
+            )
+        except Exception as exc:
+            _log(f"  README extraction launch error: {exc}", log_callback, "warning")
+            _readme_proc = None
+
+    # 1a. SRS pipeline (no GPU needed) — runs concurrently with the README subprocess above
     if srs_path:
         _log(f"  SRS extraction: {Path(srs_path).name}", log_callback)
         from srs_api import execute_part_a_srs  # type: ignore[import]
@@ -94,37 +129,15 @@ def execute_combined(
             log_callback,
         )
 
-    # 1b. README extractor — runs in a SUBPROCESS so VRAM is fully freed
-    #     before Part B's model loads. BitsAndBytes 4-bit models on Windows
-    #     don't release VRAM cleanly with del+empty_cache in the same process.
-    if readme_content:
-        _log("  README extraction (subprocess, ~2-3 min)...", log_callback)
-        _log("    Extracting project features (LLM 1/2)...", log_callback)
-        _log("    Generating test scenarios (LLM 2/2)...", log_callback)
-
-        _extractor_script = _PART_A_README / "extractor_subprocess.py"
-        _input_payload = json.dumps({
-            "content":    readme_content,
-            "repo_name":  "combined_pipeline",
-            "user_input": user_input or {},
-        }, ensure_ascii=False)
-
+    # Now collect the README subprocess result (it has been working while SRS ran)
+    if _readme_proc is not None:
         try:
-            proc = subprocess.run(
-                [sys.executable, str(_extractor_script)],
-                input=_input_payload,
-                capture_output=True,
-                text=True,
-                timeout=600,
-                env={**__import__("os").environ,
-                     "PYTHONIOENCODING": "utf-8",
-                     "PYTHONUTF8": "1"},
-            )
-            if proc.returncode != 0:
-                _log(f"  README extraction failed (exit {proc.returncode}): "
-                     f"{proc.stderr[-500:]}", log_callback, "warning")
+            _stdout, _stderr = _readme_proc.communicate(input=_readme_payload, timeout=600)
+            if _readme_proc.returncode != 0:
+                _log(f"  README extraction failed (exit {_readme_proc.returncode}): "
+                     f"{_stderr[-500:]}", log_callback, "warning")
             else:
-                readme_result = json.loads(proc.stdout)
+                readme_result = json.loads(_stdout)
                 a_result["scenarios"] = readme_result.get("test_scenarios", [])
                 a_result["features"]  = readme_result.get("features", {})
                 _log(
@@ -132,6 +145,8 @@ def execute_combined(
                     log_callback,
                 )
         except subprocess.TimeoutExpired:
+            _readme_proc.kill()
+            _readme_proc.communicate()
             _log("  README extraction timed out (>600s) — skipping", log_callback, "warning")
         except Exception as exc:
             _log(f"  README extraction error: {exc}", log_callback, "warning")
@@ -245,6 +260,7 @@ def execute_combined(
                     model             = model,
                     tokenizer         = tokenizer,
                     auto_repair       = auto_repair,
+                    use_docker        = use_docker,
                 )
                 b_result["file"] = rel_path
                 b_result["matched_requirements_count"] = len(matched_reqs)
@@ -262,45 +278,49 @@ def execute_combined(
                 if log_callback:
                     log_callback("file_result", failed_entry)
 
-    # ── Summary ───────────────────────────────────────────────────────────
-    succeeded = sum(1 for r in per_file_results if r.get("success"))
-    _log(f"=== Phase 2 complete — {succeeded}/{total} files succeeded ===", log_callback)
+        # ── Summary ───────────────────────────────────────────────────────
+        succeeded = sum(1 for r in per_file_results if r.get("success"))
+        _log(f"=== Phase 2 complete — {succeeded}/{total} files succeeded ===", log_callback)
 
-    # ── Phase 3 (balanced / best): SRS coverage gap analysis ─────────────
-    srs_coverage = {"total": 0, "covered": 0, "gaps": [], "coverage_pct": 0.0}
-    if quality_mode in ("balanced", "best") and a_result.get("requirements"):
-        _log("=== Phase 3: SRS Coverage Gap Analysis ===", log_callback)
-        from coverage_analyzer import compute_srs_coverage, load_generated_tests  # type: ignore[import]
-        test_contents = load_generated_tests(per_file_results)
-        srs_coverage  = compute_srs_coverage(a_result["requirements"], test_contents)
-        _log(
-            f"  Coverage: {srs_coverage['covered']}/{srs_coverage['total']} requirements"
-            f" ({srs_coverage['coverage_pct']}%), {len(srs_coverage['gaps'])} gaps found",
-            log_callback,
-        )
-        # Attach srs_coverage to each file's result (combined total)
-        for f in per_file_results:
-            f["srs_coverage"] = {
-                "total":   srs_coverage["total"],
-                "covered": srs_coverage["covered"],
-            }
+        # ── Phase 3 (balanced / best): SRS coverage gap analysis ─────────
+        # Stays inside the part_b_model() block so Phase 4 can reuse the
+        # already-loaded model instead of paying another ~30-45s reload.
+        srs_coverage = {"total": 0, "covered": 0, "gaps": [], "coverage_pct": 0.0}
+        if quality_mode in ("balanced", "best") and a_result.get("requirements"):
+            _log("=== Phase 3: SRS Coverage Gap Analysis ===", log_callback)
+            from coverage_analyzer import compute_srs_coverage, load_generated_tests  # type: ignore[import]
+            test_contents = load_generated_tests(per_file_results)
+            srs_coverage  = compute_srs_coverage(a_result["requirements"], test_contents)
+            _log(
+                f"  Coverage: {srs_coverage['covered']}/{srs_coverage['total']} requirements"
+                f" ({srs_coverage['coverage_pct']}%), {len(srs_coverage['gaps'])} gaps found",
+                log_callback,
+            )
+            for f in per_file_results:
+                f["srs_coverage"] = {
+                    "total":   srs_coverage["total"],
+                    "covered": srs_coverage["covered"],
+                }
 
-    # ── Phase 4 (best only): gap-fill targeted generation ────────────────
-    if quality_mode == "best" and srs_coverage.get("gaps"):
-        _log(f"=== Phase 4: Gap-Fill Pass ({len(srs_coverage['gaps'])} uncovered reqs) ===",
-             log_callback)
-        gap_results = _run_gap_fill(
-            gaps=srs_coverage["gaps"],
-            target_files=target_files,
-            use_base_only=use_base_only,
-            log_callback=log_callback,
-        )
-        if gap_results:
-            _log(f"  Gap-fill: {len(gap_results)} supplemental tests generated", log_callback)
-            for gr in gap_results:
-                per_file_results.append(gr)
-                if log_callback:
-                    log_callback("file_result", gr)
+        # ── Phase 4 (best only): gap-fill targeted generation ────────────
+        if quality_mode == "best" and srs_coverage.get("gaps"):
+            _log(f"=== Phase 4: Gap-Fill Pass ({len(srs_coverage['gaps'])} uncovered reqs) ===",
+                 log_callback)
+            gap_results = _run_gap_fill(
+                gaps=srs_coverage["gaps"],
+                target_files=target_files,
+                use_base_only=use_base_only,
+                log_callback=log_callback,
+                preloaded_model=model,
+                preloaded_tokenizer=tokenizer,
+                use_docker=use_docker,
+            )
+            if gap_results:
+                _log(f"  Gap-fill: {len(gap_results)} supplemental tests generated", log_callback)
+                for gr in gap_results:
+                    per_file_results.append(gr)
+                    if log_callback:
+                        log_callback("file_result", gr)
 
     # ── Phase 5: Bug repair happens INSIDE each PartB execute_part_b() call ──
     # When auto_repair=True, bug_to_partc.repair_pending_bugs() is called
@@ -371,19 +391,31 @@ def _run_gap_fill(
     target_files: list[dict],
     use_base_only: bool,
     log_callback: Optional[Callable],
+    preloaded_model=None,
+    preloaded_tokenizer=None,
+    use_docker: bool = False,
 ) -> list[dict]:
     """
     For each uncovered SRS requirement, generate one targeted test using
     the most relevant target file as context. Keeps only tests that pass.
+
+    If preloaded_model/preloaded_tokenizer are provided (e.g. when running
+    inside the orchestrator's Phase 2 part_b_model block), they are reused
+    directly — avoiding a ~30-45s reload of Qwen + LoRA.
     """
     if not gaps or not target_files:
         return []
 
-    _log(f"  Loading model for gap-fill ({len(gaps)} requirements)...", log_callback)
-
     gap_results = []
     try:
-        with part_b_model(use_lora=not use_base_only) as (model, tokenizer):
+        if preloaded_model is not None and preloaded_tokenizer is not None:
+            _log(f"  Reusing loaded model for gap-fill ({len(gaps)} requirements)...", log_callback)
+            _ctx = _nullcontext((preloaded_model, preloaded_tokenizer))
+        else:
+            _log(f"  Loading model for gap-fill ({len(gaps)} requirements)...", log_callback)
+            _ctx = part_b_model(use_lora=not use_base_only)
+
+        with _ctx as (model, tokenizer):
             from testgen_api import execute_part_b  # type: ignore[import]
             from requirement_matcher import match_requirements_to_file  # type: ignore[import]
 
@@ -421,6 +453,7 @@ def _run_gap_fill(
                     priming_examples = gap_hint,
                     model            = model,
                     tokenizer        = tokenizer,
+                    use_docker       = use_docker,
                 )
                 result["file"]   = f"gap_fill_{rel_path}"
                 result["is_gap_fill"] = True

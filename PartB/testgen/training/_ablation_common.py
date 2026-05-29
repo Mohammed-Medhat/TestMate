@@ -62,7 +62,7 @@ class AblationConfig:
     enable_plan_mode: bool = False
     enable_lora: bool = False
     lora_path: Optional[str] = None
-    max_retries: int = 3
+    max_retries: int = 2
     sample_size: Optional[int] = None             # None = use ALL files in eval_lite
     max_new_tokens: int = 1024
     temperature: float = 0.3
@@ -72,6 +72,13 @@ class AblationConfig:
     # The fastest passing file in that run was 698s, so 900s is a reasonable cap.
     # For full 102-file runs on Kaggle's 9h T4 budget, also lower sample_size.
     max_file_seconds: float = 900.0
+    # Checkpoint / resume: if True and a .partial.json checkpoint exists at the
+    # output path, skip files already recorded there and continue from where the
+    # previous run left off.  Set False to always start from scratch.
+    resume: bool = True
+    # Parallel mutation workers for Phase 2.  Default 1 = sequential (safe).
+    # Set to 2 on Kaggle T4 for ~2x speedup (pytest processes are independent).
+    mutation_workers: int = 1
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -131,18 +138,51 @@ def attach_lora(model, lora_path: str):
 # 3. DATASET LOADER
 # ──────────────────────────────────────────────────────────────────────────
 
+def _load_metadata_map(eval_dir: Path) -> dict[int, str]:
+    """Build {dataset_id -> code_file} map from metadata JSON(s) in eval_dir.
+
+    Prefers full_metadata.json (all 101 files) when present.
+    Falls back to any *_metadata*.json files otherwise.
+    Returns empty dict if no metadata is available.
+    """
+    out: dict[int, str] = {}
+
+    # Prefer the merged full metadata file when available
+    full_meta = eval_dir / "full_metadata.json"
+    candidates = [full_meta] if full_meta.exists() else list(eval_dir.glob("*metadata*.json"))
+
+    for meta_file in candidates:
+        try:
+            entries = json.loads(meta_file.read_text(encoding="utf-8"))
+            if isinstance(entries, list):
+                for entry in entries:
+                    ds_id = entry.get("dataset_id")
+                    cf = entry.get("code_file", "")
+                    if ds_id is not None and cf:
+                        out[int(ds_id)] = cf
+        except (json.JSONDecodeError, OSError, ValueError):
+            continue
+    return out
+
+
 def load_test_dataset(eval_dir: Path = _EVAL_DIR,
                       sample_size: Optional[int] = None,
                       seed: int = 42) -> list[dict]:
     """
     Load source files from eval_lite/testgen_eval_files/.
     `sample_size=None` → use ALL files. Otherwise random-sample N.
+    Each entry gets original_code_file and original_import_path when the
+    metadata file maps the file's numeric prefix to a source path.
     """
     if not eval_dir.exists():
         raise FileNotFoundError(f"Eval dataset not found: {eval_dir}")
 
     all_files = sorted(eval_dir.glob("*.py"))
     print(f"📁 Found {len(all_files)} files in {eval_dir.name}/")
+
+    meta_by_id = _load_metadata_map(eval_dir)
+    if meta_by_id:
+        print(f"📑 Loaded original paths for {len(meta_by_id)} files from metadata")
 
     if sample_size is None:
         selected = all_files
@@ -160,13 +200,24 @@ def load_test_dataset(eval_dir: Path = _EVAL_DIR,
             # `from 0_serializer import …` → SyntaxError at test collection.
             raw_stem = f.stem
             safe_stem = re.sub(r'^(\d)', r'm\1', raw_stem)
+
+            _id_match = re.match(r'^(\d+)_', raw_stem)
+            _ds_id = int(_id_match.group(1)) if _id_match else None
+            _orig_path = meta_by_id.get(_ds_id, "") if _ds_id is not None else ""
+            _orig_import = ""
+            if _orig_path:
+                _stem = _orig_path[:-3] if _orig_path.endswith(".py") else _orig_path
+                _orig_import = _stem.replace("/", ".").replace("\\", ".")
+
             dataset.append({
-                "id":          raw_stem,
-                "module_id":   safe_stem,
-                "filename":    f.name,
-                "abs_path":    str(f),
-                "source_code": src,
-                "lines":       len(src.splitlines()),
+                "id":                   raw_stem,
+                "module_id":            safe_stem,
+                "filename":             f.name,
+                "abs_path":             str(f),
+                "source_code":          src,
+                "lines":                len(src.splitlines()),
+                "original_code_file":   _orig_path,
+                "original_import_path": _orig_import,
             })
         except (SyntaxError, OSError):
             continue
@@ -689,7 +740,7 @@ _ERROR_HINTS = {
 
 
 def generate_with_loop(model, tokenizer, file_info: dict, prompt: str,
-                       max_retries: int = 3) -> tuple[str, int, int, int, str]:
+                       max_retries: int = 2) -> tuple[str, int, int, int, str]:
     """
     Loop: generate → validate → run pytest → if fails, regenerate with classified feedback.
     Returns (final_test_code, total_pt, total_ct, iterations, first_try_test_code).
@@ -959,6 +1010,7 @@ def evaluate_test(test_code: str,
         "tests_passed":          0,
         "pass_rate":             0.0,
         "line_coverage":         0.0,
+        "branch_coverage":       0.0,
         # generation quality
         "api_coverage":          0.0,
         "test_diversity":        0,
@@ -1035,7 +1087,7 @@ def evaluate_test(test_code: str,
         try:
             r = subprocess.run(
                 ["python", "-m", "pytest", str(tst),
-                 f"--cov={mid}", "--cov-report=json",
+                 f"--cov={mid}", "--cov-branch", "--cov-report=json",
                  "--tb=no", "-q"],
                 cwd=tmp, capture_output=True, text=True, timeout=120,
             )
@@ -1052,7 +1104,17 @@ def evaluate_test(test_code: str,
                 cov_data = json.loads(cov_file.read_text())
                 for fname, fdata in cov_data.get("files", {}).items():
                     if mid in fname or file_info["filename"] in fname:
-                        metrics["line_coverage"] = round(fdata["summary"]["percent_covered"], 2)
+                        s = fdata.get("summary", {})
+                        stmts   = s.get("num_statements", 0)
+                        covered = s.get("covered_lines", 0)
+                        branches     = s.get("num_branches", 0)
+                        cov_branches = s.get("covered_branches", 0)
+                        if stmts > 0:
+                            metrics["line_coverage"] = round(covered / stmts * 100, 2)
+                        else:
+                            metrics["line_coverage"] = round(s.get("percent_covered", 0.0), 2)
+                        if branches > 0:
+                            metrics["branch_coverage"] = round(cov_branches / branches * 100, 2)
                         break
         except subprocess.TimeoutExpired:
             pass
@@ -1066,9 +1128,194 @@ def evaluate_test(test_code: str,
 # 9. MAIN: PHASE 1 (generation)
 # ──────────────────────────────────────────────────────────────────────────
 
+# Fix A — Base apps that Django itself always wants for minimal app-registry
+# bring-up. Everything else (admin, sessions, messages, gis, …) is discovered
+# from the source's own `django.contrib.X` references.
+_DJANGO_BASE_APPS = ['django.contrib.contenttypes', 'django.contrib.auth']
+
+_DJANGO_CONTRIB_RE = re.compile(r'django\.contrib\.([a-zA-Z_][a-zA-Z_0-9]*)')
+
+
+def _discover_django_apps(source: str) -> list[str]:
+    """Scan the source for `django.contrib.{X}` references and return the
+    full INSTALLED_APPS list (base + discovered)."""
+    apps = list(_DJANGO_BASE_APPS)
+    for match in _DJANGO_CONTRIB_RE.finditer(source):
+        full = f'django.contrib.{match.group(1)}'
+        if full not in apps:
+            apps.append(full)
+    return apps
+
+
+def _discover_top_packages(source: str) -> list[str]:
+    """Fix E — Return the set of top-level packages the source imports.
+    Used for the generic 'load whatever the source thinks it needs' warmup."""
+    pkgs: set[str] = set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top = (alias.name or "").split('.')[0]
+                if top:
+                    pkgs.add(top)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and node.level == 0:
+                top = node.module.split('.')[0]
+                if top:
+                    pkgs.add(top)
+    # Drop stdlib noise that's never the bottleneck
+    pkgs -= {'sys', 'os', 're', 'json', 'ast', 'pytest', 'unittest',
+             'collections', 'itertools', 'functools', 'typing', 'pathlib',
+             'datetime', 'time', 'math', 'copy', '__future__', 'abc',
+             'enum', 'string', 'io', 'logging', 'warnings'}
+    return sorted(pkgs)
+
+
+def _make_django_settings_block(source: str) -> str:
+    """Fix A — Returns a Python snippet that configures Django settings with
+    auto-discovered INSTALLED_APPS, or empty string if django isn't in source."""
+    if 'django' not in source:
+        return ""
+    apps = _discover_django_apps(source)
+    return (
+        "try:\n"
+        "    import django\n"
+        "    from django.conf import settings\n"
+        "    if not settings.configured:\n"
+        "        settings.configure(\n"
+        "            DATABASES={'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}},\n"
+        f"            INSTALLED_APPS={apps!r},\n"
+        "            USE_TZ=True,\n"
+        "            SECRET_KEY='test-secret-key-for-testing-only',\n"
+        "            DEFAULT_AUTO_FIELD='django.db.models.AutoField',\n"
+        "            ROOT_URLCONF='django.contrib.staticfiles.urls',\n"
+        "            MIDDLEWARE=[],\n"
+        "            TEMPLATES=[{'BACKEND': 'django.template.backends.django.DjangoTemplates',\n"
+        "                        'DIRS': [], 'APP_DIRS': True, 'OPTIONS': {}}],\n"
+        "        )\n"
+        "    django.setup()\n"
+        "except Exception:\n"
+        "    pass\n"
+    )
+
+
+def _make_warmup_block(source: str) -> str:
+    """Fix E — Best-effort import of every top-level package mentioned in source."""
+    pkgs = _discover_top_packages(source)
+    if not pkgs:
+        return ""
+    return (
+        f"for _pkg in {pkgs!r}:\n"
+        "    try:\n"
+        "        __import__(_pkg)\n"
+        "    except Exception:\n"
+        "        pass\n"
+    )
+
+
+def _make_identity_registration_block(import_path: str, abs_src_path: str) -> str:
+    """Fix C — Registers our file as the real module name so `import {path}`
+    in tests loads OUR source while internal sibling imports still resolve to
+    the installed package."""
+    return (
+        "import importlib.util as _ilu, sys as _sys\n"
+        f"_spec = _ilu.spec_from_file_location({import_path!r}, {abs_src_path!r})\n"
+        "_mod  = _ilu.module_from_spec(_spec)\n"
+        f"_sys.modules[{import_path!r}] = _mod\n"
+        "_spec.loader.exec_module(_mod)\n"
+    )
+
+
+def _make_identity_conftest(source: str, import_path: str, abs_src_path: str) -> str:
+    """Compose the conftest pytest will run before collecting tests:
+    1. Generic source-driven framework warmup (Fix E)
+    2. Django-specific settings.configure() + setup() if source uses Django (Fix A)
+    3. sys.modules registration so the source is reachable under its real name (Fix C)
+    """
+    parts = ["import sys, pathlib\n",
+             "sys.path.insert(0, str(pathlib.Path(__file__).parent))\n",
+             _make_warmup_block(source),
+             _make_django_settings_block(source),
+             _make_identity_registration_block(import_path, abs_src_path)]
+    return "".join(p for p in parts if p)
+
+
+def _make_import_check_code(source: str, src_dir: str, module_name: str,
+                            abs_src_path: str = "") -> str:
+    """Build the subprocess Python snippet for the upfront importability gate.
+    Mirrors what the conftest does at test time so they verify the same context."""
+    bootstrap = (
+        "import sys\n"
+        f"sys.path.insert(0, {src_dir!r})\n"
+        + _make_warmup_block(source)
+        + _make_django_settings_block(source)
+    )
+    if abs_src_path:
+        # When we have a real path on disk, register identity first so the
+        # final import_module hits OUR file.
+        bootstrap += _make_identity_registration_block(module_name, abs_src_path)
+    bootstrap += (
+        "import importlib\n"
+        f"importlib.import_module({module_name!r})\n"
+    )
+    return bootstrap
+
+
+# Errors that indicate the warmup was insufficient — escalation should retry
+# with a broader bootstrap rather than declaring the file unimportable.
+_RECOVERABLE_ERROR_MARKERS = (
+    'AppRegistryNotReady', 'ImproperlyConfigured', 'apps.populate',
+    'INSTALLED_APPS', 'PopulateRaceCondition', 'is not registered',
+)
+
+
+def _module_imports_cleanly(module_name: str, src_dir: str,
+                            source: str = "", abs_src_path: str = "",
+                            timeout: int = 25) -> tuple[bool, str]:
+    """Return (ok, error_msg). Fix D — verify the source module can be loaded
+    under the same context the generated tests will use. On recoverable Django
+    errors, retry once with an expanded warmup (auto-discovered top packages
+    plus all django.contrib.* the source mentions, no hardcoded fallback)."""
+    code = _make_import_check_code(source, src_dir, module_name, abs_src_path)
+    try:
+        r = subprocess.run([sys.executable, "-c", code],
+                           capture_output=True, text=True, timeout=timeout)
+        if r.returncode == 0:
+            return True, ""
+        err = (r.stderr or r.stdout or "").strip()
+        # Escalation retry — only when the error pattern looks recoverable.
+        if any(m in err for m in _RECOVERABLE_ERROR_MARKERS):
+            # Build an extra-aggressive code path: re-run the warmup and also
+            # eagerly pre-import the bare 'django' package + every contrib app
+            # the source even hinted at. Still source-driven, no hardcoded list.
+            retry_code = code + (
+                "\ntry:\n"
+                "    import django\n"
+                f"    for _app in {_discover_django_apps(source)!r}:\n"
+                "        try: __import__(_app)\n"
+                "        except Exception: pass\n"
+                f"    importlib.import_module({module_name!r})\n"
+                "except Exception as _e:\n"
+                "    raise SystemExit(f'escalation failed: {_e!r}')\n"
+            )
+            r2 = subprocess.run([sys.executable, "-c", retry_code],
+                                capture_output=True, text=True, timeout=timeout)
+            if r2.returncode == 0:
+                return True, ""
+            err = (r2.stderr or r2.stdout or "").strip()
+        return False, err[:300]
+    except subprocess.TimeoutExpired:
+        return False, "import timeout"
+    except (OSError, FileNotFoundError) as exc:
+        return False, f"subprocess error: {exc}"
+
+
 def _run_production_autonomous_loop(
     model, tokenizer, file_info: dict, config: AblationConfig
-) -> tuple[str, int, int, int]:
+) -> tuple[str, int, int, int, list, dict]:
     """
     Delegate generation to the real autonomous_loop() from production main.py.
     This is used exclusively for the 'testmate' ablation variant so that the
@@ -1076,10 +1323,10 @@ def _run_production_autonomous_loop(
     docstring amplifier, pre-pass triage) rather than the harness's stripped-
     down generate_with_loop.
 
-    Returns (test_code, prompt_tokens, completion_tokens, iterations).
-    Token counts are 0 because autonomous_loop does not expose them.
+    Returns (test_code, prompt_tokens, completion_tokens, iterations, bes_scores).
+    Returns an empty tuple early when the source module is unimportable —
+    no generated test could succeed against it.
     """
-    import sys
     # Ensure PartB/testgen is on sys.path so we can import main.py
     _testgen_dir = str(Path(__file__).parent.parent)
     if _testgen_dir not in sys.path:
@@ -1088,11 +1335,45 @@ def _run_production_autonomous_loop(
     from main import autonomous_loop  # type: ignore[import]
 
     mid = file_info.get("module_id", file_info["id"])
+    source_code = file_info["source_code"]
+    orig_code_file = file_info.get("original_code_file", "")
+    orig_import = file_info.get("original_import_path", "")
+
     stats: dict = {}
     with tempfile.TemporaryDirectory() as _tmp:
         tmp = Path(_tmp)
-        src = tmp / f"{mid}.py"
-        src.write_text(file_info["source_code"], encoding="utf-8")
+
+        # Fix C — when metadata gives us the original module path, write the
+        # source there and register identity in a conftest. Otherwise fall
+        # back to the flat synthetic layout.
+        if orig_code_file and orig_import:
+            src = tmp / orig_code_file
+            src.parent.mkdir(parents=True, exist_ok=True)
+            src.write_text(source_code, encoding="utf-8")
+            (tmp / "conftest.py").write_text(
+                _make_identity_conftest(source_code, orig_import, str(src)),
+                encoding="utf-8",
+            )
+            check_module = orig_import
+            ablation_import_path = orig_import
+            print(f"   📦 Identity restored: source written to {orig_code_file}")
+        else:
+            src = tmp / f"{mid}.py"
+            src.write_text(source_code, encoding="utf-8")
+            check_module = mid
+            ablation_import_path = None
+
+        # Fix D — verify the source loads under the same context the tests
+        # will use. Skip the file entirely if not (saves the retry budget).
+        ok, reason = _module_imports_cleanly(
+            check_module, str(tmp),
+            source=source_code,
+            abs_src_path=str(src) if ablation_import_path else "",
+        )
+        if not ok:
+            print(f"   ⏭️  Source module unimportable — skipping autonomous_loop "
+                  f"({reason.splitlines()[-1][:160] if reason else 'no detail'})")
+            return "", 0, 0, 0, []
 
         autonomous_loop(
             model,
@@ -1103,19 +1384,22 @@ def _run_production_autonomous_loop(
             stats_out=stats,
             skip_bes_gate=getattr(config, "skip_bes_gate", False),
             max_seconds=getattr(config, "max_file_seconds", None),
+            import_path=ablation_import_path,
         )
 
         # autonomous_loop writes test_{stem}_testmate.py in the same dir as src
-        test_path = tmp / f"test_{mid}_testmate.py"
+        _stem = src.stem
+        test_path = src.parent / f"test_{_stem}_testmate.py"
         if not test_path.exists():
-            test_path = tmp / f"test_{mid}.py"   # legacy fallback
+            test_path = src.parent / f"test_{_stem}.py"   # legacy fallback
         test_code = test_path.read_text(encoding="utf-8") if test_path.exists() else ""
 
     iterations = stats.get("iterations", config.max_retries)
     prompt_tokens = stats.get("prompt_tokens", 0)
     completion_tokens = stats.get("completion_tokens", 0)
     bes_scores = stats.get("accepted_bes_scores", [])
-    return test_code, prompt_tokens, completion_tokens, iterations, bes_scores
+    target_timings = stats.get("target_timings", {})
+    return test_code, prompt_tokens, completion_tokens, iterations, bes_scores, target_timings
 
 
 def _save_checkpoint(per_file: list, config: AblationConfig, output_path: str) -> None:
@@ -1154,10 +1438,26 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
         model = attach_lora(model, config.lora_path)
     dataset = load_test_dataset(sample_size=config.sample_size)
 
-    per_file = []
+    # Resume from checkpoint if one exists and resume=True
+    per_file: list[dict] = []
+    done_ids: set[str] = set()
+    partial_path = Path(output_path).with_suffix(".partial.json")
+    if config.resume and partial_path.exists():
+        try:
+            checkpoint = json.loads(partial_path.read_text(encoding="utf-8"))
+            per_file = checkpoint.get("per_file", [])
+            done_ids = {e["id"] for e in per_file if "id" in e}
+            print(f"   ▶️  Resuming — skipping {len(done_ids)} already-completed files")
+        except (json.JSONDecodeError, OSError, KeyError):
+            per_file = []
+            done_ids = set()
+
     t_total = time.perf_counter()
 
     for i, file_info in enumerate(dataset, 1):
+        if file_info["id"] in done_ids:
+            print(f"[{i}/{len(dataset)}] ⏭️  {file_info['filename']} — already done, skipping")
+            continue
         print(f"\n[{i}/{len(dataset)}] {file_info['filename']} ({file_info['lines']} lines)")
         t0 = time.perf_counter()
 
@@ -1177,11 +1477,12 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
 
             # Generate
             first_try_test = None
+            target_timings: dict = {}
             if config.variant == "testmate":
                 # Use the real production pipeline (BES gate, quality gates,
                 # docstring amplifier, pre-pass triage) so this cell honestly
                 # measures the full TestMate stack.
-                test_code, pt, ct, iterations, bes_scores = _run_production_autonomous_loop(
+                test_code, pt, ct, iterations, bes_scores, target_timings = _run_production_autonomous_loop(
                     model, tokenizer, file_info, config
                 )
                 first_try_test = test_code  # autonomous_loop already self-corrected
@@ -1225,14 +1526,15 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
                 "bes_scores":        bes_scores,
                 "mean_bes_score":    round(sum(bes_scores) / len(bes_scores), 1) if bes_scores else 0.0,
                 "plan_text":         plan_text if plan_text is not None else "",
+                "target_timings":    target_timings,    # O7: per-target wall time
                 "test_code":         test_code,          # full code (needed for Phase 2 mutation)
                 "test_code_preview": test_code[:200],   # legacy: kept for backwards-compat readers
                 **metrics,
             }
             per_file.append(entry)
             print(f"   ✓ syntax={metrics['syntax_valid']} pass_rate={metrics['pass_rate']:.0%}"
-                  f" cov={metrics['line_coverage']:.1f}% api_cov={metrics['api_coverage']:.0%}"
-                  f" iter={iterations} ({wall:.1f}s)")
+                  f" cov={metrics['line_coverage']:.1f}% bcov={metrics['branch_coverage']:.1f}%"
+                  f" api_cov={metrics['api_coverage']:.0%} iter={iterations} ({wall:.1f}s)")
 
         except Exception as exc:
             logger.exception("File failed")
@@ -1268,6 +1570,7 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
         "files_succeeded":          sum(1 for e in valid if e.get("syntax_valid")),
         "mean_pass_rate":           _mean(e.get("pass_rate", 0) for e in valid),
         "mean_line_coverage":       _mean(e.get("line_coverage", 0) for e in valid),
+        "mean_branch_coverage":     _mean(e.get("branch_coverage", 0) for e in valid),
         "mean_api_coverage":        _mean(e.get("api_coverage", 0) for e in valid),
         "any_pass_1_rate":          round(sum(1 for e in valid if e.get("any_pass_1")) / n_valid, 3),
         "all_pass_1_rate":          round(sum(1 for e in valid if e.get("all_pass_1")) / n_valid, 3),
@@ -1315,10 +1618,14 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
 # 10. MAIN: PHASE 2 (mutation testing)
 # ──────────────────────────────────────────────────────────────────────────
 
-def run_mutation_pass(input_json: str, output_json: str) -> dict:
+def run_mutation_pass(input_json: str, output_json: str, workers: int = 1) -> dict:
     """
-    Phase 2: read Phase 1 results, run mutmut on each generated test,
+    Phase 2: read Phase 1 results, run mutation testing on each generated test,
     add `mutation_score` per file + `mean_mutation_score` to summary.
+
+    workers: number of parallel threads for mutation runs (default 1 = sequential).
+             Set to 2 on Kaggle T4 for ~2x speedup; mutation is pytest-subprocess
+             work so ThreadPoolExecutor is safe (no GIL contention).
     """
     in_path = Path(input_json)
     out_path = Path(output_json)
@@ -1329,34 +1636,60 @@ def run_mutation_pass(input_json: str, output_json: str) -> dict:
     per_file = data.get("per_file", [])
 
     print("=" * 70)
-    print(f"  PHASE 2: Mutation testing")
+    print(f"  PHASE 2: Mutation testing  (workers={workers})")
     print(f"  Reading: {in_path}")
     print(f"  Files:   {len(per_file)}")
     print("=" * 70)
 
-    t_total = time.perf_counter()
+    # Separate runnable entries from those we can skip immediately
+    runnable = []
     for i, entry in enumerate(per_file, 1):
         if "error" in entry or not entry.get("syntax_valid"):
             entry["mutation_score"] = None
-            continue
-        # Skip mutation when the test suite couldn't run — mutmut would report
-        # 100% "killed" because every pytest invocation fails (import errors, etc.),
-        # which inflates the mean_mutation_score completely.
-        if not entry.get("tests_passed", 0):
+        elif not entry.get("tests_passed", 0):
             entry["mutation_score"] = None
             print(f"\n[{i}/{len(per_file)}] {entry['file']}  → skipped (tests_passed=0)")
-            continue
-        print(f"\n[{i}/{len(per_file)}] {entry['file']}")
-        t0 = time.perf_counter()
-        score = _run_mutmut_on_pair(entry)
-        entry["mutation_score"] = score
-        print(f"   mutation_score = {score:.1f}%  ({time.perf_counter()-t0:.1f}s)")
+        else:
+            runnable.append((i, entry))
 
-        # Checkpoint every 10 files
-        if i % 10 == 0:
-            _save_phase2_checkpoint(data, out_path)
-            elapsed = (time.perf_counter() - t_total) / 60
-            print(f"   Checkpoint @ {i}/{len(per_file)} — elapsed {elapsed:.1f}m")
+    t_total = time.perf_counter()
+
+    if workers <= 1:
+        # Sequential path (default)
+        for completed, (i, entry) in enumerate(runnable, 1):
+            print(f"\n[{i}/{len(per_file)}] {entry['file']}")
+            t0 = time.perf_counter()
+            score = _run_mutmut_on_pair(entry)
+            entry["mutation_score"] = score
+            print(f"   mutation_score = {score:.1f}%  ({time.perf_counter()-t0:.1f}s)")
+            if completed % 10 == 0:
+                _save_phase2_checkpoint(data, out_path)
+                elapsed = (time.perf_counter() - t_total) / 60
+                print(f"   Checkpoint @ {completed}/{len(runnable)} runnable — elapsed {elapsed:.1f}m")
+    else:
+        # Parallel path via ThreadPoolExecutor (mutation is pure subprocess work)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        futures_map = {}
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for i, entry in runnable:
+                fut = executor.submit(_run_mutmut_on_pair, entry)
+                futures_map[fut] = (i, entry)
+
+            completed = 0
+            for fut in as_completed(futures_map):
+                i, entry = futures_map[fut]
+                try:
+                    score = fut.result()
+                except Exception as exc:
+                    score = 0.0
+                    print(f"   ⚠️  Mutation run failed for {entry['file']}: {exc}")
+                entry["mutation_score"] = score
+                completed += 1
+                print(f"\n[{i}/{len(per_file)}] {entry['file']}  mutation_score={score:.1f}%")
+                if completed % 10 == 0:
+                    _save_phase2_checkpoint(data, out_path)
+                    elapsed = (time.perf_counter() - t_total) / 60
+                    print(f"   Checkpoint @ {completed}/{len(runnable)} runnable — elapsed {elapsed:.1f}m")
 
     # Only average files where mutation actually ran (tests passed, score is not None)
     valid = [e for e in per_file if "error" not in e and e.get("syntax_valid")]

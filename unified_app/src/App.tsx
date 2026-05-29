@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Toaster, toast } from 'sonner'
 import Landing from './components/Landing'
 import LeftSidebar from './components/LeftSidebar'
 import MainContent from './components/MainContent'
 import RightSidebar from './components/RightSidebar'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
+import HelpModal from './components/HelpModal'
 import { getInitialStages, advanceStages, detectStageFromLog, type Stage } from './components/PipelineStepper'
 import type {
   View, Mode, PartAMode, ActiveTab, RunSettings, FileInfo,
@@ -23,6 +26,7 @@ export default function App() {
   const [view, setView]           = useState<View>('landing')
   const [mode, setMode]           = useState<Mode>('combined')
   const [isModalOpen, setModal]   = useState(false)
+  const [isHelpOpen,  setHelp]    = useState(false)
   const [settings, setSettings]   = useState<RunSettings>(DEFAULT_SETTINGS)
   const [history, setHistory]     = useState<HistoryItem[]>([])
 
@@ -119,8 +123,25 @@ export default function App() {
     }).then(refreshHistory).catch(() => {})
   }
 
+  // ── Card transition state (fill → split panels) ─────────────────────────
+  const [cardTx, setCardTx] = useState<{
+    rect: DOMRect; color: string; phase: 'fill' | 'split'
+  } | null>(null)
+
   // ── Navigation ───────────────────────────────────────────────────────────
-  const enterMode = (m: Mode) => { setMode(m); setView('workspace') }
+  const enterMode = (m: Mode, rect?: DOMRect, color?: string) => {
+    setMode(m)
+    if (rect) {
+      setCardTx({ rect, color: color ?? '#10b981', phase: 'fill' })
+      setTimeout(() => {
+        setView('workspace')
+        setCardTx(ct => ct ? { ...ct, phase: 'split' } : null)
+      }, 460)
+      setTimeout(() => setCardTx(null), 960)
+    } else {
+      setView('workspace')
+    }
+  }
   const goHome = () => { setView('landing'); refreshHistory() }
 
   // ── Part B: discover ─────────────────────────────────────────────────────
@@ -190,9 +211,10 @@ export default function App() {
     setStages(getInitialStages(mode, settings.qualityMode))
     setElapsed(0)
 
+    toast.loading('Starting run…', { id: 'run', duration: Infinity })
     try {
       if (mode === 'partb') {
-        if (selected.size === 0) { setStatus('idle'); return }
+        if (selected.size === 0) { setStatus('idle'); toast.dismiss('run'); return }
         const selectedFiles = [...selected].map(i => files[i])
         setActiveTab('bugs')
         setPrepassResults([])
@@ -201,7 +223,7 @@ export default function App() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             files: selectedFiles, url: repoUrl, branch,
-            docker: settings.docker, deep_scan: settings.deepScan,
+            use_docker: settings.docker, deep_scan: settings.deepScan,
             max_retries: settings.maxRetries, hitl: settings.hitl,
             intense: settings.intense, plan_mode: settings.planMode,
             use_base_only: settings.useBaseOnly, quality_mode: settings.qualityMode,
@@ -241,10 +263,15 @@ export default function App() {
           if (msg.type === 'stale_fixed') {
             setStaleDetails(prev => [...prev, msg.data as StaleDetail])
           }
-          if (msg.type === 'repair_start')    addLog(`🔧 Bug Repair starting — ${msg.data?.total_files} file(s)`)
+          if (msg.type === 'repair_start') {
+            addLog(`🔧 Bug Repair starting — ${msg.data?.total_files} file(s)`)
+            toast.loading(`Repairing ${msg.data?.total_files} file(s)…`, { id: 'repair' })
+          }
           if (msg.type === 'repair_complete') {
             const d = msg.data as any
             addLog(d?.repair_success ? `✅ Repaired: ${d?.source_file}` : `❌ Could not repair: ${d?.source_file}`)
+            if (d?.repair_success) toast.success(`Fixed: ${d?.source_file}`, { id: 'repair' })
+            else toast.error(`Could not fix: ${d?.source_file}`, { id: 'repair' })
             setResults((prev: any) => ({
               ...prev,
               part_c: [...(Array.isArray(prev?.part_c) ? prev.part_c : []), d],
@@ -255,6 +282,9 @@ export default function App() {
             addLog(`  ${d?.target}: ${d?.old_verdict} → ${d?.new_verdict}`)
           }
         }, ok => {
+          toast.dismiss('run')
+          if (ok) toast.success('Tests generated successfully')
+          else toast.error('Run failed — check the trace log')
           setStatus(ok ? 'done' : 'error'); if (ok) setStages(s => advanceStages(s, 'done'))
           saveRun('partb', `Generated tests for ${repoName}`, ok ? 'success' : 'error')
         })
@@ -296,6 +326,8 @@ export default function App() {
           }
         }
 
+        toast.dismiss('run')
+        toast.success('Extraction complete')
         saveRun('parta', `Extracted requirements from ${srsFile?.name ?? readme.slice(0, 30) + '…'}`, 'success')
         setStatus('done'); setStages(s => advanceStages(s, 'done'))
 
@@ -337,6 +369,9 @@ export default function App() {
             setResults(msg.data as PartCResult)
           }
         }, ok => {
+          toast.dismiss('run')
+          if (ok) toast.success('Bug repair complete')
+          else toast.error('Repair failed — check the trace log')
           setStatus(ok ? 'done' : 'error')
           if (ok) setStages(s => advanceStages(s, 'done'))
           saveRun('partc',
@@ -362,6 +397,7 @@ export default function App() {
         fd.append('use_base_only', String(settings.useBaseOnly))
         fd.append('quality_mode', settings.qualityMode ?? 'fast')
         fd.append('auto_repair', String(settings.autoRepair))
+        fd.append('use_docker', String(settings.docker))
 
         const res = await fetch(`${API}/api/combined/run`, { method: 'POST', body: fd })
         const { job_id, error } = await res.json()
@@ -432,14 +468,44 @@ export default function App() {
             setResults((prev: any) => ({ ...prev, suspicious: msg.data }))
           }
         }, ok => {
+          toast.dismiss('run')
+          if (ok) toast.success(`Pipeline complete — ${selectedFiles.length} file(s) processed`)
+          else toast.error('Pipeline failed — check the trace log')
           setStatus(ok ? 'done' : 'error'); if (ok) setStages(s => advanceStages(s, 'done'))
           saveRun('combined', `Full pipeline on ${selectedFiles.length} file(s) from ${repoName || 'repo'}`,
                   ok ? 'success' : 'error')
         })
       }
 
-    } catch (e: any) { addLog('❌ ' + e.message); setStatus('error') }
+    } catch (e: any) {
+      toast.dismiss('run')
+      toast.error((e as Error).message ?? 'Unknown error')
+      addLog('❌ ' + (e as Error).message)
+      setStatus('error')
+    }
   }, [mode, selected, files, repoUrl, branch, repoName, settings, partAMode, srsFile, readme, repoNameA, problems, expected, edgeCases, threshold, combSrsFile, combReadme, partcSourceIdx, partcTestIdx])
+
+  // ── Keyboard shortcuts (placed after startRun is defined) ─────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey
+      if (e.key === 'Escape') {
+        if (isHelpOpen)  { setHelp(false);  return }
+        if (isModalOpen) { setModal(false); return }
+      }
+      if (e.key === '?' && !ctrl && !e.altKey && e.target === document.body) { setHelp(true); return }
+      if (view !== 'workspace') return
+      if (ctrl && e.key === 'Enter' && status !== 'running') { startRun(); return }
+      if (!ctrl && !e.altKey && !e.shiftKey && e.target === document.body) {
+        if (e.key === '1') setMode('combined')
+        if (e.key === '2') setMode('parta')
+        if (e.key === '3') setMode('partb')
+        if (e.key === '4') setMode('partc')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [view, status, isModalOpen, isHelpOpen, startRun])
 
   const partAStatsForSidebar = {
     total: partAStats.total,
@@ -449,56 +515,147 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden">
-      {view === 'landing' ? (
-        <Landing onPickMode={enterMode} onOpenSettings={() => setModal(true)} history={history} />
-      ) : (
-        <div className="flex h-full w-full workspace-entering">
-          <LeftSidebar
-            mode={mode} setMode={m => {
-              setMode(m)
-              setActiveTab(m === 'partb' ? 'bugs' : m === 'partc' ? 'sbfl' : 'requirements')
-              setStages(getInitialStages(m))
-            }}
-            onHome={goHome} onSettings={() => setModal(true)} settings={settings}
-            repoUrl={repoUrl} setRepoUrl={setRepoUrl}
-            branch={branch} setBranch={setBranch}
-            files={files} selected={selected} toggleFile={toggleFile}
-            discover={discover} discovering={discovering} repoName={repoName}
-            partAMode={partAMode} setPartAMode={setPartAMode}
-            srsFile={srsFile} setSrsFile={setSrsFile}
-            readme={readme} setReadme={setReadme}
-            repoNameA={repoNameA} setRepoNameA={setRepoNameA}
-            problems={problems} setProblems={setProblems}
-            expected={expected} setExpected={setExpected}
-            edgeCases={edgeCases} setEdgeCases={setEdgeCases}
-            threshold={threshold} setThreshold={setThreshold}
-            combSrsFile={combSrsFile} setCombSrsFile={setCombSrsFile}
-            combReadme={combReadme} setCombReadme={setCombReadme}
-            combTargetFile={combTargetFile} setCombTargetFile={setCombTargetFile}
-            combImportPath={combImportPath} setCombImportPath={setCombImportPath}
-            partcSourceIdx={partcSourceIdx} setPartcSourceIdx={setPartcSourceIdx}
-            partcTestIdx={partcTestIdx} setPartcTestIdx={setPartcTestIdx}
-            status={status} startRun={startRun}
+    <div className="relative h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden">
+      <Toaster
+        position="bottom-right"
+        theme="dark"
+        toastOptions={{ style: { background: '#18181b', border: '1px solid #3f3f46', color: '#f4f4f5' } }}
+      />
+
+      {/* ── Card transition: phase 1 — color fills from card via clip-path ── */}
+      {cardTx && cardTx.phase === 'fill' && (() => {
+        const r = cardTx.rect
+        const iw = window.innerWidth, ih = window.innerHeight
+        const clipStart = `inset(${r.top}px ${iw - r.right}px ${ih - r.bottom}px ${r.left}px round 16px)`
+        return (
+          <motion.div
+            className="pointer-events-none fixed inset-0"
+            style={{ background: cardTx.color, zIndex: 200 }}
+            initial={{ clipPath: clipStart }}
+            animate={{ clipPath: 'inset(0px 0px 0px 0px round 0px)' }}
+            transition={{ duration: 0.46, ease: [0.4, 0, 0.15, 1] }}
           />
-          <MainContent
-            mode={mode} results={results} logs={logs} streamedCode={streamedCode}
-            aiStatus={aiStatus} status={status} progress={progress}
-            stages={stages} elapsedSec={elapsedSec}
-            activeTab={activeTab} setActiveTab={setActiveTab}
-            selectedBug={selectedBug} setSelectedBug={setSelectedBug}
-            selectedCoverageFile={selectedCovFile} setSelectedCoverageFile={setSelectedCovFile}
-            reviewRequest={reviewRequest} onReviewDecision={handleReview}
-            planRequest={planRequest} onPlanDecision={handlePlan}
-            requirements={requirements} scenarios={scenarios} features={features}
-            prepassResults={prepassResults} staleDetails={staleDetails}
-          />
-          <RightSidebar mode={mode} results={results} logs={logs} partAStats={partAStatsForSidebar} prepassResults={prepassResults} />
-        </div>
-      )}
+        )
+      })()}
+
+      {/* ── Card transition: phase 2 — 4 panels fly to corners ── */}
+      {cardTx && cardTx.phase === 'split' && ([
+        { k: 'tl', top: 0,    left:  0,  bottom: undefined, right: undefined, dx: '-105%', dy: '-105%' },
+        { k: 'tr', top: 0,    right: 0,  bottom: undefined, left:  undefined, dx:  '105%', dy: '-105%' },
+        { k: 'bl', bottom: 0, left:  0,  top:    undefined, right: undefined, dx: '-105%', dy:  '105%' },
+        { k: 'br', bottom: 0, right: 0,  top:    undefined, left:  undefined, dx:  '105%', dy:  '105%' },
+      ] as const).map(({ k, top, right, bottom, left, dx, dy }) => (
+        <motion.div
+          key={k}
+          className="pointer-events-none fixed"
+          style={{ top, right, bottom, left, width: '50vw', height: '50vh', background: cardTx.color, zIndex: 200 }}
+          initial={{ x: 0, y: 0 }}
+          animate={{ x: dx, y: dy }}
+          transition={{ duration: 0.44, ease: [0.55, 0, 0.1, 1] }}
+        />
+      ))}
+
+      {/* ── Landing ── */}
+      <AnimatePresence>
+        {view === 'landing' && (
+          <motion.div
+            key="landing"
+            className="absolute inset-0 z-10"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.08 } }}
+            transition={{ duration: 0.32, ease: 'easeOut' }}
+          >
+            <Landing onPickMode={enterMode} onOpenSettings={() => setModal(true)} onOpenHelp={() => setHelp(true)} history={history} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Workspace ── */}
+      <AnimatePresence>
+        {view === 'workspace' && (
+          <motion.div
+            key="workspace"
+            className="absolute inset-0 flex"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.2 } }}
+            transition={{ duration: 0.18, delay: 0 }}
+          >
+            {/* Left sidebar slides in from the left */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.35, delay: 0.08, ease: [0.22, 0, 0.1, 1] }}
+            >
+              <LeftSidebar
+                mode={mode} setMode={m => {
+                  setMode(m)
+                  setActiveTab(m === 'partb' ? 'bugs' : m === 'partc' ? 'sbfl' : 'requirements')
+                  setStages(getInitialStages(m))
+                }}
+                onHome={goHome} onSettings={() => setModal(true)} onHelp={() => setHelp(true)} settings={settings}
+                repoUrl={repoUrl} setRepoUrl={setRepoUrl}
+                branch={branch} setBranch={setBranch}
+                files={files} selected={selected} toggleFile={toggleFile}
+                discover={discover} discovering={discovering} repoName={repoName}
+                partAMode={partAMode} setPartAMode={setPartAMode}
+                srsFile={srsFile} setSrsFile={setSrsFile}
+                readme={readme} setReadme={setReadme}
+                repoNameA={repoNameA} setRepoNameA={setRepoNameA}
+                problems={problems} setProblems={setProblems}
+                expected={expected} setExpected={setExpected}
+                edgeCases={edgeCases} setEdgeCases={setEdgeCases}
+                threshold={threshold} setThreshold={setThreshold}
+                combSrsFile={combSrsFile} setCombSrsFile={setCombSrsFile}
+                combReadme={combReadme} setCombReadme={setCombReadme}
+                combTargetFile={combTargetFile} setCombTargetFile={setCombTargetFile}
+                combImportPath={combImportPath} setCombImportPath={setCombImportPath}
+                partcSourceIdx={partcSourceIdx} setPartcSourceIdx={setPartcSourceIdx}
+                partcTestIdx={partcTestIdx} setPartcTestIdx={setPartcTestIdx}
+                status={status} startRun={startRun}
+              />
+            </motion.div>
+
+            {/* Main content rises from below */}
+            <motion.div
+              className="flex-1 min-w-0 flex flex-col"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.14, ease: [0.22, 0, 0.1, 1] }}
+            >
+              <MainContent
+                mode={mode} results={results} logs={logs} streamedCode={streamedCode}
+                aiStatus={aiStatus} status={status} progress={progress}
+                stages={stages} elapsedSec={elapsedSec}
+                activeTab={activeTab} setActiveTab={setActiveTab}
+                selectedBug={selectedBug} setSelectedBug={setSelectedBug}
+                selectedCoverageFile={selectedCovFile} setSelectedCoverageFile={setSelectedCovFile}
+                reviewRequest={reviewRequest} onReviewDecision={handleReview}
+                planRequest={planRequest} onPlanDecision={handlePlan}
+                requirements={requirements} scenarios={scenarios} features={features}
+                prepassResults={prepassResults} staleDetails={staleDetails}
+              />
+            </motion.div>
+
+            {/* Right sidebar slides in from the right */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.35, delay: 0.2, ease: [0.22, 0, 0.1, 1] }}
+            >
+              <RightSidebar mode={mode} results={results} logs={logs} partAStats={partAStatsForSidebar} prepassResults={prepassResults} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {isModalOpen && (
         <ProjectSettingsModal onClose={() => setModal(false)} settings={settings} onSave={setSettings} />
+      )}
+
+      {isHelpOpen && (
+        <HelpModal onClose={() => setHelp(false)} />
       )}
     </div>
   )
