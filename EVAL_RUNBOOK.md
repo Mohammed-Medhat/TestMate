@@ -420,3 +420,93 @@ Total GPU time ≈ 9 hours, well within Kaggle's free 30 GPU h / week.
 | `pipeline_eval_kaggle.py` | 3 | Full pipeline end-to-end |
 | `pipeline_eval_local.py` | 4 | True repair rate (hidden tests) |
 | `aggregate_results.py` | 5 | Builds Tables 1, 2, 3 |
+
+---
+
+# What changed after the 2026-05-28 quality/measurement/RAG update
+
+This section records what changed and what to re-run to pick up the new metrics.
+
+## New columns in the ablation JSON (all variants, Phase 1)
+
+| Column | Level | What it contains |
+|--------|-------|-----------------|
+| `prompt_tokens` | per-file | Total prompt tokens consumed by all `generate_test()` calls for this file (was always 0 before for the `testmate` variant). |
+| `completion_tokens` | per-file | Total completion tokens generated for this file. |
+| `bes_scores` | per-file | List of BES scores for each test that was accepted through the BES gate (empty for non-testmate variants which skip the BES gate entirely). |
+| `mean_bes_score` | per-file | Mean of `bes_scores`, or 0.0 if none accepted. |
+| `total_prompt_tokens` | summary | Sum across all files. |
+| `total_completion_tokens` | summary | Sum across all files. |
+| `mean_bes_score` | summary | Mean of per-file mean_bes_score for files that had at least one accepted test. |
+
+The `testmate` and `testmate_no_bes` variants now report real token counts.
+All other variants reported real counts already (the zero bug was testmate-specific because it used `autonomous_loop` internally rather than `generate_single_shot`).
+
+## Self-healing RAG (Tier 4)
+
+The RAG SQLite database (`testmate_rag.db`) now has three additional columns on both `test_examples` and `bad_examples`:
+- `use_count` — times a row was retrieved and shown to the model
+- `success_count` — times retrieval of that row correlated with an accepted test
+- `last_used_at` — last retrieval timestamp
+
+Every `init_db()` call (i.e., every testmate run) automatically migrates existing databases forward with `ALTER TABLE ... ADD COLUMN` (idempotent).
+
+**Trust-factor scoring** (`(success_count+1)/(use_count+2)`) acts as a Laplace-smoothed prior:
+- New rows start at 0.5 (neutral) and need ~5 retrievals to develop signal
+- High-success rows get a small quality-score boost at retrieval time
+- Bad-example rows with <30% success rate after 5+ uses are suppressed (not deleted — just skipped in retrieval)
+
+**Startup decay**: each `init_db()` call runs `UPDATE test_examples SET quality_score = quality_score * 0.95 WHERE last_used_at < 30 days ago`. Rows that no one retrieves for 30 days decay below the 40-point floor in ~10 runs. Hard-delete applies to `bad_examples` rows with 0 successes after 3+ uses and 60 days inactivity — those warnings demonstrably don't help and waste prompt tokens.
+
+## What to re-run
+
+### Minimum re-run (strongly recommended before paper submission)
+
+Re-run only the **TestMate** variant (Phase 1) to get accurate token counts and BES scores:
+
+```python
+# Cell 3 (Kaggle, same setup as before)
+!python kaggle_ablation_testmate.py
+```
+
+Download `results/ablation_testmate_with_mut.json` and replace the old file locally.
+
+Then re-run Phase 5 to rebuild the paper tables:
+```powershell
+python PartB/testgen/training/aggregate_results.py `
+    --partb_dir    paper_eval/partb_results `
+    --pipeline_dir paper_eval/pipeline_results `
+    --apr_dir      paper_eval/apr_results `
+    --output_dir   paper_eval/paper_tables
+```
+
+### Optional (for richer ablation comparison)
+
+Re-run all 7 Phase 1 variants if you want `mean_bes_score` to appear in the comparison table for every condition (non-testmate variants will have `mean_bes_score=0.0` since they skip the BES gate, which is correct and informative — it shows how much the BES gate contributes).
+
+### Self-healing RAG warm-up
+
+The self-healing RAG starts cold — `use_count=0` for all existing rows. It only develops trust signal after real runs. For the **first** post-update ablation run: expect identical retrieval scores to before (trust factor = neutral 0.5). By the **second** run (after feedback from run 1 has been written to the DB), retrieval will start preferring examples that actually helped.
+
+To verify the self-healing RAG is working after a run:
+```sql
+-- Should be > 0 after any testmate run
+SELECT COUNT(*) FROM test_examples WHERE use_count > 0;
+SELECT COUNT(*) FROM bad_examples WHERE use_count > 0;
+
+-- Check trust distribution
+SELECT
+  AVG(CAST(success_count AS REAL) / (use_count + 1)) AS mean_trust,
+  MIN(quality_score), MAX(quality_score)
+FROM test_examples WHERE use_count > 0;
+```
+
+## Quality improvements that don't need a re-run to take effect
+
+These are already live in the code — they activate the next time `autonomous_loop` runs:
+- **Tautology filter** (`assert x == x` rejected before pytest)
+- **Identical-retry skip** (model repeated same test → forced diversity)
+- **Stronger semantic dedup** (variable-renamed duplicates caught by normalize())
+- **Property-heavy file skip** (>80% `@property` → skip entire file)
+- **Stale priming exclusion** (test examples >30 days old excluded from in-context priming)
+- **Specific exception handling** (bare `except:` → typed + `logger.debug` for diagnosability)

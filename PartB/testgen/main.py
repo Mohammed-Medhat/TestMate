@@ -12,15 +12,22 @@ Usage:
 """     
 
 import os, sys, ast, re, subprocess, argparse, time, textwrap, json
+import logging
 from difflib import SequenceMatcher
 
 import networkx as nx
 import torch
 from concurrent.futures import ThreadPoolExecutor
+
+# Module-level logger. Default level is WARNING so debug calls are silent unless
+# explicitly enabled (e.g., logging.getLogger("main").setLevel(logging.DEBUG)).
+logger = logging.getLogger(__name__)
 from rag_store import (init_db, store_example, retrieve_similar, store_bad_example,
                       retrieve_bad_examples, store_probe_value, retrieve_probe_value,
                       store_source_pattern, retrieve_source_patterns,
-                      store_method_dependency, retrieve_method_dependencies)
+                      store_method_dependency, retrieve_method_dependencies,
+                      feedback_test_accepted, feedback_test_rejected,
+                      feedback_bad_helped, feedback_bad_didnt_help)
 
 from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -50,7 +57,7 @@ if torch.cuda.is_available():
 # ============================================================
 
 _AST_CACHE: dict[str, dict] = {}
-_AST_CACHE_MAX = 32
+_AST_CACHE_MAX = 512
 
 
 def _extract_function_source(source_code: str, func_name: str) -> str:
@@ -517,6 +524,17 @@ def quick_quality_check(test_code: str) -> tuple[bool, str]:
     if len(assert_lines) >= 2 and len(unique_asserts) == 1:
         return False, "All assertions are identical — add different inputs or verify different properties"
 
+    # Reject tautologies: 'assert x == x' (always true) and 'assert f() == f()'
+    # (same call on both sides). These pass pytest but catch zero bugs and
+    # pollute the RAG corpus when they're stored as "good examples".
+    _TAUTOLOGY_IDENT = re.compile(r'assert\s+([A-Za-z_]\w*)\s*==\s*\1\b')
+    _TAUTOLOGY_CALL = re.compile(r'assert\s+([A-Za-z_]\w*\([^)]*\))\s*==\s*\1')
+    for line in assert_lines:
+        if _TAUTOLOGY_IDENT.search(line):
+            return False, "Tautology: 'assert x == x' is always True — assert against an expected value"
+        if _TAUTOLOGY_CALL.search(line):
+            return False, "Tautology: same call on both sides of == is always True — assert against a literal"
+
     return True, "OK"
 
 
@@ -722,7 +740,8 @@ def generate_file_test_plan(model, tokenizer, source_code: str,
                             import_path: str, target_file: str,
                             probe_cache: dict,
                             srs_requirements: list = None,
-                            priming_examples: str = "") -> str:
+                            priming_examples: str = "",
+                            stats_out: dict = None) -> str:
     """Phase 1 of plan mode: generate a structured test plan for ALL functions in a file.
 
     Creates one unified plan covering every target function/method before
@@ -856,7 +875,7 @@ Return inside <plan>...</plan> tags."""
     # More tokens for file-level plan (covers many functions)
     max_tokens = max(500, min(1000, 250 * len(targets)))
     raw = generate_test(model, tokenizer, messages,
-                        max_tokens=max_tokens, temperature=0.3)
+                        max_tokens=max_tokens, temperature=0.3, stats_out=stats_out)
 
     # Extract plan from tags
     if "<plan>" in raw and "</plan>" in raw:
@@ -865,11 +884,14 @@ Return inside <plan>...</plan> tags."""
 
 
 def generate_test(model, tokenizer, messages: list, max_tokens: int = MAX_NEW_TOKENS,
-                  temperature: float = None) -> str:
+                  temperature: float = None, stats_out: dict = None) -> str:
     """Generate test code from the current conversation.
 
     Thread-safe: uses CUDA synchronization barriers to prevent
     access violations when called from daemon threads.
+
+    If stats_out is provided, increments stats_out["prompt_tokens"] and
+    stats_out["completion_tokens"] with the actual token counts from this call.
     """
     _temp = temperature if temperature is not None else TEMPERATURE
     chat = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -915,6 +937,12 @@ def generate_test(model, tokenizer, messages: list, max_tokens: int = MAX_NEW_TO
             )
 
     raw = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    # M1: token accounting. Prompt = tokens fed in; completion = new tokens
+    # generated (output length minus prompt length).
+    if stats_out is not None:
+        _completion_tokens = int(out.shape[1] - inputs["input_ids"].shape[1])
+        stats_out["prompt_tokens"] = stats_out.get("prompt_tokens", 0) + _prompt_len
+        stats_out["completion_tokens"] = stats_out.get("completion_tokens", 0) + _completion_tokens
     # Free GPU memory immediately
     del inputs, out
     return raw
@@ -1073,8 +1101,8 @@ def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str =
                 if source_basename.replace(".py", "") in filepath:
                     executed_lines = set(info.get("executed_lines", []))
                     break
-        except:
-            pass
+        except (json.JSONDecodeError, OSError, KeyError) as _cov_e:
+            logger.debug("Failed to parse coverage.json (%s); proceeding with empty executed_lines", _cov_e)
 
     return result.returncode == 0, output, line_coverage, branch_coverage, executed_lines
 
@@ -1848,11 +1876,23 @@ def is_semantically_duplicate(new_test: str,
     ).strip()
 
     def normalize(code):
+        # Q3: stronger normalization so structurally-identical tests with
+        # different local variable names / comments / whitespace map to the
+        # same canonical form. String literals are deliberately preserved so
+        # tests with different expected values still differ.
+        # 1. Strip Python line comments.
+        code = re.sub(r'#[^\n]*', '', code)
+        # 2. Canonicalize constructor-style assignments.
         code = re.sub(
             r'\w+\s*=\s*\w+\([^)]*\)', 'OBJ = CLASS()', code
         )
-        # Do NOT strip string literals — keep expected values
-        # for functional comparison
+        # 3. Replace lowercase identifiers on the LHS of '=' with VAR
+        #    (catches `x = ...`, `obj = ...`, `result = ...`, etc.).
+        code = re.sub(
+            r'\b[a-z_][a-z0-9_]*\s*=(?!=)', 'VAR =', code
+        )
+        # 4. Collapse runs of whitespace.
+        code = re.sub(r'\s+', ' ', code).strip()
         return code
 
     new_body_norm = normalize(new_body)
@@ -2146,38 +2186,34 @@ def build_call_graph(source_code: str):
         tree = ast.parse(source_code)
     except SyntaxError:
         return G
-    
+
+    # Build a single id(func_node) -> class_name map once.
+    # Replaces the previous O(N^2) re-walk per function for parent lookup.
+    _func_to_class: dict[int, str] = {}
+    for cls_node in ast.walk(tree):
+        if isinstance(cls_node, ast.ClassDef):
+            for item in cls_node.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    _func_to_class[id(item)] = cls_node.name
+
     # Add all functions and methods as nodes
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # Check if it belongs to a class
-            parent_class = None
-            for cls_node in ast.walk(tree):
-                if isinstance(cls_node, ast.ClassDef):
-                    for item in cls_node.body:
-                        if item is node:
-                            parent_class = cls_node.name
-                            break
-            
+            parent_class = _func_to_class.get(id(node))
+
             full_name = f"{parent_class}.{node.name}" if parent_class else node.name
-            G.add_node(full_name, 
+            G.add_node(full_name,
                       type="method" if parent_class else "function",
                       class_name=parent_class,
                       method_name=node.name,
                       lineno=node.lineno,
                       end_lineno=node.end_lineno or node.lineno)
-    
+
     # Pass 1: Add edges for call relationships
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            parent_class = None
-            for cls_node in ast.walk(tree):
-                if isinstance(cls_node, ast.ClassDef):
-                    for item in cls_node.body:
-                        if item is node:
-                            parent_class = cls_node.name
-                            break
-            
+            parent_class = _func_to_class.get(id(node))
+
             caller = f"{parent_class}.{node.name}" if parent_class else node.name
             
             for child in ast.walk(node):
@@ -2709,8 +2745,8 @@ except Exception as e:
         output = result.stdout.strip()
         if output and not output.startswith("ERROR"):
             return output
-    except:
-        pass
+    except (subprocess.SubprocessError, OSError) as _probe_e:
+        logger.debug("Param-attribute probe subprocess failed (%s)", _probe_e)
     return ""
 
 
@@ -4541,6 +4577,9 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
     if stats_out is not None:
         stats_out.setdefault("iterations", 0)
         stats_out.setdefault("targets_processed", 0)
+        stats_out.setdefault("prompt_tokens", 0)
+        stats_out.setdefault("completion_tokens", 0)
+        stats_out.setdefault("accepted_bes_scores", [])
     # Per-file deadline (None = no limit)
     file_deadline = (time.time() + max_seconds) if max_seconds else None
     def _cb(event_type, *args):
@@ -5018,7 +5057,8 @@ RULES — EXECUTE THE PLAN
             model, tokenizer, source_code, targets, ctx, G,
             import_path, target_file, probe_cache,
             srs_requirements=srs_requirements,
-            priming_examples=priming_examples)
+            priming_examples=priming_examples,
+            stats_out=stats_out)
         print(f"📋 File plan generated ({len(_file_plan)} chars)")
         # Send plan to GUI for user review/edit
         target_names = ", ".join(
@@ -5153,7 +5193,8 @@ RULES — EXECUTE THE PLAN
         # RAG retrieval (pass source_file to avoid self-reinforcing patterns)
         similar_examples = retrieve_similar(
             method_name, cls_name or "", top_k=2,
-            source_file=os.path.basename(target_file))
+            source_file=os.path.basename(target_file),
+            target_signature=target_label_graph)
         rag_section, perfect_rag_hit = _section_rag(
             similar_examples)
         best_example = (similar_examples[0]
@@ -5162,7 +5203,8 @@ RULES — EXECUTE THE PLAN
         method_deps = retrieve_method_dependencies(
             cls_name or "", method_name)
         bad_examples = retrieve_bad_examples(
-            method_name, cls_name or "")
+            method_name, cls_name or "",
+            target_signature=target_label_graph)
 
         # Probed value
         probed_value = probe_cache.get(target_label_graph)
@@ -5356,6 +5398,11 @@ RULES — EXECUTE THE PLAN
         # Initialize so the post-loop "FAILING TEST" block (line ~5783) has a value
         # even when every retry iteration hit the "No valid test extracted" continue.
         test_func_clean = ""
+        # Track the last unique test attempted for this target. If the model
+        # emits the same token sequence on a retry (common at low temperatures),
+        # we skip the redundant enforcement + pytest cycle and force diversity.
+        _last_attempted_test = ""
+        _identical_retry_skips = 0
         for retry in range(_effective_retries):
             if stats_out is not None:
                 stats_out["iterations"] = stats_out.get("iterations", 0) + 1
@@ -5389,7 +5436,7 @@ RULES — EXECUTE THE PLAN
                 
                 print(f"   🤔 Generating test for {target_label} (max_tokens={max_tokens}, temp={_temp})...")
                 _cb("ai_status", "thinking", f"Reasoning about {target_label}...", target_label)
-                raw = generate_test(model, tokenizer, messages, max_tokens=max_tokens, temperature=_temp)
+                raw = generate_test(model, tokenizer, messages, max_tokens=max_tokens, temperature=_temp, stats_out=stats_out)
                 test_func = extract_test_code(raw)
                 test_func = fix_generator_assertions(test_func)
 
@@ -5427,6 +5474,16 @@ RULES — EXECUTE THE PLAN
             if "def test_" not in test_func_clean:
                 print(f"   ⚠️  No test function in output, skipping...")
                 continue
+
+            # Q2: identical-retry skip. If the model just produced the same
+            # tokens as the previous attempt for this target, running through
+            # enforcement + pytest will deterministically fail the same way.
+            # Skip ahead to the next retry (temperature will already be higher).
+            if test_func_clean and test_func_clean == _last_attempted_test:
+                _identical_retry_skips += 1
+                print(f"   🔁 Identical test as previous retry — skipping pytest, forcing diversity")
+                continue
+            _last_attempted_test = test_func_clean
 
             # Fix 5 wiring: enforce stateful setup post-processing
             test_func_clean = enforce_stateful_setup(
@@ -5525,6 +5582,20 @@ RULES — EXECUTE THE PLAN
             with open(test_file, "w") as f:
                 f.write(candidate)
 
+            # Pre-flight: AST parse the candidate before paying pytest startup cost.
+            # If the candidate is not syntactically valid Python, pytest is guaranteed
+            # to fail at collection time — skip it and feed the parse error to the next retry.
+            try:
+                ast.parse(candidate)
+            except SyntaxError as _se:
+                _se_msg = f"SyntaxError: {_se.msg} at line {_se.lineno}"
+                print(f"   ⚠️  Pre-flight syntax check failed: {_se_msg}")
+                with open(test_file, "w") as f:
+                    f.write(accumulated_code)
+                chunk_prompt = build_chunk_prompt(
+                    error_logs=_se_msg, retry=retry, test_plan=_file_plan)
+                continue
+
             _cb("ai_status", "validating", f"Running pytest for {target_label}", target_label)
             try:
                 # Fast path: only run_pytest during the loop
@@ -5606,6 +5677,9 @@ RULES — EXECUTE THE PLAN
                                       test_func_clean, f"BES {_bes_val:.0f}/100 < {threshold}",
                                       os.path.basename(target_file),
                                       failure_category="quality_gate", survived_mutants=mutants)
+                    # Tier 4: self-healing RAG feedback on BES rejection
+                    feedback_test_rejected(target_label_graph)
+                    feedback_bad_didnt_help(target_label_graph, "quality_gate")
                     # Inject the retry hint into the next prompt
                     _retry_error = _hint or f"BES score too low ({_bes_val:.0f}/100). Use more diverse inputs."
                     chunk_prompt = build_chunk_prompt(error_logs=_retry_error, retry=retry, test_plan=_file_plan)
@@ -5621,6 +5695,12 @@ RULES — EXECUTE THE PLAN
                 n_funcs = len(re.findall(r'def test_\w+', accumulated_code))
                 score_emoji = "✓" if _bes_val >= 70 else "~" if _bes_val >= 50 else "?"
                 print(f"   Passed! ({n_funcs} tests accumulated) [{score_emoji}] BES: {_bes_val:.0f}/100")
+                # M2: persist BES score for paper metrics
+                if stats_out is not None:
+                    stats_out["accepted_bes_scores"].append(_bes_val)
+                # Tier 4: self-healing RAG feedback
+                feedback_test_accepted(target_label_graph)
+                feedback_bad_helped(target_label_graph)
                 test_added = True
                 tests_for_this_target += 1
                 
@@ -5741,6 +5821,9 @@ RULES — EXECUTE THE PLAN
                                   test_func_clean, error_summary[:200],
                                   os.path.basename(target_file),
                                   failure_category=category, survived_mutants=mutants)
+                # Tier 4: self-healing RAG feedback on pytest failure
+                feedback_test_rejected(target_label_graph)
+                feedback_bad_didnt_help(target_label_graph, category)
 
                 # Extract the FULL pytest E-lines (actual vs expected values)
                 e_lines = [l.strip() for l in logs.split("\n") if l.strip().startswith("E ")]

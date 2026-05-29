@@ -48,13 +48,26 @@ def is_worth_testing(path: str | Path) -> tuple[bool, str]:
 
     public_funcs = 0
     public_classes = 0
+    property_funcs = 0
     has_logic = False
+
+    def _is_property(fn_node: ast.AST) -> bool:
+        if not isinstance(fn_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        for d in fn_node.decorator_list:
+            if isinstance(d, ast.Name) and d.id == "property":
+                return True
+            if isinstance(d, ast.Attribute) and d.attr in ("setter", "getter", "deleter"):
+                return True
+        return False
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if not node.name.startswith("_"):
                 public_funcs += 1
                 has_logic = True
+                if _is_property(node):
+                    property_funcs += 1
         elif isinstance(node, ast.ClassDef):
             if not node.name.startswith("_"):
                 public_classes += 1
@@ -63,6 +76,8 @@ def is_worth_testing(path: str | Path) -> tuple[bool, str]:
                     if isinstance(cls_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         if not cls_node.name.startswith("_") or cls_node.name == "__init__":
                             public_funcs += 1
+                            if _is_property(cls_node):
+                                property_funcs += 1
         elif isinstance(node, (ast.If, ast.For, ast.While, ast.Try)):
             has_logic = True
 
@@ -71,6 +86,12 @@ def is_worth_testing(path: str | Path) -> tuple[bool, str]:
 
     if name == "__init__.py" and not has_logic and public_funcs == 0 and public_classes == 0:
         return False, "__init__.py with no logic"
+
+    # Skip files dominated by @property definitions — these are typically
+    # read-only metadata accessors with no testable logic and burn model
+    # time for very little coverage gain.
+    if public_funcs >= 3 and property_funcs / public_funcs > 0.8:
+        return False, f"mostly @property ({property_funcs}/{public_funcs})"
 
     return True, f"{public_funcs} func(s), {public_classes} class(es)"
 

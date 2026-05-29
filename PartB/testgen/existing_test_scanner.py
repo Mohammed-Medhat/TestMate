@@ -9,9 +9,11 @@ and the functions have non-trivial assertions). No manual curation needed.
 from __future__ import annotations
 
 import ast
+import os
 import random
 import subprocess
 import tempfile
+import time
 import logging
 from pathlib import Path
 
@@ -22,16 +24,29 @@ _SKIP_DIRS = {
     "node_modules", ".mypy_cache", ".pytest_cache",
 }
 
+# Priming examples older than this are skipped — stale tests typically encode
+# patterns that no longer match current code and teach the model bad habits.
+_PRIMING_STALENESS_SECONDS = 30 * 86400
+
 
 # ── Discovery ─────────────────────────────────────────────────────────────
 
 def find_test_files(repo_dir: str | Path, max_files: int = 30) -> list[Path]:
     repo = Path(repo_dir)
     found = []
+    _cutoff = time.time() - _PRIMING_STALENESS_SECONDS
     for p in repo.rglob("*.py"):
         if any(part in _SKIP_DIRS for part in p.parts):
             continue
         if p.name.startswith("test_") or p.name.endswith("_test.py"):
+            # Skip stale test files (haven't been touched in 30+ days). They
+            # typically reference renamed APIs or old patterns and hurt priming.
+            try:
+                if os.path.getmtime(p) < _cutoff:
+                    logger.debug("[priming] skipping stale test file: %s", p)
+                    continue
+            except OSError:
+                pass
             found.append(p)
             if len(found) >= max_files:
                 break

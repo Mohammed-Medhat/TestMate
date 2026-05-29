@@ -1112,7 +1112,10 @@ def _run_production_autonomous_loop(
         test_code = test_path.read_text(encoding="utf-8") if test_path.exists() else ""
 
     iterations = stats.get("iterations", config.max_retries)
-    return test_code, 0, 0, iterations
+    prompt_tokens = stats.get("prompt_tokens", 0)
+    completion_tokens = stats.get("completion_tokens", 0)
+    bes_scores = stats.get("accepted_bes_scores", [])
+    return test_code, prompt_tokens, completion_tokens, iterations, bes_scores
 
 
 def _save_checkpoint(per_file: list, config: AblationConfig, output_path: str) -> None:
@@ -1165,6 +1168,7 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
             # Optional plan generation (Call #1)
             plan_text = None
             plan_pt = plan_ct = 0
+            bes_scores = []
             if config.enable_plan_mode:
                 plan_text, plan_pt, plan_ct = generate_plan(model, tokenizer, file_info)
 
@@ -1177,7 +1181,7 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
                 # Use the real production pipeline (BES gate, quality gates,
                 # docstring amplifier, pre-pass triage) so this cell honestly
                 # measures the full TestMate stack.
-                test_code, pt, ct, iterations = _run_production_autonomous_loop(
+                test_code, pt, ct, iterations, bes_scores = _run_production_autonomous_loop(
                     model, tokenizer, file_info, config
                 )
                 first_try_test = test_code  # autonomous_loop already self-corrected
@@ -1218,6 +1222,8 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
                 "completion_tokens": ct + plan_ct,
                 "any_pass_1":        any_pass_1,
                 "all_pass_1":        all_pass_1,
+                "bes_scores":        bes_scores,
+                "mean_bes_score":    round(sum(bes_scores) / len(bes_scores), 1) if bes_scores else 0.0,
                 "plan_text":         plan_text if plan_text is not None else "",
                 "test_code":         test_code,          # full code (needed for Phase 2 mutation)
                 "test_code_preview": test_code[:200],   # legacy: kept for backwards-compat readers
@@ -1276,6 +1282,9 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
         "mean_iterations":          _mean(e.get("iterations", 0) for e in valid),
         "mean_wall_time":           _mean(e.get("wall_time_sec", 0) for e in valid),
         "total_wall_time":          round(time.perf_counter() - t_total, 1),
+        "total_prompt_tokens":      sum(e.get("prompt_tokens", 0) for e in valid),
+        "total_completion_tokens":  sum(e.get("completion_tokens", 0) for e in valid),
+        "mean_bes_score":           _mean(e.get("mean_bes_score", 0) for e in valid if e.get("mean_bes_score", 0) > 0),
     }
     if config.enable_plan_mode:
         plan_scores = [e.get("plan_adherence") for e in valid if e.get("plan_adherence") is not None]
@@ -1328,7 +1337,14 @@ def run_mutation_pass(input_json: str, output_json: str) -> dict:
     t_total = time.perf_counter()
     for i, entry in enumerate(per_file, 1):
         if "error" in entry or not entry.get("syntax_valid"):
-            entry["mutation_score"] = 0.0
+            entry["mutation_score"] = None
+            continue
+        # Skip mutation when the test suite couldn't run — mutmut would report
+        # 100% "killed" because every pytest invocation fails (import errors, etc.),
+        # which inflates the mean_mutation_score completely.
+        if not entry.get("tests_passed", 0):
+            entry["mutation_score"] = None
+            print(f"\n[{i}/{len(per_file)}] {entry['file']}  → skipped (tests_passed=0)")
             continue
         print(f"\n[{i}/{len(per_file)}] {entry['file']}")
         t0 = time.perf_counter()
@@ -1340,18 +1356,21 @@ def run_mutation_pass(input_json: str, output_json: str) -> dict:
         if i % 10 == 0:
             _save_phase2_checkpoint(data, out_path)
             elapsed = (time.perf_counter() - t_total) / 60
-            print(f"   💾 Phase 2 checkpoint @ {i}/{len(per_file)} — elapsed {elapsed:.1f}m")
+            print(f"   Checkpoint @ {i}/{len(per_file)} — elapsed {elapsed:.1f}m")
 
-    # Update summary
+    # Only average files where mutation actually ran (tests passed, score is not None)
     valid = [e for e in per_file if "error" not in e and e.get("syntax_valid")]
-    scores = [e.get("mutation_score", 0) for e in valid]
+    scores = [e["mutation_score"] for e in valid
+              if e.get("mutation_score") is not None and e.get("tests_passed", 0) > 0]
     data.setdefault("summary", {})["mean_mutation_score"] = (
         round(sum(scores) / len(scores), 3) if scores else 0.0
     )
+    data["summary"]["mutation_tested_files"] = len(scores)
 
     out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    print(f"\n✅ Phase 2 complete — saved → {out_path}")
-    print(f"   mean_mutation_score = {data['summary']['mean_mutation_score']:.2f}%")
+    print(f"\n Phase 2 complete — saved → {out_path}")
+    print(f"   mean_mutation_score = {data['summary']['mean_mutation_score']:.2f}%"
+          f"  (over {data['summary']['mutation_tested_files']} files with passing tests)")
     return data
 
 
