@@ -1323,7 +1323,8 @@ def _run_production_autonomous_loop(
     docstring amplifier, pre-pass triage) rather than the harness's stripped-
     down generate_with_loop.
 
-    Returns (test_code, prompt_tokens, completion_tokens, iterations, bes_scores).
+    Returns (test_code, prompt_tokens, completion_tokens, iterations,
+             bes_scores, target_timings).
     Returns an empty tuple early when the source module is unimportable —
     no generated test could succeed against it.
     """
@@ -1373,7 +1374,7 @@ def _run_production_autonomous_loop(
         if not ok:
             print(f"   ⏭️  Source module unimportable — skipping autonomous_loop "
                   f"({reason.splitlines()[-1][:160] if reason else 'no detail'})")
-            return "", 0, 0, 0, []
+            return "", 0, 0, 0, [], {}
 
         autonomous_loop(
             model,
