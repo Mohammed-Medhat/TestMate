@@ -1404,6 +1404,13 @@ def _run_production_autonomous_loop(
                   f"({reason.splitlines()[-1][:160] if reason else 'no detail'})")
             return "", 0, 0, 0, [], {}
 
+        # CRITICAL: write the test next to the conftest (tmp/), not next to
+        # src (tmp/django/contrib/admin/) or PartB/testgen/generated_tests/.
+        # Two reasons:
+        #   1. Inner-loop pytest needs to discover tmp/conftest.py so identity
+        #      restoration fires — without it, tests run against the INSTALLED
+        #      package instead of our source.
+        #   2. The lookup below needs a deterministic location.
         autonomous_loop(
             model,
             tokenizer,
@@ -1414,13 +1421,23 @@ def _run_production_autonomous_loop(
             skip_bes_gate=getattr(config, "skip_bes_gate", False),
             max_seconds=getattr(config, "max_file_seconds", None),
             import_path=ablation_import_path,
+            test_output_dir=str(tmp),
         )
 
-        # autonomous_loop writes test_{stem}_testmate.py in the same dir as src
+        # autonomous_loop now writes test_{stem}_testmate.py into test_output_dir (=tmp)
         _stem = src.stem
-        test_path = src.parent / f"test_{_stem}_testmate.py"
+        test_path = tmp / f"test_{_stem}_testmate.py"
         if not test_path.exists():
-            test_path = src.parent / f"test_{_stem}.py"   # legacy fallback
+            # Fallbacks: previous flat layout next to src, legacy non-testmate name,
+            # and the gen_tests_dir path autonomous_loop used before this fix.
+            for _alt in (
+                src.parent / f"test_{_stem}_testmate.py",
+                src.parent / f"test_{_stem}.py",
+                Path(__file__).parent.parent / "generated_tests" / f"test_{_stem}_testmate.py",
+            ):
+                if _alt.exists():
+                    test_path = _alt
+                    break
         test_code = test_path.read_text(encoding="utf-8") if test_path.exists() else ""
 
     iterations = stats.get("iterations", config.max_retries)

@@ -4619,7 +4619,8 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     srs_requirements: list = None, priming_examples: str = "",
                     auto_repair: bool = False, stats_out: dict = None,
                     skip_bes_gate: bool = False, max_seconds: float = None,
-                    docker_image: str = None):
+                    docker_image: str = None,
+                    test_output_dir: str = None):
     """The main self-correcting loop.
 
     Args:
@@ -4803,7 +4804,14 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
     _stem = os.path.splitext(target_name)[0]
     _testmate_name = f"test_{_stem}_testmate.py"
 
-    if import_path:
+    if test_output_dir:
+        # Caller (e.g. ablation harness) explicitly chose where to place the
+        # test — typically next to a conftest.py that does identity
+        # restoration. Honour that location regardless of import_path so the
+        # inner-loop pytest discovers the conftest.
+        os.makedirs(test_output_dir, exist_ok=True)
+        test_file = os.path.join(test_output_dir, _testmate_name)
+    elif import_path:
         gen_tests_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_tests")
         os.makedirs(gen_tests_dir, exist_ok=True)
         test_file = os.path.join(gen_tests_dir, _testmate_name)
