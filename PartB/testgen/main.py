@@ -5519,17 +5519,23 @@ RULES — EXECUTE THE PLAN
                     continue
 
                 # O5: pre-pytest symbol validation — catches hallucinated
-                # `from {actual_import} import <unknown_or_private>` lines
-                # before we spend tokens on a retry triggered by an ImportError.
+                # `from {actual_import} import <unknown_or_private>` lines.
+                # Diagnostic-only: we print warnings but do NOT mutate
+                # _last_category, because:
+                #   (a) the per-target import-stripping below removes most
+                #       suspect lines before pytest sees them, so flagging them
+                #       as "import_error" would be wrong; and
+                #   (b) the category-aware retry bail (Fix 2) at line ~5923
+                #       trips after 2 consecutive import_error categories — if
+                #       we mark this iteration as import_error preemptively
+                #       and pytest also yields import_error, we'd burn the
+                #       remaining retry budget on a single failure.
                 try:
-                    from symbol_validator import validate_test_imports, format_warnings_for_prompt  # type: ignore[import]
+                    from symbol_validator import validate_test_imports  # type: ignore[import]
                     _sym_warnings = validate_test_imports(test_func, actual_import, source_code)
                     if _sym_warnings:
-                        _hint = format_warnings_for_prompt(_sym_warnings)
-                        print(f"   ⚠️  Symbol validator: {len(_sym_warnings)} suspect import(s)")
-                        # Feed warnings into the NEXT retry's prompt as error_logs
-                        _last_error_summary = (_last_error_summary or "") + _hint
-                        _last_category = "import_error"
+                        print(f"   ⚠️  Symbol validator: {len(_sym_warnings)} suspect import(s) "
+                              f"(diagnostic only, not failing the test)")
                 except Exception:
                     pass  # validator must never block the generation flow
 

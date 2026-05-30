@@ -1054,22 +1054,43 @@ def evaluate_test(test_code: str,
 
     # 3. Execution + coverage
     mid = file_info.get("module_id", file_info["id"])
+    orig_code_file = file_info.get("original_code_file", "")
+    orig_import    = file_info.get("original_import_path", "")
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        src = tmp / f"{mid}.py"
-        src.write_text(file_info["source_code"], encoding="utf-8")
+
+        # CRITICAL: mirror the layout autonomous_loop used during generation.
+        # The generated tests reference `from {orig_import} import *`, which
+        # only resolves when the conftest hijacks sys.modules to point at OUR
+        # source. The legacy flat layout (mid.py + sys.path conftest) is the
+        # fallback when no metadata is available.
+        if orig_code_file and orig_import:
+            src = tmp / orig_code_file
+            src.parent.mkdir(parents=True, exist_ok=True)
+            src.write_text(file_info["source_code"], encoding="utf-8")
+            (tmp / "conftest.py").write_text(
+                _make_identity_conftest(file_info["source_code"], orig_import, str(src)),
+                encoding="utf-8",
+            )
+            cov_target = orig_import
+        else:
+            src = tmp / f"{mid}.py"
+            src.write_text(file_info["source_code"], encoding="utf-8")
+            (tmp / "conftest.py").write_text(
+                "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent))\n"
+            )
+            cov_target = mid
+
         tst = tmp / f"test_{mid}.py"
         tst.write_text(test_code, encoding="utf-8")
-        # Conftest ensures tempdir is on sys.path so relative-import-style source can be found
-        (tmp / "conftest.py").write_text(
-            "import sys, pathlib\nsys.path.insert(0, str(pathlib.Path(__file__).parent))\n"
-        )
 
-        # 3a. Collection
+        # 3a. Collection — bumped 30→60s to absorb Django settings.configure()
+        # + django.setup() overhead in the identity conftest.
         try:
             r = subprocess.run(
                 ["python", "-m", "pytest", str(tst), "--collect-only", "-q"],
-                cwd=tmp, capture_output=True, text=True, timeout=30,
+                cwd=tmp, capture_output=True, text=True, timeout=60,
             )
             metrics["imports_resolve"] = (r.returncode == 0)
             metrics["tests_collected"] = sum(1 for l in r.stdout.splitlines() if "::test_" in l)
@@ -1081,13 +1102,14 @@ def evaluate_test(test_code: str,
 
         metrics["tests_runnable"] = True
 
-        # 3b. Run with coverage — pytest-cov takes a module name (importable via
-        # sys.path) OR a directory path. A .py file path is NOT valid; use module
-        # name (mid). Conftest.py above already puts tmp on sys.path.
+        # 3b. Run with coverage — pytest-cov takes a module name (importable
+        # via sys.path) OR a directory path. With identity restoration the
+        # module is reachable under its real package name, so cov_target is
+        # the original import path; otherwise fall back to mid.
         try:
             r = subprocess.run(
                 ["python", "-m", "pytest", str(tst),
-                 f"--cov={mid}", "--cov-branch", "--cov-report=json",
+                 f"--cov={cov_target}", "--cov-branch", "--cov-report=json",
                  "--tb=no", "-q"],
                 cwd=tmp, capture_output=True, text=True, timeout=120,
             )
@@ -1102,8 +1124,14 @@ def evaluate_test(test_code: str,
             cov_file = tmp / "coverage.json"
             if cov_file.exists():
                 cov_data = json.loads(cov_file.read_text())
+                # Match either the synthetic name, the original file path
+                # (django/contrib/admin/checks.py), or the raw filename.
+                norm_orig = orig_code_file.replace("\\", "/") if orig_code_file else ""
                 for fname, fdata in cov_data.get("files", {}).items():
-                    if mid in fname or file_info["filename"] in fname:
+                    fname_norm = fname.replace("\\", "/")
+                    if (mid in fname
+                            or file_info["filename"] in fname
+                            or (norm_orig and norm_orig in fname_norm)):
                         s = fdata.get("summary", {})
                         stmts   = s.get("num_statements", 0)
                         covered = s.get("covered_lines", 0)
@@ -1439,16 +1467,27 @@ def run_ablation(config: AblationConfig, output_path: str) -> dict:
         model = attach_lora(model, config.lora_path)
     dataset = load_test_dataset(sample_size=config.sample_size)
 
-    # Resume from checkpoint if one exists and resume=True
+    # Resume from checkpoint if one exists and resume=True. We invalidate the
+    # checkpoint when its config doesn't match the current run — otherwise a
+    # stale partial from an earlier (possibly buggy) run would silently skip
+    # every file, producing an empty output.
     per_file: list[dict] = []
     done_ids: set[str] = set()
     partial_path = Path(output_path).with_suffix(".partial.json")
     if config.resume and partial_path.exists():
         try:
             checkpoint = json.loads(partial_path.read_text(encoding="utf-8"))
-            per_file = checkpoint.get("per_file", [])
-            done_ids = {e["id"] for e in per_file if "id" in e}
-            print(f"   ▶️  Resuming — skipping {len(done_ids)} already-completed files")
+            cp_config  = checkpoint.get("config", {})
+            cur_config = asdict(config)
+            if cp_config != cur_config:
+                print(f"   ⚠️  Checkpoint config differs — discarding stale partial")
+                print(f"      (delete {partial_path.name} manually if you want a full reset)")
+                per_file = []
+                done_ids = set()
+            else:
+                per_file = checkpoint.get("per_file", [])
+                done_ids = {e["id"] for e in per_file if "id" in e}
+                print(f"   ▶️  Resuming — skipping {len(done_ids)} already-completed files")
         except (json.JSONDecodeError, OSError, KeyError):
             per_file = []
             done_ids = set()
