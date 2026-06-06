@@ -11,19 +11,32 @@ interface ModalProps {
 function Toggle({ label, desc, checked, onChange, color = 'emerald' }: {
   label: string; desc: string; checked: boolean; onChange: () => void; color?: string
 }) {
-  const bg = checked
+  const track = checked
     ? color === 'violet' ? 'bg-violet-500'
     : color === 'amber'  ? 'bg-amber-500'
     : 'bg-emerald-500'
     : 'bg-zinc-700'
+
   return (
-    <div className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
-      <div>
-        <p className="text-sm font-medium text-zinc-200">{label}</p>
-        <p className="text-xs text-zinc-500">{desc}</p>
+    <div className="flex items-start gap-3 p-3 bg-zinc-800/50 rounded-lg">
+      {/* Label + description — takes all space, can wrap */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-zinc-200 leading-snug">{label}</p>
+        <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">{desc}</p>
       </div>
-      <button onClick={onChange} className={`relative w-11 h-6 rounded-full transition-colors ${bg}`}>
-        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${checked ? 'left-6' : 'left-1'}`} />
+      {/* Toggle track — never shrinks */}
+      <button
+        onClick={onChange}
+        aria-checked={checked}
+        role="switch"
+        className={`flex-shrink-0 relative w-11 h-6 rounded-full transition-colors duration-200 focus-ring mt-0.5 ${track}`}
+      >
+        {/* Knob — uses translateX so transition-transform actually works */}
+        <span className={`
+          absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm
+          transition-transform duration-200 ease-in-out
+          ${checked ? 'translate-x-5' : 'translate-x-0'}
+        `} />
       </button>
     </div>
   )

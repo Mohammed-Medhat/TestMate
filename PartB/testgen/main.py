@@ -949,7 +949,7 @@ def generate_test(model, tokenizer, messages: list, max_tokens: int = MAX_NEW_TO
 
 
 def run_pytest(test_file: str, target_file: str = None, deadline_ts: float = None,
-               docker_image: str = None) -> tuple[bool, str]:
+               docker_image: str = None, python_exe: str = None) -> tuple[bool, str]:
     """Run pytest on the test file. Returns (passed, output).
 
     deadline_ts: optional Unix timestamp. When provided, pytest's subprocess
@@ -957,6 +957,10 @@ def run_pytest(test_file: str, target_file: str = None, deadline_ts: float = Non
 
     docker_image: optional pre-built repo image tag. When provided, runs pytest
     inside that container (env-isolated from host) instead of host pytest.
+
+    python_exe: optional interpreter to run pytest with (e.g. a version-pinned
+    cluster venv). Defaults to the host interpreter. Ignored when docker_image
+    is set.
     """
     if docker_image:
         try:
@@ -970,6 +974,7 @@ def run_pytest(test_file: str, target_file: str = None, deadline_ts: float = Non
             # silently producing zero results in production.
             print(f"   ⚠️  Docker pytest fell back to host: {exc}")
 
+    _py = python_exe or sys.executable
     env = os.environ.copy()
     if target_file:
         # Walk up from target_file until no __init__.py is found to find the repo root
@@ -983,7 +988,7 @@ def run_pytest(test_file: str, target_file: str = None, deadline_ts: float = Non
         _timeout = max(5, min(_timeout, int(deadline_ts - time.time()) - 2))
 
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", test_file, "-x", "--tb=short", "--no-header", "-q"],
+        [_py, "-m", "pytest", test_file, "-x", "--tb=short", "--no-header", "-q"],
         capture_output=True, text=True, timeout=_timeout, cwd=os.path.dirname(os.path.abspath(test_file)),
         env=env
     )
@@ -993,7 +998,7 @@ def run_pytest(test_file: str, target_file: str = None, deadline_ts: float = Non
 
 def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str = None,
                              need_lines=True, deadline_ts: float = None,
-                             docker_image: str = None) -> tuple[bool, str, float, float, set]:
+                             docker_image: str = None, python_exe: str = None) -> tuple[bool, str, float, float, set]:
     """Run pytest with coverage including branch coverage.
 
     Returns (passed, output, line_coverage_pct, branch_coverage_pct, covered_lines).
@@ -1006,6 +1011,8 @@ def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str =
                   coverage pass inside that container.  Note: covered_lines set
                   is empty in Docker mode (would require docker-cp of cov.json
                   per call); use the percentages instead.
+    python_exe: optional interpreter (version-pinned cluster venv). Defaults to
+                the host interpreter. Ignored when docker_image is set.
     """
     if docker_image:
         try:
@@ -1017,6 +1024,7 @@ def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str =
             )
         except Exception as exc:
             print(f"   ⚠️  Docker coverage pytest fell back to host: {exc}")
+    _py = python_exe or sys.executable
     # Use module name if available (works for installed packages),
     # fall back to source directory (works for local files)
     if cov_module:
@@ -1027,7 +1035,7 @@ def run_pytest_with_coverage(test_file: str, source_file: str, cov_module: str =
     test_dir = os.path.dirname(os.path.abspath(test_file))
     cov_json = os.path.join(test_dir, "coverage.json")
 
-    flags = [sys.executable, "-m", "pytest", test_file, "-v", "--tb=short",
+    flags = [_py, "-m", "pytest", test_file, "-v", "--tb=short",
              f"--cov={cov_target}",
              "--cov-branch",
              "--cov-report=term-missing", "--no-header"]
@@ -4620,7 +4628,8 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
                     auto_repair: bool = False, stats_out: dict = None,
                     skip_bes_gate: bool = False, max_seconds: float = None,
                     docker_image: str = None,
-                    test_output_dir: str = None):
+                    test_output_dir: str = None,
+                    python_exe: str = None):
     """The main self-correcting loop.
 
     Args:
@@ -5160,7 +5169,7 @@ RULES — EXECUTE THE PLAN
     # compute (next_start - this_start) for the duration of each target.
     _target_start_times: list[tuple[str, float]] = []
     # Write initial empty test file to get baseline
-    with open(test_file, "w") as f:
+    with open(test_file, "w", encoding="utf-8") as f:
         f.write(accumulated_code)
 
     for idx, (cls_name, method_name) in enumerate(targets, 1):
@@ -5618,7 +5627,7 @@ RULES — EXECUTE THE PLAN
                     # Hard reject on retry 0 when coverage is very low
                     if retry == 0 and pct < 50:
                         print(f"   ❌ Path coverage too low ({pct:.0f}%) — forcing retry")
-                        with open(test_file, "w") as f:
+                        with open(test_file, "w", encoding="utf-8") as f:
                             f.write(accumulated_code)
                         continue
                 elif _pcov == _ptotal:
@@ -5682,7 +5691,7 @@ RULES — EXECUTE THE PLAN
             _cb("ai_status", "writing", f"Writing test for {target_label}", target_label)
             _cb("code_stream", test_func_clean, f"test_{os.path.basename(target_file)}", target_label, retry > 0)
             candidate = accumulated_code + "\n" + test_func_clean + "\n"
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(candidate)
 
             # Pre-flight: AST parse the candidate before paying pytest startup cost.
@@ -5693,7 +5702,7 @@ RULES — EXECUTE THE PLAN
             except SyntaxError as _se:
                 _se_msg = f"SyntaxError: {_se.msg} at line {_se.lineno}"
                 print(f"   ⚠️  Pre-flight syntax check failed: {_se_msg}")
-                with open(test_file, "w") as f:
+                with open(test_file, "w", encoding="utf-8") as f:
                     f.write(accumulated_code)
                 chunk_prompt = build_chunk_prompt(
                     error_logs=_se_msg, retry=retry, test_plan=_file_plan)
@@ -5704,7 +5713,7 @@ RULES — EXECUTE THE PLAN
                 # Fast path: only run_pytest during the loop
                 # Coverage is collected ONCE at the end for speed
                 passed, logs = run_pytest(test_file, target_file, deadline_ts=file_deadline,
-                                          docker_image=docker_image)
+                                          docker_image=docker_image, python_exe=python_exe)
                 cov_pct = 0.0
                 branch_cov_pct = 0.0
                 lines_after = covered_lines_so_far
@@ -5725,7 +5734,7 @@ RULES — EXECUTE THE PLAN
                                       os.path.basename(target_file),
                                       failure_category="quality_gate", survived_mutants=mutants)
                     chunk_prompt = build_chunk_prompt(error_logs=reject_msg, retry=retry, test_plan=_file_plan)
-                    with open(test_file, "w") as f:
+                    with open(test_file, "w", encoding="utf-8") as f:
                         f.write(accumulated_code)
                     continue
             
@@ -5787,7 +5796,7 @@ RULES — EXECUTE THE PLAN
                     # Inject the retry hint into the next prompt
                     _retry_error = _hint or f"BES score too low ({_bes_val:.0f}/100). Use more diverse inputs."
                     chunk_prompt = build_chunk_prompt(error_logs=_retry_error, retry=retry, test_plan=_file_plan)
-                    with open(test_file, "w") as f:
+                    with open(test_file, "w", encoding="utf-8") as f:
                         f.write(accumulated_code)
                     continue
 
@@ -5996,7 +6005,7 @@ RULES — EXECUTE THE PLAN
                 })
 
             candidate_failure = accumulated_code + "\n\n# FAILING TEST (exhausted retries): Potential Bug\n" + test_func_clean + "\n"
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(candidate_failure)
 
     # O7: compute per-target wall time as (next_start - this_start),
@@ -6085,14 +6094,14 @@ RULES — EXECUTE THE PLAN
         pass
 
     # ── Save final accumulated tests ──
-    with open(test_file, "w") as f:
+    with open(test_file, "w", encoding="utf-8") as f:
         f.write(accumulated_code)
 
     # Get final coverage from last successful run or a new quick run
     try:
         _, _, final_cov_pct, final_branch_cov_pct, _ = run_pytest_with_coverage(
             test_file, target_file, actual_import, need_lines=False,
-            deadline_ts=file_deadline, docker_image=docker_image,
+            deadline_ts=file_deadline, docker_image=docker_image, python_exe=python_exe,
         )
     except:
         final_cov_pct = 0.0
@@ -6282,7 +6291,7 @@ RULES — EXECUTE THE PLAN
                       f"renamed {gate_report['duplicates_renamed']} duplicates, "
                       f"fixed {gate_report['none_strings_fixed']} None-string issues")
             accumulated_code = cleaned
-            with open(test_file, "w") as f:
+            with open(test_file, "w", encoding="utf-8") as f:
                 f.write(accumulated_code)
     except Exception as _gate_exc:
         print(f"   ⚠️  Quality gates skipped (error): {_gate_exc}")

@@ -1,0 +1,42 @@
+﻿import pytest
+from buggy_calculator import calculate_discount, clamp, count_vowels, fahrenheit_to_celsius, find_second_largest
+
+
+def test_discount_twenty_percent():
+    assert calculate_discount(100, 20) == 80.0
+
+def test_discount_ten_percent():
+    assert calculate_discount(50, 10) == 45.0
+
+def test_discount_full():
+    assert calculate_discount(100, 100) == 0.0
+
+def test_clamp_below_min():
+    assert clamp(5, 10, 20) == 10
+
+def test_clamp_above_max():
+    assert clamp(25, 10, 20) == 20
+
+def test_clamp_in_range():
+    assert clamp(15, 10, 20) == 15
+
+def test_count_vowels_mixed_case():
+    assert count_vowels("Hello World") == 3
+
+def test_count_vowels_uppercase():
+    assert count_vowels("AEIOU") == 5
+
+def test_count_vowels_no_vowels():
+    assert count_vowels("rhythm") == 0
+
+def test_freezing_point():
+    assert fahrenheit_to_celsius(32) == pytest.approx(0.0, abs=1e-6)
+
+def test_boiling_point():
+    assert fahrenheit_to_celsius(212) == pytest.approx(100.0, abs=1e-6)
+
+def test_second_largest_basic():
+    assert find_second_largest([3, 1, 4, 1, 5, 9]) == 5
+
+def test_second_largest_pair():
+    assert find_second_largest([10, 20]) == 10

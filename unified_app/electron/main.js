@@ -59,6 +59,7 @@ function createMainWindow() {
     minWidth: 1100,
     minHeight: 700,
     show: false,
+    fullscreen: true,
     backgroundColor: '#0a0d0c',
     title: 'TestMate',
     webPreferences: {

@@ -1,11 +1,13 @@
-import { Home, Settings, Search, Rocket, FileCode, Link2, FileText, Bot, Upload, Wrench } from 'lucide-react'
+import { Home, Settings, Search, Rocket, FileCode, Link2, FileText, Bot, Upload, Wrench, HelpCircle } from 'lucide-react'
 import type { Mode, PartAMode, FileInfo, RunSettings } from '../types'
+import { MODE_COLORS } from '../theme'
 
 interface Props {
   mode: Mode
   setMode: (m: Mode) => void
   onHome: () => void
   onSettings: () => void
+  onHelp?: () => void
   settings: RunSettings
 
   // Part B
@@ -53,7 +55,7 @@ const PART_A_MODES: { id: PartAMode; label: string }[] = [
 ]
 
 export default function LeftSidebar(props: Props) {
-  const { mode, setMode, onHome, onSettings, settings, status, startRun } = props
+  const { mode, setMode, onHome, onSettings, onHelp, settings, status, startRun } = props
 
   const activeSettingsCount = [settings.docker, settings.deepScan, settings.intense, settings.hitl, settings.planMode, settings.autoRepair].filter(Boolean).length
 
@@ -62,28 +64,35 @@ export default function LeftSidebar(props: Props) {
       {/* ── Icon rail (48px) ─────────────────────────────────────────── */}
       <div className="w-12 bg-zinc-950 border-r border-zinc-800 flex flex-col items-center py-3 gap-2">
         {/* Home */}
-        <button onClick={onHome}
-          className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors mb-2"
-          title="Back to Home">
+        <button onClick={onHome} aria-label="Back to Home"
+          className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors mb-2 focus-ring"
+          title="Back to Home (H)">
           <Home size={18} />
         </button>
 
-        {/* Mode switchers */}
-        {MODE_ICONS.map(({ mode: m, icon, label }) => (
-          <button key={m} onClick={() => setMode(m)} title={label}
-            className={`p-2 rounded transition-colors ${
+        {/* Mode switchers — active icon uses that mode's accent color */}
+        {MODE_ICONS.map(({ mode: m, icon, label }, idx) => (
+          <button key={m} onClick={() => setMode(m)} aria-label={label}
+            title={`${label} (${idx + 1})`}
+            className={`p-2 rounded transition-all focus-ring ${
               mode === m
-                ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30'
+                ? MODE_COLORS[m].railActive
                 : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
             }`}>
             {icon}
           </button>
         ))}
 
-        {/* Settings at bottom */}
-        <div className="mt-auto">
-          <button onClick={onSettings} title="Settings"
-            className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 transition-colors relative">
+        {/* Help + Settings at bottom */}
+        <div className="mt-auto flex flex-col gap-1">
+          {onHelp && (
+            <button onClick={onHelp} aria-label="Help" title="Help / Manual (?)"
+              className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors focus-ring">
+              <HelpCircle size={18} />
+            </button>
+          )}
+          <button onClick={onSettings} aria-label="Open Settings" title="Settings"
+            className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 transition-colors relative focus-ring">
             <Settings size={18} />
             {activeSettingsCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
@@ -193,9 +202,12 @@ function CombinedSidebar({
 
       {files.length > 0 && (
         <div className="p-3 border-t border-zinc-800">
-          <button onClick={startRun} disabled={!canRun}
-            className="w-full py-2 rounded text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-40 transition-colors flex items-center justify-center gap-1.5">
-            {status === 'running' ? 'Running...' : <><Rocket size={14} /> Run Full Pipeline</>}
+          <button onClick={startRun} disabled={!canRun} aria-label="Run Full Pipeline"
+            className={`relative w-full py-2 rounded text-sm font-semibold text-white transition-all focus-ring flex items-center justify-center gap-1.5
+              ${status === 'running' ? 'bg-emerald-600 opacity-80 cursor-not-allowed' : !canRun ? 'bg-emerald-500 opacity-40' : 'bg-emerald-500 hover:bg-emerald-600 btn-run-ready'}`}>
+            {status === 'running'
+              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Running…</>
+              : <><Rocket size={14} /> Run Full Pipeline</>}
           </button>
           <p className="text-[0.6rem] text-zinc-500 text-center mt-1">
             {selected.size}/{files.length} selected · {settings.maxRetries} retries
@@ -216,13 +228,13 @@ function PartASidebar({ partAMode, setPartAMode, srsFile, setSrsFile, readme, se
       <div className="p-3 border-b border-zinc-800 flex-1 overflow-y-auto">
         <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Mode</h2>
 
-        {/* Segmented pill */}
+        {/* Segmented pill — blue accent for Part A */}
         <div className="flex gap-0.5 rounded-lg border border-zinc-800 bg-zinc-950 p-0.5 mb-3">
           {PART_A_MODES.map(m => (
             <button key={m.id} onClick={() => setPartAMode(m.id)}
               className={`flex-1 rounded-md py-1 text-[10px] font-medium transition-colors ${
                 partAMode === m.id
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
                   : 'text-zinc-500 hover:text-zinc-300'
               }`}>{m.label}</button>
           ))}
@@ -232,7 +244,7 @@ function PartASidebar({ partAMode, setPartAMode, srsFile, setSrsFile, readme, se
         {(partAMode === 'srs' || partAMode === 'both') && (
           <>
             <label className="block text-[11px] text-zinc-500 mb-1">SRS Document</label>
-            <label className="flex items-center gap-2 mb-2 cursor-pointer rounded border border-dashed border-zinc-700 px-2 py-2 text-[11px] text-zinc-500 hover:border-emerald-500/40 hover:text-zinc-300 transition-colors">
+            <label className="flex items-center gap-2 mb-2 cursor-pointer rounded border border-dashed border-zinc-700 px-2 py-2 text-[11px] text-zinc-500 hover:border-blue-500/40 hover:text-zinc-300 transition-colors">
               <Upload size={12} />
               {srsFile ? srsFile.name : 'Choose PDF / DOCX…'}
               <input type="file" accept=".pdf,.doc,.docx" className="hidden"
@@ -242,7 +254,7 @@ function PartASidebar({ partAMode, setPartAMode, srsFile, setSrsFile, readme, se
               <label className="text-[11px] text-zinc-500 shrink-0">Threshold</label>
               <input type="range" min={0.5} max={1} step={0.05} value={threshold}
                 onChange={e => setThreshold(Number(e.target.value))}
-                className="flex-1 accent-emerald-500" />
+                className="flex-1 accent-blue-500" />
               <span className="text-[11px] text-zinc-400 w-7 text-right">{threshold}</span>
             </div>
           </>
@@ -252,26 +264,26 @@ function PartASidebar({ partAMode, setPartAMode, srsFile, setSrsFile, readme, se
         {(partAMode === 'readme' || partAMode === 'both') && (
           <>
             <label className="block text-[11px] text-zinc-500 mb-1">README / Description</label>
-            <textarea className="w-full mb-2 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-emerald-500 focus:outline-none resize-none"
+            <textarea className="w-full mb-2 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-blue-500 focus:outline-none resize-none"
               rows={3} placeholder="Paste README text…" value={readme} onChange={e => setReadme(e.target.value)} />
-            <input className="w-full mb-1.5 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            <input className="w-full mb-1.5 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
               placeholder="Project name (optional)" value={repoNameA} onChange={e => setRepoNameA(e.target.value)} />
-            <input className="w-full mb-1.5 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            <input className="w-full mb-1.5 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
               placeholder="Main problems to address…" value={problems} onChange={e => setProblems(e.target.value)} />
-            <input className="w-full mb-1.5 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            <input className="w-full mb-1.5 rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
               placeholder="Expected behaviour…" value={expected} onChange={e => setExpected(e.target.value)} />
-            <input className="w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            <input className="w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
               placeholder="Known edge cases…" value={edgeCases} onChange={e => setEdgeCases(e.target.value)} />
           </>
         )}
       </div>
 
-      <RunButton status={status} onClick={startRun} label="Run Part A" />
+      <RunButton status={status} onClick={startRun} label="Run Part A" colorScheme="blue" />
     </>
   )
 }
 
-/* ── Part B Sidebar (verbatim PartB/gui pattern) ─────────────── */
+/* ── Part B Sidebar — violet accent ──────────────────────────── */
 function PartBSidebar({ repoUrl, setRepoUrl, branch, setBranch, files, selected,
   toggleFile, discover, discovering, repoName, settings, status, startRun }: Props) {
 
@@ -282,12 +294,12 @@ function PartBSidebar({ repoUrl, setRepoUrl, branch, setBranch, files, selected,
         <input value={repoUrl} onChange={e => setRepoUrl(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && discover()}
           placeholder="GitHub URL or local path"
-          className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-emerald-500" />
+          className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-violet-500" />
         <input value={branch} onChange={e => setBranch(e.target.value)}
           placeholder="branch (optional)"
-          className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-emerald-500" />
+          className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-violet-500" />
         <button onClick={discover} disabled={discovering || !repoUrl.trim()}
-          className="w-full py-1.5 rounded text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
+          className="w-full py-1.5 rounded text-xs font-medium bg-violet-500 hover:bg-violet-600 text-white disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
           {discovering ? 'Scanning...' : <><Search size={12} /> Discover Files</>}
         </button>
       </div>
@@ -297,7 +309,7 @@ function PartBSidebar({ repoUrl, setRepoUrl, branch, setBranch, files, selected,
         {files.length > 0 && (
           <button
             onClick={() => { files.forEach((_, i) => { if (selected.size < files.length && !selected.has(i)) toggleFile(i); else if (selected.size === files.length && selected.has(i)) toggleFile(i) }) }}
-            className="text-[0.65rem] text-emerald-400 hover:text-emerald-300 hover:underline">
+            className="text-[0.65rem] text-violet-400 hover:text-violet-300 hover:underline">
             {selected.size === files.length ? 'Deselect All' : 'Select All'}
           </button>
         )}
@@ -313,8 +325,8 @@ function PartBSidebar({ repoUrl, setRepoUrl, branch, setBranch, files, selected,
               <div key={i} onClick={() => toggleFile(i)}
                 className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 cursor-pointer group">
                 <input type="checkbox" checked={checked} onChange={() => toggleFile(i)}
-                  onClick={e => e.stopPropagation()} className="accent-emerald-500 w-3 h-3" />
-                <FileCode size={14} className="text-emerald-400" />
+                  onClick={e => e.stopPropagation()} className="accent-violet-500 w-3 h-3" />
+                <FileCode size={14} className="text-violet-400" />
                 <span className={`text-sm ${checked ? 'text-zinc-200' : 'text-zinc-400'} group-hover:text-zinc-200 truncate`}>{name}</span>
                 <span className="ml-auto text-[0.6rem] text-zinc-600">{file.functions}fn</span>
               </div>
@@ -327,9 +339,12 @@ function PartBSidebar({ repoUrl, setRepoUrl, branch, setBranch, files, selected,
 
       {files.length > 0 && (
         <div className="p-3 border-t border-zinc-800">
-          <button onClick={startRun} disabled={selected.size === 0 || status === 'running'}
-            className="w-full py-2 rounded text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-40 transition-colors flex items-center justify-center gap-1.5">
-            {status === 'running' ? 'Running...' : <><Rocket size={14} /> Generate Tests</>}
+          <button onClick={startRun} disabled={selected.size === 0 || status === 'running'} aria-label="Generate Tests"
+            className={`relative w-full py-2 rounded text-sm font-semibold text-white transition-all focus-ring flex items-center justify-center gap-1.5
+              ${status === 'running' ? 'bg-violet-600 opacity-80 cursor-not-allowed' : selected.size === 0 ? 'bg-violet-500 opacity-40' : 'bg-violet-500 hover:bg-violet-600 btn-run-ready'}`}>
+            {status === 'running'
+              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Running…</>
+              : <><Rocket size={14} /> Generate Tests</>}
           </button>
           <p className="text-[0.6rem] text-zinc-500 text-center mt-1">
             {selected.size}/{files.length} selected · {settings.maxRetries} retries
@@ -469,15 +484,38 @@ function ActivePills({ settings }: { settings: RunSettings }) {
   )
 }
 
-function RunButton({ status, onClick, label, disabled = false }: {
+function RunButton({ status, onClick, label, disabled = false, colorScheme = 'emerald' }: {
   status: string; onClick: () => void; label: string; disabled?: boolean
+  colorScheme?: 'emerald' | 'blue' | 'violet' | 'amber'
 }) {
+  const isRunning = status === 'running'
+  const isReady   = !disabled && !isRunning
+
+  const base = colorScheme === 'blue'    ? 'bg-blue-500 hover:bg-blue-600'
+             : colorScheme === 'violet'  ? 'bg-violet-500 hover:bg-violet-600'
+             : colorScheme === 'amber'   ? 'bg-amber-500 hover:bg-amber-600'
+             :                            'bg-emerald-500 hover:bg-emerald-600'
+  const running = colorScheme === 'blue'   ? 'bg-blue-600'
+                : colorScheme === 'violet' ? 'bg-violet-600'
+                : colorScheme === 'amber'  ? 'bg-amber-600'
+                :                           'bg-emerald-600'
+  const faded  = base.split(' ')[0]   // just the bg-* part for disabled
+
   return (
     <div className="p-3 border-t border-zinc-800 mt-auto">
       <button onClick={onClick}
-        disabled={disabled || status === 'running'}
-        className="w-full py-2 rounded text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-40 transition-colors flex items-center justify-center gap-1.5">
-        {status === 'running' ? 'Running...' : <><Rocket size={14} />{label}</>}
+        disabled={disabled || isRunning}
+        aria-label={isRunning ? 'Running…' : label}
+        className={`relative w-full py-2 rounded text-sm font-semibold text-white
+          transition-all focus-ring flex items-center justify-center gap-1.5
+          ${isRunning ? `${running} opacity-80 cursor-not-allowed`
+            : disabled  ? `${faded} opacity-40 cursor-not-allowed`
+            : `${base} ${isReady ? 'btn-run-ready' : ''}`}
+        `}>
+        {isRunning
+          ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Running…</>
+          : <><Rocket size={14} />{label}</>
+        }
       </button>
     </div>
   )

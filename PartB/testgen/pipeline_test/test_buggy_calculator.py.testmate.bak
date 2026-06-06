@@ -1,0 +1,10 @@
+import pytest
+from unittest.mock import MagicMock, patch
+from buggy_calculator import *
+
+
+# FAILING TEST (exhausted retries): Potential Bug
+def test_count_vowels():
+    assert count_vowels("Hello World") == 3
+    assert count_vowels("AEIOU") == 5
+    assert count_vowels("rhythm") == 0

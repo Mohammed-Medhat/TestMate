@@ -1,5 +1,7 @@
-import { Check, X, Loader } from 'lucide-react'
+import { X, Loader } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import type { Mode } from '../types'
+import { MODE_COLORS } from '../theme'
 
 
 export type StageStatus = 'pending' | 'active' | 'done' | 'error'
@@ -128,12 +130,14 @@ export function advanceStages(stages: Stage[], activeId: string): Stage[] {
 // ── Component ────────────────────────────────────────────────────────────
 interface Props {
   stages: Stage[]
+  mode?: Mode
   currentFile?: string
   progress?: { current: number; total: number }
   elapsedSec?: number
 }
 
-export default function PipelineStepper({ stages, currentFile, progress, elapsedSec }: Props) {
+export default function PipelineStepper({ stages, mode = 'combined', currentFile, progress, elapsedSec }: Props) {
+  const hex = MODE_COLORS[mode].hex
   const showProgress = progress && progress.total > 0
   return (
     <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-2 flex items-center gap-2 overflow-x-auto shrink-0">
@@ -142,25 +146,66 @@ export default function PipelineStepper({ stages, currentFile, progress, elapsed
         {stages.map((s, i) => (
           <div key={s.id} className="flex items-center gap-1">
             {i > 0 && (
-              <span className={`text-xs mx-1 ${stages[i-1].status === 'done' ? 'text-emerald-500/60' : 'text-zinc-700'}`}>→</span>
+              <motion.span
+                animate={{ color: stages[i-1].status === 'done' ? 'rgba(16,185,129,0.6)' : '#3f3f46' }}
+                transition={{ duration: 0.4 }}
+                className="text-xs mx-1"
+              >→</motion.span>
             )}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
-              s.status === 'done'    ? 'bg-emerald-500/10 text-emerald-400'
-              : s.status === 'active' ? 'bg-emerald-500/20 text-white stage-active'
-              : s.status === 'error'  ? 'bg-red-500/15 text-red-400'
-              : 'text-zinc-600'
-            }`}>
-              {s.status === 'done'   && <Check size={11} className="text-emerald-400" />}
-              {s.status === 'active' && <Loader size={11} className="animate-spin" />}
-              {s.status === 'error'  && <X size={11} className="text-red-400" />}
-              {s.status === 'pending' && <span className="w-[11px] h-[11px] rounded-full border border-zinc-700" />}
+            <motion.div
+              layout
+              animate={{
+                backgroundColor: s.status === 'done'   ? `${hex}1a`
+                               : s.status === 'active' ? `${hex}33`
+                               : s.status === 'error'  ? 'rgba(239,68,68,0.15)'
+                               : 'transparent',
+                color: s.status === 'done'   ? hex
+                     : s.status === 'active' ? '#ffffff'
+                     : s.status === 'error'  ? '#f87171'
+                     : '#52525b',
+              }}
+              transition={{ duration: 0.35 }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium
+                ${s.status === 'active' ? 'stage-active' : ''}`}
+              style={s.status === 'active' ? { '--pulse-color': `${hex}73` } as React.CSSProperties : undefined}
+            >
+              <AnimatePresence mode="wait">
+                {s.status === 'done' && (
+                  <motion.svg key="check" width={11} height={11} viewBox="0 0 11 11"
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                  >
+                    <polyline points="2,6 4.5,8.5 9,3" fill="none" stroke={hex} strokeWidth={1.8}
+                      strokeLinecap="round" strokeLinejoin="round"
+                      strokeDasharray={20} strokeDashoffset={0}
+                      className="check-draw" />
+                  </motion.svg>
+                )}
+                {s.status === 'active' && (
+                  <motion.span key="spin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <Loader size={11} className="animate-spin" />
+                  </motion.span>
+                )}
+                {s.status === 'error' && (
+                  <motion.span key="x" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                    <X size={11} className="text-red-400" />
+                  </motion.span>
+                )}
+                {s.status === 'pending' && (
+                  <motion.span key="dot" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <span className="block w-[11px] h-[11px] rounded-full border border-zinc-700" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
               {s.label}
               {s.status === 'active' && (
                 <span className="inline-flex items-center ml-0.5">
                   <span className="thinking-dot" /><span className="thinking-dot" /><span className="thinking-dot" />
                 </span>
               )}
-            </div>
+            </motion.div>
           </div>
         ))}
       </div>
@@ -176,8 +221,12 @@ export default function PipelineStepper({ stages, currentFile, progress, elapsed
           {showProgress && (
             <div className="flex items-center gap-2">
               <div className="w-24 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 transition-all"
-                  style={{ width: `${Math.min(100, (progress!.current / progress!.total) * 100)}%` }} />
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: hex }}
+                  animate={{ width: `${Math.min(100, (progress!.current / progress!.total) * 100)}%` }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                />
               </div>
               <span>{progress!.current}/{progress!.total}</span>
             </div>

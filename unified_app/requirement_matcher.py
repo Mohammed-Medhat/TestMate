@@ -109,6 +109,12 @@ def _keyword_top_n(file_source: str, requirements: list[Any], n: int = 30) -> li
 
 _SBERT_MODEL = None  # cached after first load
 
+# Requirement-text → embedding cache. Same requirement appears as a candidate
+# for many different target files during a Phase 2 run; encoding it once and
+# reusing the vector is accuracy-neutral (deterministic encoder) and saves the
+# bulk of SBERT cost.
+_REQ_EMB_CACHE: dict = {}
+
 
 def _load_sbert():
     global _SBERT_MODEL
@@ -129,7 +135,18 @@ def _semantic_rerank(file_source: str, candidates: list[Any], top_k: int) -> lis
 
     file_vec = model.encode(file_source[:1500], convert_to_numpy=True, show_progress_bar=False)
     texts = [_req_text(c) for c in candidates]
-    req_vecs = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+
+    # Reuse cached embeddings for requirements seen earlier this run;
+    # batch-encode only the new ones.
+    missing_idx = [i for i, t in enumerate(texts) if t not in _REQ_EMB_CACHE]
+    if missing_idx:
+        new_texts = [texts[i] for i in missing_idx]
+        new_vecs = model.encode(new_texts, convert_to_numpy=True, show_progress_bar=False)
+        for i, vec in zip(missing_idx, new_vecs):
+            _REQ_EMB_CACHE[texts[i]] = vec
+
+    import numpy as _np
+    req_vecs = _np.stack([_REQ_EMB_CACHE[t] for t in texts])
 
     fnorm = np.linalg.norm(file_vec) + 1e-9
     rnorms = np.linalg.norm(req_vecs, axis=1) + 1e-9

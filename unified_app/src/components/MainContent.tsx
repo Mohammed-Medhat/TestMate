@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronRight, Bug, Shield, FlaskConical, X, Eye, FileCode,
   AlertTriangle, CheckCircle, XCircle, Pencil, Pause, ClipboardList, MessageSquare, Send } from 'lucide-react'
 import type { Mode, ActiveTab, ReviewRequest, PlanRequest, Requirement, Scenario, PartCResult, PrepassSummary, StaleDetail } from '../types'
+import { MODE_COLORS } from '../theme'
 import RequirementsList from './RequirementsList'
 import ScenariosList from './ScenariosList'
 import CodeViewer from './CodeViewer'
 import PipelineStepper, { type Stage } from './PipelineStepper'
+import { diffLines } from 'diff'
 
 interface Props {
   mode: Mode
@@ -443,43 +446,67 @@ export default function MainContent({
         { key: 'testcode',     label: 'Test Code',    icon: <Bug size={14} /> },
       ]
 
+  const mc = MODE_COLORS[mode]
+
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 min-w-0">
       {/* Top bar */}
       <div className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center px-4 gap-2 shrink-0">
+        {/* Breadcrumb */}
         <div className="flex items-center gap-1 text-sm">
           <span className="text-zinc-500">testmate</span>
           <ChevronRight size={14} className="text-zinc-600" />
-          <span className="text-emerald-400 font-medium">{progress.file || (mode === 'parta' ? 'requirements' : 'test_core.py')}</span>
+          <motion.span
+            key={mode}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className={`font-medium ${mc.text}`}
+          >
+            {progress.file || (mode === 'parta' ? 'requirements' : mode === 'partc' ? 'sbfl_repair' : 'test_core.py')}
+          </motion.span>
         </div>
+
+        {/* AI status indicator */}
         {aiStatus && (
           <div className="ml-4 flex items-center gap-2 text-xs text-zinc-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: mc.hex }} />
             <span className="truncate max-w-[300px]">{aiStatus}</span>
           </div>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          {tabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-1.5 text-sm rounded transition-all flex items-center gap-1.5 ${
-                activeTab === tab.key
-                  ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/30'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
-              }`}>
-              {tab.icon}{tab.label}
-              {tab.count !== undefined && tab.count > 0 && (
-                <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium ${tab.key === 'bugs' ? 'bg-red-500/20 text-red-400' : tab.key === 'mutations' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+
+        {/* Tabs — use mode color for active state */}
+        <div className="ml-auto flex items-center gap-0.5">
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.key
+            const badgeCls = tab.key === 'bugs'
+              ? 'bg-red-500/20 text-red-400'
+              : tab.key === 'mutations'
+              ? 'bg-amber-500/20 text-amber-400'
+              : `${mc.badgeBg} ${mc.badgeText}`
+            return (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-1.5 text-xs rounded transition-all flex items-center gap-1.5 border ${
+                  isActive
+                    ? `${mc.text} ${mc.bg} ${mc.border}`
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border-transparent'
+                }`}>
+                {tab.icon}{tab.label}
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium ${badgeCls}`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* Pipeline stepper — shows status across all modes */}
       <PipelineStepper
         stages={stages}
+        mode={mode}
         currentFile={progress.file}
         progress={progress.total > 0 ? { current: progress.current, total: progress.total } : undefined}
         elapsedSec={status === 'running' || status === 'done' ? elapsedSec : undefined}
@@ -495,7 +522,15 @@ export default function MainContent({
 
         {/* Tab content */}
         {!reviewRequest && !planRequest && (
-          <div className="flex-1">
+          <AnimatePresence mode="wait">
+          <motion.div
+            key={`${mode}-${activeTab}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="flex-1"
+          >
             {/* Part B — Stale Tests tab */}
             {mode === 'partb' && activeTab === 'stale' && (
               <StaleTestsView prepassResults={prepassResults} staleDetails={staleDetails} />
@@ -503,18 +538,21 @@ export default function MainContent({
 
             {/* Part B tabs */}
             {mode === 'partb' && activeTab === 'bugs' && (
-              bugs.length === 0
+              status === 'running' && bugs.length === 0
+                ? <SkeletonRows count={4} />
+                : bugs.length === 0
                 ? <EmptyState icon={<Bug size={32} className="text-zinc-600" />} text="No zero-day bugs detected" sub={results ? 'Clean run!' : 'Run evaluation to see results.'} />
                 : <div className="p-4 space-y-2">
                     {bugs.map((bug: any, i: number) => {
                       const repair = bug.repair
                       return (
                         <div key={i} onClick={() => setSelectedBug({ bug, index: i })}
-                          className={`flex items-center gap-3 p-3 bg-zinc-900 rounded-lg border cursor-pointer transition-colors ${
+                          className={`list-item-enter flex items-center gap-3 p-3 bg-zinc-900 rounded-lg border cursor-pointer transition-colors ${
                             repair?.success ? 'border-emerald-500/30 hover:border-emerald-500/50'
                             : repair?.attempted ? 'border-red-500/20 hover:border-red-500/30'
                             : 'border-zinc-800 hover:border-red-500/30'
-                          }`}>
+                          }`}
+                          style={{ animationDelay: `${i * 40}ms` }}>
                           <Bug size={16} className="text-red-400 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-zinc-200 truncate">{bug.description || bug.bug_type}</p>
@@ -552,8 +590,16 @@ export default function MainContent({
                     })}
                   </div>
             )}
-            {mode === 'partb' && activeTab === 'coverage' && <CoverageView results={results} selectedFile={selectedCoverageFile} setSelectedFile={setSelectedCoverageFile} />}
-            {mode === 'partb' && activeTab === 'mutations' && <MutationsView results={results} />}
+            {mode === 'partb' && activeTab === 'coverage' && (
+              status === 'running' && !results?.coverage_map
+                ? <SkeletonRows count={6} />
+                : <CoverageView results={results} selectedFile={selectedCoverageFile} setSelectedFile={setSelectedCoverageFile} />
+            )}
+            {mode === 'partb' && activeTab === 'mutations' && (
+              status === 'running' && !results?.mutation_score
+                ? <SkeletonRows count={3} />
+                : <MutationsView results={results} />
+            )}
 
             {/* Part A tabs */}
             {mode === 'parta' && activeTab === 'requirements' && (
@@ -585,7 +631,8 @@ export default function MainContent({
                 sub=""
               />
             )}
-          </div>
+          </motion.div>
+          </AnimatePresence>
         )}
       </div>
 
@@ -787,16 +834,26 @@ function PatchesView({ result }: { result: PartCResult | null }) {
             <span className="text-xs text-zinc-500 ml-auto">{att.result}</span>
             {att.patched && (
               <button onClick={() => setShowDiff(showDiff === i ? null : i)}
-                className="text-xs text-amber-400 hover:text-amber-300 ml-2">
-                {showDiff === i ? 'Hide' : 'View'} patch
+                className="text-xs text-amber-400 hover:text-amber-300 ml-2 focus-ring rounded px-1">
+                {showDiff === i ? 'Hide' : 'View'} diff
               </button>
             )}
           </div>
-          {showDiff === i && att.patched && (
-            <pre className="text-xs text-zinc-300 font-mono p-3 overflow-x-auto bg-zinc-950 max-h-64">
-              {att.patched}
-            </pre>
-          )}
+          <AnimatePresence>
+            {showDiff === i && att.patched && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="p-3 bg-zinc-950">
+                  <InlineDiff original={result?.original ?? ''} patched={att.patched} filename={`attempt_${att.n}`} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       ))}
 
@@ -819,6 +876,48 @@ function EmptyState({ icon, text, sub }: { icon: React.ReactNode; text: string; 
       {icon}
       <p className="text-sm text-zinc-400">{text}</p>
       {sub && <p className="text-xs text-zinc-600">{sub}</p>}
+    </div>
+  )
+}
+
+/* ── Skeleton placeholder rows ─────────────────────────────────── */
+function SkeletonRows({ count = 4 }: { count?: number }) {
+  return (
+    <div className="p-4 space-y-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-zinc-800 bg-zinc-900"
+          style={{ animationDelay: `${i * 80}ms` }}>
+          <div className="skeleton w-4 h-4 rounded-full shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <div className="skeleton h-3 rounded" style={{ width: `${55 + (i % 3) * 15}%` }} />
+            <div className="skeleton h-2.5 rounded w-1/3" />
+          </div>
+          <div className="skeleton h-5 w-14 rounded-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── Inline diff viewer (no 3rd-party render dep) ─────────────── */
+function InlineDiff({ original, patched, filename }: { original: string; patched: string; filename?: string }) {
+  const hunks = diffLines(original, patched)
+  return (
+    <div className="font-mono text-[11px] leading-relaxed overflow-auto max-h-80 border border-zinc-800 rounded-lg">
+      {filename && (
+        <div className="px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 text-zinc-400 text-[10px]">
+          {filename}
+        </div>
+      )}
+      {hunks.map((part, i) => {
+        const cls = part.added ? 'diff-add text-emerald-300' : part.removed ? 'diff-del text-red-300' : 'diff-ctx'
+        const prefix = part.added ? '+ ' : part.removed ? '− ' : '  '
+        return (part.value.split('\n').filter((_, li, arr) => li < arr.length - 1 || arr[li]).map((line, j) => (
+          <div key={`${i}-${j}`} className={`px-3 py-0.5 whitespace-pre ${cls}`}>
+            {prefix}{line}
+          </div>
+        )))
+      })}
     </div>
   )
 }

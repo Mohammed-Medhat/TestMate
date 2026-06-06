@@ -135,3 +135,9 @@ dist/
 unified_app/results/history.json
 unified_app/flywheel_data.jsonl
 unified_app/testmate_rag.db
+
+# ========================
+# SRS document (generated artifact)
+# ========================
+TESTMATE_SRS.pdf
+generate_srs.py
