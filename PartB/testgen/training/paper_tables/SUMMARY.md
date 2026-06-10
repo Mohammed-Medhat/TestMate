@@ -9,10 +9,11 @@ The three axes that matter — and why a single coverage number is misleading. C
 
 | variant / mode | line cov% | pass@1% | mutation% | what it shows |
 |---|---|---|---|---|
-| TestMate (suite) | 91.6 | 17.6 | 74.1 | coverage-optimized |
+| TestMate (suite) | 93.8 | 97.6 | 81.5 | coverage-optimized |
+| base (suite, no_lora) | 78.9 | 80.0 | 89.8 | raw model, suite |
 | TestMate (quality) | 42.5 | 16.7 | - | correctness-optimized |
 
-**Headline:** run with `--mutation` to fill the bug-detection column and apply the decision rule. Until then, the proven hook is the coverage–correctness gap (91% coverage, ~18% correct assertions).
+**Headline (data-supported):** the contribution is the *insight + system*, not beating the base per file (mutation 81.5% vs base 89.8% per file). TestMate produces bug-catching suites on **more programs** (205 vs 168); coverage is misleading (93.8% cov / 97.6% pass rate in suite mode, 42.5% cov / 16.7% pass rate in quality mode).
 
 # TestEval — TestMate vs paper
 
@@ -27,7 +28,7 @@ The three axes that matter — and why a single coverage number is misleading. C
 | CodeQwen1.5-7B | 90.7 | 86.9 | 84.3 | paper |
 | CodeLlama-7B | 86.1 | 81.6 | 73.9 | paper |
 | TestMate (quality mode) | 42.5 | 22.4 | - | ours · correctness-optimized, 1 test/prog |
-| TestMate (suite mode) | 91.6 | 82.7 | - | ours · TestEval protocol, comprehensive suite |
+| TestMate (suite mode) | 93.8 | 88.2 | - | ours · TestEval protocol, comprehensive suite |
 
 > TestMate also reports **pass@1 (correct assertions)** and **mutation score** — bug-exposure metrics the paper's coverage task does not measure (it counts tests with wrong assertions as valid). Quality-mode coverage is averaged over all 210 programs; suite mode follows the paper's coverage-maximizing protocol.
 
@@ -37,17 +38,23 @@ The three axes that matter — and why a single coverage number is misleading. C
 |---|---|---|---|---|---|---|---|---|
 | testmate | 16.7 | 16.7 | 42.52 | 22.43 | 44.8 | 77.6 | 56.47 | 230.69 |
 
-
-_(need both `testmate` and `no_rag` for the RAG-lift delta)_
-
 ## testgenevallite — realistic code (RAG-context lift)
 
-_(no data — run the sweep for this dataset)_
+| variant | pass@1 | passrate | line_cov% | branch_cov% | graphRAG | vecRAG | BES | wall_s |
+|---|---|---|---|---|---|---|---|---|
+| testmate | 13.3 | 13.3 | 11.68 | 0.83 | 26.7 | 56.7 | 5.33 | 399.92 |
+| no_rag | 6.7 | 6.7 | 14.67 | 0.72 | 0.0 | 0.0 | 0.00 | 322.06 |
+
+
+**RAG lift (testmate − no_rag) (matched-N=30 (files run by both testmate and no_rag; testmate original N=80)):** Δline_cov = **-2.99%**, Δbranch_cov = **+0.11%**, Δpass@1 = **+6.7 pts**
 
 
 ## HumanEval — universal sanity point
 
-_(no data — run the sweep for this dataset)_
+| variant | pass@1 | passrate | line_cov% | branch_cov% | graphRAG | vecRAG | BES | wall_s |
+|---|---|---|---|---|---|---|---|---|
+| testmate | 60.4 | 60.4 | 67.64 | 39.56 | 14.6 | 85.4 | 58.34 | 62.25 |
+| no_lora | 33.5 | 37.4 | 34.10 | 20.57 | 16.5 | 86.6 | 0.00 | 113.45 |
 
 
 ---

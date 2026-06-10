@@ -201,3 +201,175 @@ def execute_part_b(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
+
+
+# ── Interactive chat refinement ─────────────────────────────────────────────
+
+_REFINE_SYSTEM = (
+    "You are TestMate's test editor. You revise an EXISTING pytest file according "
+    "to the user's instruction.\n"
+    "RULES:\n"
+    "- Output the COMPLETE updated test file wrapped in <test>...</test> tags.\n"
+    "- On the line BEFORE the <test> block, write ONE short sentence describing what you changed.\n"
+    "- Keep every existing passing test unless the instruction says to change or remove it.\n"
+    "- Use pytest. Import the module under test exactly as the current file does. "
+    "Assert concrete expected VALUES (never `assert True`).\n"
+    "- If the user's message is a QUESTION rather than an edit request, do NOT output a "
+    "<test> block — reply in one short sentence telling them what concrete change you can make.\n"
+)
+
+
+def refine_test_file(
+    target_file: str,
+    test_path: str,
+    test_code: str,
+    instruction: str,
+    model: Any,
+    tokenizer: Any,
+    history: Optional[list] = None,
+    max_retries: int = 3,
+    log_callback: Optional[Callable] = None,
+    use_docker: bool = False,
+) -> dict:
+    """Apply a single natural-language edit instruction to an existing test file.
+
+    Reuses the same model + helpers as the generation loop: builds an edit
+    prompt, generates a rewrite, runs it through `quick_quality_check` and
+    `run_pytest`, and feeds any failure back for up to `max_retries` repair
+    rounds. On success the file at `test_path` is overwritten; on total failure
+    the original content is restored and the file is left unchanged.
+
+    Returns a dict shaped like `execute_part_b()` plus:
+        edited:     bool — whether the on-disk file was changed.
+        chat_reply: str  — one-line assistant message for the chat UI.
+    """
+    from main import (
+        generate_test, extract_test_code, quick_quality_check, run_pytest,
+    )
+
+    def _status(status: str, detail: str = "") -> None:
+        if log_callback:
+            try:
+                log_callback("ai_status", status, detail)
+            except Exception:
+                pass
+
+    target = Path(target_file)
+    tpath = Path(test_path) if test_path else None
+
+    try:
+        source = target.read_text(encoding="utf-8") if target.exists() else ""
+    except Exception:
+        source = ""
+    src_ctx = source if len(source) <= 6000 else source[:6000] + "\n# … (truncated)"
+
+    messages: list[dict] = [{"role": "system", "content": _REFINE_SYSTEM}]
+    # Prior turns for multi-turn context (cap each to keep the prompt small).
+    for h in (history or []):
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": str(h["content"])[:2000]})
+    messages.append({
+        "role": "user",
+        "content": (
+            f"Module under test ({target.name}):\n```python\n{src_ctx}\n```\n\n"
+            f"Current test file ({tpath.name if tpath else 'test.py'}):\n"
+            f"```python\n{test_code}\n```\n\n"
+            f"Instruction: {instruction}"
+        ),
+    })
+
+    # Optional Docker isolation (mirrors execute_part_b's image build).
+    docker_image: Optional[str] = None
+    if use_docker:
+        try:
+            from docker_runner import ensure_repo_image  # type: ignore[import]
+            _root = str(target.parent.resolve())
+            while (Path(_root) / "__init__.py").exists():
+                _parent = str(Path(_root).parent)
+                if _parent == _root:
+                    break
+                _root = _parent
+            docker_image = ensure_repo_image(_root, Path(_root).name or "project")
+        except Exception as _e:
+            logger.warning("[chat] Docker setup failed (%s) — host pytest", _e)
+            docker_image = None
+
+    def _result(success: bool, edited: bool, code: str, reply: str, error: str = "") -> dict:
+        return {
+            "success":   success,
+            "edited":    edited,
+            "chat_reply": reply,
+            "test_file": tpath.name if tpath else (f"test_{target.stem}_testmate.py"),
+            "test_code": code,
+            "test_path": str(tpath) if tpath else "",
+            "target":    target_file,
+            "error":     error,
+        }
+
+    _status("Thinking", "revising the tests")
+    raw = generate_test(model, tokenizer, messages, temperature=0.2)
+    reply = (raw.split("<test>")[0].strip() if "<test>" in raw else raw.strip())[:300]
+
+    # No edit produced — treat as a question/refusal, leave the file untouched.
+    if "<test>" not in raw:
+        return _result(False, False, test_code,
+                       reply or "I only edit tests — tell me what to change.")
+
+    candidate = extract_test_code(raw)
+    original = test_code
+    last_error = ""
+
+    for attempt in range(max_retries + 1):
+        ok_q, reason = quick_quality_check(candidate)
+        if not ok_q:
+            last_error = f"quality check: {reason}"
+            if attempt < max_retries:
+                _status("Repairing", reason)
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content":
+                    f"That test has a problem: {reason}. "
+                    f"Fix it and output the COMPLETE file in <test>...</test>."})
+                raw = generate_test(model, tokenizer, messages, temperature=0.3)
+                candidate = extract_test_code(raw)
+                continue
+            break
+
+        if not tpath:
+            # Nowhere to validate against — quality passed, return as-is.
+            return _result(True, False, candidate, reply or "Updated the tests.")
+
+        try:
+            tpath.write_text(candidate, encoding="utf-8")
+        except Exception as e:
+            return _result(False, False, original, f"Could not write the file: {e}", str(e))
+
+        _status("Validating", f"running pytest (attempt {attempt + 1})")
+        try:
+            passed, output = run_pytest(str(tpath), str(target), docker_image=docker_image)
+        except Exception as e:
+            passed, output = False, str(e)
+
+        if passed:
+            return _result(True, True, candidate, reply or "Updated the tests — they pass.")
+
+        last_error = (output or "tests failed")[-1500:]
+        if attempt < max_retries:
+            _status("Repairing", "the edited test failed — fixing")
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content":
+                f"The test failed when run:\n{last_error}\n"
+                f"Fix it and output the COMPLETE file in <test>...</test>."})
+            raw = generate_test(model, tokenizer, messages, temperature=0.4)
+            candidate = extract_test_code(raw)
+
+    # All attempts failed — restore the original file so nothing is broken.
+    if tpath:
+        try:
+            tpath.write_text(original, encoding="utf-8")
+        except Exception:
+            pass
+    return _result(
+        False, False, original,
+        (reply + " — but that edit didn't pass, so I left the test unchanged.").strip(),
+        last_error,
+    )

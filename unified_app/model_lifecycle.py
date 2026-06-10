@@ -32,11 +32,14 @@ from __future__ import annotations
 
 import gc
 import logging
+import os
 import sys
+import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -303,3 +306,116 @@ def part_c_model(use_lora: bool = True):
         elif use_lora:
             logger.warning("PartC adapter not loaded — using active adapter as fallback")
         yield sess.model, sess.tokenizer
+
+
+# ── Keep-alive resident PartB model (for interactive chat refinement) ───────
+#
+# The standard context managers above load → work → flush. That's correct for
+# batch runs, but it means the model is gone the moment a run ends — so a chat
+# turn afterwards would pay a ~30–45 s reload every message.
+#
+# PartBResident holds the model resident for a short window after the last use
+# (default 10 min, env TESTMATE_KEEPALIVE_SEC) so chat turns are instant, then
+# auto-unloads when idle to free VRAM. PartA / PartC paths MUST call
+# force_release() before they load, since the Qwen model and Part A's model
+# cannot coexist in GPU memory.
+
+class _PartBResident:
+    """Singleton that keeps the PartB Qwen model warm between chat turns."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self.model: Any = None
+        self.tokenizer: Any = None
+        self._adapters: set = set()
+        self._use_lora: bool = True
+        self._last_used: float = 0.0
+        self._reaper: Optional[threading.Thread] = None
+        try:
+            self._keepalive = float(os.environ.get("TESTMATE_KEEPALIVE_SEC", "600"))
+        except ValueError:
+            self._keepalive = 600.0
+
+    def acquire(self, use_lora: bool = True, status_cb: Optional[Callable[[str], None]] = None):
+        """Return (model, tokenizer), loading (or reloading) if cold or the
+        LoRA flag changed. Cheap when already warm."""
+        with self._lock:
+            if self.model is None or self._use_lora != use_lora:
+                if self.model is not None:
+                    self._flush_locked()
+                if status_cb:
+                    try:
+                        status_cb("warming up the model (first message may take ~30s)…")
+                    except Exception:
+                        pass
+                logger.info("PartBResident: loading model (use_lora=%s)…", use_lora)
+                self.model, self.tokenizer, self._adapters = _load_qwen_with_adapters(
+                    partb_lora=_PARTB_LORA_PATH,
+                    partc_lora=_PARTC_LORA_PATH,
+                    use_lora=use_lora,
+                )
+                self._use_lora = use_lora
+                if use_lora and "partb" in self._adapters:
+                    try:
+                        self.model.set_adapter("partb")
+                    except Exception:
+                        pass
+                self._start_reaper_locked()
+            self._last_used = time.monotonic()
+            return self.model, self.tokenizer
+
+    def touch(self) -> None:
+        """Reset the idle timer (call after each run / chat turn)."""
+        with self._lock:
+            if self.model is not None:
+                self._last_used = time.monotonic()
+
+    def force_release(self) -> None:
+        """Immediately unload + flush. Call from any PartA/PartC path before it
+        loads its own model (VRAM-coexistence rule)."""
+        with self._lock:
+            self._flush_locked()
+
+    @property
+    def is_resident(self) -> bool:
+        with self._lock:
+            return self.model is not None
+
+    def _flush_locked(self) -> None:
+        if self.model is None:
+            return
+        logger.info("PartBResident: releasing model → flushing GPU…")
+        try:
+            del self.model
+        except Exception:
+            pass
+        self.model = None
+        self.tokenizer = None
+        self._adapters = set()
+        flush_gpu()
+
+    def _start_reaper_locked(self) -> None:
+        if self._reaper is not None and self._reaper.is_alive():
+            return
+
+        def _loop() -> None:
+            while True:
+                time.sleep(30)
+                with self._lock:
+                    if self.model is None:
+                        return  # nothing resident — let the thread die
+                    idle = time.monotonic() - self._last_used
+                    if idle > self._keepalive:
+                        logger.info(
+                            "PartBResident: idle %.0fs > %.0fs — auto-unloading",
+                            idle, self._keepalive,
+                        )
+                        self._flush_locked()
+                        return
+
+        self._reaper = threading.Thread(target=_loop, daemon=True, name="partb-keepalive-reaper")
+        self._reaper.start()
+
+
+# Process-wide singleton.
+PARTB_RESIDENT = _PartBResident()

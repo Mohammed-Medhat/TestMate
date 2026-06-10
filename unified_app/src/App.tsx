@@ -7,11 +7,12 @@ import MainContent from './components/MainContent'
 import RightSidebar from './components/RightSidebar'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
 import HelpModal from './components/HelpModal'
+import ChatBubble, { fileKey } from './components/ChatBubble'
 import { getInitialStages, advanceStages, detectStageFromLog, type Stage } from './components/PipelineStepper'
 import type {
   View, Mode, PartAMode, ActiveTab, RunSettings, FileInfo,
   ReviewRequest, PlanRequest, Requirement, Scenario, HistoryItem, PartAStats, Progress,
-  PartCResult, PrepassSummary, StaleDetail,
+  PartCResult, PrepassSummary, StaleDetail, ChatMessage,
 } from './types'
 
 const API = (window as any).api?.baseUrl ?? 'http://127.0.0.1:8080'
@@ -84,6 +85,11 @@ export default function App() {
   // Pre-pass state (existing test triage results)
   const [prepassResults, setPrepassResults] = useState<PrepassSummary[]>([])
   const [staleDetails,   setStaleDetails]   = useState<StaleDetail[]>([])
+
+  // ── Chat refinement state ─────────────────────────────────────────────────
+  const [chatThreads, setChatThreads] = useState<Record<string, ChatMessage[]>>({})
+  const [chatBusy,   setChatBusy]     = useState(false)
+  const [chatStatus, setChatStatus]   = useState('')
 
   // ── Load history on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -203,6 +209,97 @@ export default function App() {
     }
     es.onerror = () => { es.close(); onDone(false) }
   }
+
+  // ── Chat refinement: edit a generated test by instruction ─────────────────
+  const setThread = (key: string, fn: (t: ChatMessage[]) => ChatMessage[]) =>
+    setChatThreads(prev => ({ ...prev, [key]: fn(prev[key] ?? []) }))
+
+  const sendChatMessage = useCallback((idx: number, message: string) => {
+    const f = (results?.part_b ?? [])[idx]
+    if (!f) return
+    const key = fileKey(f)
+    const prior = (chatThreads[key] ?? [])
+      .filter(m => !m.pending)
+      .map(m => ({ role: m.role, content: m.content }))
+
+    // Optimistically add the user message + a pending assistant placeholder.
+    setThread(key, t => [...t, { role: 'user', content: message }, { role: 'assistant', content: '', pending: true }])
+    setChatBusy(true); setChatStatus('Thinking…')
+
+    const finishAssistant = (content: string, ok: boolean) =>
+      setThread(key, t => {
+        const next = [...t]
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].role === 'assistant' && next[i].pending) {
+            next[i] = { role: 'assistant', content, ok }
+            break
+          }
+        }
+        return next
+      })
+
+    ;(async () => {
+      try {
+        const res = await fetch(`${API}/api/partb/chat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            target_file: f.target ?? f.abs_path ?? '',
+            test_path:   f.test_path ?? '',
+            test_code:   f.test_code ?? '',
+            message, history: prior,
+            use_base_only: settings.useBaseOnly,
+            use_docker:    settings.docker,
+            max_retries:   settings.maxRetries,
+          }),
+        })
+        const { job_id, error } = await res.json()
+        if (error || !job_id) { finishAssistant(`⚠️ ${error ?? 'Could not start chat'}`, false); setChatBusy(false); setChatStatus(''); return }
+
+        connectSSE(`${API}/api/partb/chat/stream?job_id=${job_id}`, msg => {
+          if (msg.type === 'ai_status') setChatStatus(`${msg.status}${msg.detail ? ': ' + msg.detail : ''}`)
+          if (msg.type === 'chat_reply') {
+            const d = msg.data as any
+            finishAssistant(d.chat_reply ?? 'Done.', d.edited !== false)
+            if (d.edited) {
+              setResults((prev: any) => {
+                const arr: any[] = Array.isArray(prev?.part_b) ? [...prev.part_b] : []
+                if (arr[idx]) arr[idx] = { ...arr[idx], test_code: d.test_code, test_path: d.test_path || arr[idx].test_path, success: true }
+                return { ...prev, part_b: arr }
+              })
+              toast.success('Test updated')
+            }
+          }
+        }, ok => {
+          setChatBusy(false); setChatStatus('')
+          if (!ok) finishAssistant('⚠️ The model run failed — the test was left unchanged.', false)
+        })
+      } catch (e: any) {
+        finishAssistant(`⚠️ ${e?.message ?? 'Request failed'}`, false)
+        setChatBusy(false); setChatStatus('')
+      }
+    })()
+  }, [results, chatThreads, settings])
+
+  // ── Manual edit: persist an edited test file to disk ──────────────────────
+  const saveTest = useCallback(async (testPath: string, code: string) => {
+    try {
+      const res = await fetch(`${API}/api/partb/save`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_path: testPath, test_code: code }),
+      })
+      const d = await res.json()
+      if (d.error) { toast.error(`Save failed: ${d.error}`); return }
+      setResults((prev: any) => {
+        const arr: any[] = Array.isArray(prev?.part_b) ? [...prev.part_b] : []
+        const i = arr.findIndex(f => (f.test_path || f.test_file) === testPath)
+        if (i >= 0) arr[i] = { ...arr[i], test_code: code }
+        return { ...prev, part_b: arr }
+      })
+      toast.success('Saved')
+    } catch (e: any) {
+      toast.error(`Save failed: ${e?.message ?? 'unknown error'}`)
+    }
+  }, [])
 
   // ── Main run dispatcher ───────────────────────────────────────────────────
   const startRun = useCallback(async () => {
@@ -635,6 +732,7 @@ export default function App() {
                 planRequest={planRequest} onPlanDecision={handlePlan}
                 requirements={requirements} scenarios={scenarios} features={features}
                 prepassResults={prepassResults} staleDetails={staleDetails}
+                onSaveTest={saveTest}
               />
             </motion.div>
 
@@ -646,6 +744,17 @@ export default function App() {
             >
               <RightSidebar mode={mode} results={results} logs={logs} partAStats={partAStatsForSidebar} prepassResults={prepassResults} />
             </motion.div>
+
+            {/* Floating chat bubble — refine generated tests by instruction */}
+            {Array.isArray(results?.part_b) && results.part_b.length > 0 && (
+              <ChatBubble
+                files={results.part_b}
+                threads={chatThreads}
+                busy={chatBusy}
+                status={chatStatus}
+                onSend={sendChatMessage}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,0 +1,26 @@
+{
+  "testmate": {
+    "total_files": 210,
+    "files_succeeded": 205,
+    "mean_pass_rate": 0.167,
+    "mean_line_coverage": 42.522,
+    "mean_branch_coverage": 22.435,
+    "mean_api_coverage": 0.464,
+    "any_pass_1_rate": 0.167,
+    "all_pass_1_rate": 0.167,
+    "graphrag_hit_rate": 0.448,
+    "vectorrag_hit_rate": 0.776,
+    "mean_rag_utilization": 0.12,
+    "mean_retrieval_coverage": 0.759,
+    "total_model_hallucinations": 26,
+    "total_rag_hallucinations": 15,
+    "mean_test_diversity": 1.257,
+    "mean_assertions_per_test": 2.313,
+    "mean_iterations": 3.657,
+    "mean_wall_time": 230.686,
+    "total_wall_time": 48487.1,
+    "total_prompt_tokens": 1563155,
+    "total_completion_tokens": 239447,
+    "mean_bes_score": 56.465
+  }
+}

@@ -141,3 +141,26 @@ unified_app/testmate_rag.db
 # ========================
 TESTMATE_SRS.pdf
 generate_srs.py
+
+# ========================
+# Logs, scratch & debug artifacts
+# ========================
+*.log
+*.err
+ps_load_test*
+model_load*.log
+run_tgel_full*
+
+# ========================
+# Backups & eval checkpoints (keep the real results/*.json, drop the rest)
+# ========================
+*.bak
+*.bak[0-9]*
+*.N*.bak
+*.partial.json
+
+# ========================
+# Claude Code local state
+# ========================
+.claude/scheduled_tasks.lock
+.claude/*.lock

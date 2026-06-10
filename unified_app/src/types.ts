@@ -47,6 +47,14 @@ export interface RunSettings {
   autoRepair: boolean    // opt-in: invoke PartC to repair confirmed/suspected bugs
 }
 
+// ── Chat refinement ─────────────────────────────────────────────────────────
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  pending?: boolean   // assistant placeholder while a turn is streaming
+  ok?: boolean        // whether the edit succeeded (false → left unchanged)
+}
+
 // ── History ─────────────────────────────────────────────────────────────────
 export interface HistoryItem {
   id: string

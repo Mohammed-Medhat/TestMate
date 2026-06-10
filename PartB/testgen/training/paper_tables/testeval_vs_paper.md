@@ -11,6 +11,6 @@
 | CodeQwen1.5-7B | 90.7 | 86.9 | 84.3 | paper |
 | CodeLlama-7B | 86.1 | 81.6 | 73.9 | paper |
 | TestMate (quality mode) | 42.5 | 22.4 | - | ours · correctness-optimized, 1 test/prog |
-| TestMate (suite mode) | 91.6 | 82.7 | - | ours · TestEval protocol, comprehensive suite |
+| TestMate (suite mode) | 93.8 | 88.2 | - | ours · TestEval protocol, comprehensive suite |
 
 > TestMate also reports **pass@1 (correct assertions)** and **mutation score** — bug-exposure metrics the paper's coverage task does not measure (it counts tests with wrong assertions as valid). Quality-mode coverage is averaged over all 210 programs; suite mode follows the paper's coverage-maximizing protocol.

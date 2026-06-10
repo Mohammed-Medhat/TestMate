@@ -435,8 +435,8 @@ def run_evaluation(repo_url: str, branch: str, selected_files: list[dict],
             if os.path.exists(test_path):
                 test_files.append(test_path)
 
-            # ── Per-file HITL review ──
-            if hitl and os.path.exists(test_path):
+            # ── Per-file HITL review (loops so 'revise' can re-present) ──
+            while hitl and os.path.exists(test_path):
                 try:
                     with open(test_path, "r", encoding="utf-8") as f:
                         file_test_code = f.read()
@@ -463,6 +463,25 @@ def run_evaluation(repo_url: str, branch: str, selected_files: list[dict],
                 decision = decision_data.get("decision", "approve")
                 emit_log(f"👤 Decision for {basename}: {decision}", "success")
 
+                if decision == "revise":
+                    # Natural-language change request → regenerate, then re-review.
+                    instruction = decision_data.get("edited_code", "").strip()
+                    if not instruction:
+                        continue
+                    emit_log(f"   💬 Revising {basename}: {instruction[:80]}")
+                    try:
+                        from testgen_api import refine_test_file
+                        refine_test_file(
+                            target_file=src_path, test_path=test_path,
+                            test_code=file_test_code, instruction=instruction,
+                            model=model, tokenizer=tokenizer,
+                            max_retries=max_retries, log_callback=_gui_callback,
+                            use_docker=use_docker,
+                        )
+                    except Exception as _re:
+                        emit_log(f"   ⚠️ Revision failed: {str(_re)[:160]}", "warning")
+                    continue  # re-present the (possibly updated) test for review
+
                 if decision == "reject":
                     # Remove this test file and skip it
                     if test_path in test_files:
@@ -476,7 +495,8 @@ def run_evaluation(repo_url: str, branch: str, selected_files: list[dict],
                         with open(test_path, "w", encoding="utf-8") as f:
                             f.write(edited)
                         emit_log(f"   ✏️ Test for {basename} updated with edits")
-                # "approve" → do nothing, keep the test as-is
+                # "approve"/"edit"/"reject" → done reviewing this file
+                break
 
         # Step 5: Evaluate
         emit_pipeline_stage("eval")

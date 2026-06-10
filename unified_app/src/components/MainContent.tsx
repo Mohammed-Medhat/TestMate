@@ -35,6 +35,8 @@ interface Props {
   // Pre-pass results
   prepassResults?: PrepassSummary[]
   staleDetails?: StaleDetail[]
+  // Persist a manual edit of a generated test file to disk
+  onSaveTest?: (testPath: string, code: string) => Promise<void> | void
 }
 
 /* ── Severity badge ────────────────────────────────────── */
@@ -202,7 +204,9 @@ function StreamedCodeBlock({ code, isRunning }: { code: string; isRunning: boole
 function ReviewPanel({ review, onDecision }: { review: ReviewRequest; onDecision: (d: string, c?: string) => void }) {
   const [editMode, setEditMode] = useState(false)
   const [edited, setEdited] = useState(review.test_code)
-  useEffect(() => { setEdited(review.test_code); setEditMode(false) }, [review.test_code])
+  const [reviseMode, setReviseMode] = useState(false)
+  const [instruction, setInstruction] = useState('')
+  useEffect(() => { setEdited(review.test_code); setEditMode(false); setReviseMode(false); setInstruction('') }, [review.test_code])
   return (
     <div className="m-4 bg-amber-500/5 border-2 border-amber-500/30 rounded-xl overflow-hidden animate-modal-in">
       <div className="p-4 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-3">
@@ -224,9 +228,19 @@ function ReviewPanel({ review, onDecision }: { review: ReviewRequest; onDecision
           : <pre className="p-4 font-mono text-xs text-zinc-300 overflow-auto max-h-[350px] leading-relaxed whitespace-pre-wrap bg-zinc-950">{review.test_code}</pre>
         }
       </div>
+      {/* Request-changes (natural-language revise) */}
+      {reviseMode && (
+        <div className="p-3 border-b border-amber-500/20 bg-zinc-900/30">
+          <div className="flex items-center gap-2 mb-2"><MessageSquare size={14} className="text-zinc-500" /><span className="text-xs text-zinc-500">Describe the change you want</span></div>
+          <textarea value={instruction} onChange={e => setInstruction(e.target.value)} placeholder="e.g. 'use pytest.mark.parametrize instead of three separate tests'" className="w-full bg-zinc-950 text-zinc-300 text-xs p-2.5 rounded-lg border border-zinc-800 outline-none resize-none placeholder:text-zinc-700 focus:border-amber-500/40" rows={2} />
+        </div>
+      )}
       <div className="p-4 flex items-center gap-3">
         <button onClick={() => onDecision('approve')} className="px-4 py-2 text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors flex items-center gap-1.5"><CheckCircle size={14} />Approve</button>
         {editMode && <button onClick={() => onDecision('edit', edited)} className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors flex items-center gap-1.5"><Pencil size={14} />Save & Approve</button>}
+        {!reviseMode
+          ? <button onClick={() => setReviseMode(true)} className="px-4 py-2 text-sm font-medium bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 border border-violet-500/30 rounded-lg transition-colors flex items-center gap-1.5"><MessageSquare size={14} />Request changes</button>
+          : <button onClick={() => instruction.trim() && onDecision('revise', instruction.trim())} disabled={!instruction.trim()} className="px-4 py-2 text-sm font-medium bg-violet-500 hover:bg-violet-600 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-1.5"><Send size={14} />Regenerate with changes</button>}
         <button onClick={() => onDecision('reject')} className="px-4 py-2 text-sm font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors flex items-center gap-1.5"><XCircle size={14} />Reject</button>
         <span className="ml-auto text-xs text-zinc-500">Waiting for your decision...</span>
       </div>
@@ -281,7 +295,10 @@ function PlanReviewPanel({ plan, onDecision }: { plan: PlanRequest; onDecision: 
 }
 
 /* ── Combined Test Code view (per-file picker + code viewer) ─────────── */
-function CombinedTestCodeView({ results }: { results: any }) {
+function CombinedTestCodeView({ results, onSaveTest }: {
+  results: any
+  onSaveTest?: (testPath: string, code: string) => Promise<void> | void
+}) {
   const partB = results?.part_b
   const partC: any[] = Array.isArray(results?.part_c) ? results.part_c : []
   const files: any[] = Array.isArray(partB)
@@ -392,7 +409,13 @@ function CombinedTestCodeView({ results }: { results: any }) {
             <CodeViewer code={curRepair.patched} filename={curRepair.source_file ?? 'source.py'} />
           </div>
         ) : cur?.test_code ? (
-          <CodeViewer code={cur.test_code} filename={cur.test_file ?? cur.file ?? 'test.py'} />
+          <CodeViewer
+            code={cur.test_code}
+            filename={cur.test_file ?? cur.file ?? 'test.py'}
+            onSave={onSaveTest && (cur.test_path || cur.test_file)
+              ? (code: string) => onSaveTest(cur.test_path || cur.test_file, code)
+              : undefined}
+          />
         ) : (
           <EmptyState icon={<Bug size={32} className="text-zinc-600" />}
             text="No test code for this file" sub={cur?.error ?? 'Generation may have failed silently.'} />
@@ -411,6 +434,7 @@ export default function MainContent({
   reviewRequest, onReviewDecision, planRequest, onPlanDecision,
   requirements, scenarios, features,
   prepassResults = [], staleDetails = [],
+  onSaveTest,
 }: Props) {
   const bugs = results?.bug_reports?.filter((b: any) => b.bug_type !== 'mutation_survivor') || []
   const mutations = results?.bug_reports?.filter((b: any) => b.bug_type === 'mutation_survivor') || []
@@ -617,7 +641,7 @@ export default function MainContent({
             {/* Combined tabs */}
             {mode === 'combined' && activeTab === 'requirements' && <RequirementsList requirements={requirements} />}
             {mode === 'combined' && activeTab === 'scenarios'    && <ScenariosList scenarios={scenarios} />}
-            {mode === 'combined' && activeTab === 'testcode'     && <CombinedTestCodeView results={results} />}
+            {mode === 'combined' && activeTab === 'testcode'     && <CombinedTestCodeView results={results} onSaveTest={onSaveTest} />}
 
             {/* Part C tabs */}
             {mode === 'partc' && activeTab === 'sbfl' && <SbflView result={partcResult} />}

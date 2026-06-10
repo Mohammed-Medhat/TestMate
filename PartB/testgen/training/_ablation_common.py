@@ -178,12 +178,10 @@ def load_qwen_base_4bit(model_id: str = DEFAULT_MODEL_ID):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-    os.environ.setdefault(
-        "PYTORCH_CUDA_ALLOC_CONF",
-        "expandable_segments:True,garbage_collection_threshold:0.6",
-    )
+    # Windows: do not touch PYTORCH_CUDA_ALLOC_CONF — expandable_segments crashes CUDA
+    os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
 
-    print(f"🧠 Loading {model_id} from HuggingFace (4-bit NF4, no LoRA)...")
+    print(f"[INFO] Loading {model_id} from HuggingFace (4-bit NF4, no LoRA)...")
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     if tokenizer.pad_token is None:

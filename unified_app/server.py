@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 # ── Paths ──────────────────────────────────────────────────────────────────
 _HERE = Path(__file__).parent
 _ROOT = _HERE.parent
+_PART_A_README = _ROOT / "PartA" / "readme_extractor"
 
 sys.path.insert(0, str(_ROOT / "PartA" / "srs_pipeline"))
 sys.path.insert(0, str(_ROOT / "PartA" / "readme_extractor"))
@@ -56,6 +57,37 @@ def _new_job() -> tuple[str, asyncio.Queue]:
     with _job_lock:
         _jobs[job_id] = q
     return job_id, q
+
+
+def _run_readme_extractor(content: str, repo_name: str, user_input: Optional[dict] = None) -> dict:
+    """
+    Run README extraction in an isolated subprocess (mirrors orchestrator.py's
+    combined pipeline). PartA's BnB 4-bit model must NOT be loaded in-process
+    here: even after PARTB_RESIDENT.force_release(), del+empty_cache() cannot
+    fully release a previously-loaded BnB model on Windows, and a second
+    in-process BnB load can segfault the whole server instead of raising a
+    catchable error.
+    """
+    import subprocess
+    payload = json.dumps({
+        "content": content,
+        "repo_name": repo_name,
+        "user_input": user_input or {},
+    }, ensure_ascii=False)
+    proc = subprocess.run(
+        [sys.executable, str(_PART_A_README / "extractor_subprocess.py")],
+        input=payload,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+        timeout=600,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"README extraction subprocess failed (exit {proc.returncode}): {proc.stderr[-1000:]}"
+        )
+    return json.loads(proc.stdout)
 
 
 def _get_job_queue(job_id: str) -> Optional[asyncio.Queue]:
@@ -159,8 +191,10 @@ async def parta_readme_run(request: Request):
         return JSONResponse({"status": "error", "message": "content is empty"}, status_code=400)
 
     try:
-        from readme_api import execute_part_a_readme  # type: ignore[import]
-        result = execute_part_a_readme(
+        # Free any keep-alive PartB model first — PartA's model cannot coexist.
+        from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
+        PARTB_RESIDENT.force_release()
+        result = _run_readme_extractor(
             content=content,
             repo_name=body.get("repo_name", "upload"),
             user_input=body.get("user_input"),
@@ -199,8 +233,10 @@ async def parta_both_run(
             merged["srs"] = srs_result
 
         if readme_content.strip():
-            from readme_api import execute_part_a_readme  # type: ignore[import]
-            readme_result = execute_part_a_readme(
+            # README extractor needs the GPU — release the keep-alive PartB model.
+            from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
+            PARTB_RESIDENT.force_release()
+            readme_result = _run_readme_extractor(
                 content=readme_content, repo_name=repo_name
             )
             merged["readme"] = readme_result
@@ -272,6 +308,18 @@ async def partb_run(request: Request):
         log_cb = _make_log_callback(q, loop)
         try:
             from testgen_api import execute_part_b  # type: ignore[import]
+            from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
+
+            # Load the model once and keep it resident, so the post-run chat
+            # bubble can refine these tests without a cold reload. Falls back to
+            # per-file loading inside execute_part_b if the warm load fails.
+            try:
+                _model, _tokenizer = PARTB_RESIDENT.acquire(
+                    use_lora=not body.get("use_base_only", False))
+            except Exception as _e:
+                logger.warning("resident acquire failed (%s) — per-file load", _e)
+                _model = _tokenizer = None
+
             for fi in files:
                 log_cb("log", "info", f"Generating tests for {fi['path']}...")
                 result = execute_part_b(
@@ -285,11 +333,14 @@ async def partb_run(request: Request):
                     quality_mode=body.get("quality_mode", "fast"),
                     auto_repair=body.get("auto_repair", False),
                     use_docker=body.get("use_docker", False),
+                    model=_model,
+                    tokenizer=_tokenizer,
                 )
                 loop.call_soon_threadsafe(q.put_nowait, {
                     "type": "file_result",
                     "data": {**result, "file": fi["path"]},
                 })
+            PARTB_RESIDENT.touch()  # start the keep-alive idle window
             loop.call_soon_threadsafe(q.put_nowait, {"type": "complete"})
         except Exception as exc:
             logger.exception("partb_run worker failed")
@@ -299,6 +350,94 @@ async def partb_run(request: Request):
 
     threading.Thread(target=_worker, daemon=True).start()
     return JSONResponse({"job_id": job_id})
+
+
+# ── PartB chat refinement (edit a generated test by instruction) ───────────
+@app.post("/api/partb/chat")
+async def partb_chat(request: Request):
+    """Apply one natural-language edit to an already-generated test file.
+
+    Body: { target_file, test_path, test_code, message, history[], use_docker?,
+            use_base_only?, max_retries? }
+    Returns { job_id } — stream via /api/partb/chat/stream?job_id=<id>.
+    """
+    body = await request.json()
+    target_file = body.get("target_file", "")
+    message     = (body.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"error": "message is empty"}, status_code=400)
+    if not target_file:
+        return JSONResponse({"error": "target_file is required"}, status_code=400)
+
+    loop = asyncio.get_event_loop()
+    job_id, q = _new_job()
+
+    def _worker():
+        log_cb = _make_log_callback(q, loop)
+        try:
+            from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
+            from testgen_api import refine_test_file     # type: ignore[import]
+
+            def _warm(detail: str):
+                loop.call_soon_threadsafe(q.put_nowait, {
+                    "type": "ai_status", "status": "Loading model", "detail": detail})
+
+            model, tokenizer = PARTB_RESIDENT.acquire(
+                use_lora=not body.get("use_base_only", False), status_cb=_warm)
+            PARTB_RESIDENT.touch()
+
+            result = refine_test_file(
+                target_file=target_file,
+                test_path=body.get("test_path", ""),
+                test_code=body.get("test_code", ""),
+                instruction=message,
+                model=model,
+                tokenizer=tokenizer,
+                history=body.get("history", []),
+                max_retries=body.get("max_retries", 3),
+                log_callback=log_cb,
+                use_docker=body.get("use_docker", False),
+            )
+            PARTB_RESIDENT.touch()
+
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "chat_reply", "data": result})
+            if result.get("edited"):
+                loop.call_soon_threadsafe(q.put_nowait, {
+                    "type": "file_result",
+                    "data": {**result, "file": target_file},
+                })
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "complete"})
+        except Exception as exc:
+            logger.exception("partb_chat worker failed")
+            loop.call_soon_threadsafe(q.put_nowait, {"type": "error", "message": str(exc)})
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return JSONResponse({"job_id": job_id})
+
+
+@app.get("/api/partb/chat/stream")
+async def partb_chat_stream(job_id: str):
+    return StreamingResponse(
+        _sse_stream(job_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/partb/save")
+async def partb_save(request: Request):
+    """Persist a manual edit straight to disk (no model needed)."""
+    body = await request.json()
+    test_path = body.get("test_path", "")
+    test_code = body.get("test_code", "")
+    if not test_path:
+        return JSONResponse({"error": "test_path is required"}, status_code=400)
+    try:
+        Path(test_path).write_text(test_code, encoding="utf-8")
+        return JSONResponse({"status": "ok", "test_path": test_path})
+    except Exception as exc:
+        logger.exception("partb_save failed")
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 @app.get("/api/partb/stream")
@@ -372,6 +511,10 @@ async def combined_run(
     def _worker():
         log_cb = _make_log_callback(q, loop)
         try:
+            # Release any keep-alive PartB model — the combined pipeline loads
+            # PartA (GPU) and its own PartB session, which cannot coexist with it.
+            from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
+            PARTB_RESIDENT.force_release()
             from orchestrator import execute_combined  # type: ignore[import]
             result = execute_combined(
                 srs_path=_srs_path_capture,
@@ -452,8 +595,10 @@ async def partc_run(request: Request):
             sys.path.insert(0, str(_ROOT / "PartC" / "api"))
             sys.path.insert(0, str(_ROOT / "PartC"))
             from partc_api import execute_part_c  # type: ignore[import]
-            from model_lifecycle import part_c_model  # type: ignore[import]
+            from model_lifecycle import part_c_model, PARTB_RESIDENT  # type: ignore[import]
 
+            # Standalone PartC loads its own session — drop the keep-alive model.
+            PARTB_RESIDENT.force_release()
             with part_c_model() as (model, tokenizer):
                 result = execute_part_c(
                     source_file=source_file,
