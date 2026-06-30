@@ -42,11 +42,10 @@ The three axes that matter — and why a single coverage number is misleading. C
 
 | variant | pass@1 | passrate | line_cov% | branch_cov% | graphRAG | vecRAG | BES | wall_s |
 |---|---|---|---|---|---|---|---|---|
-| testmate | 13.3 | 13.3 | 11.68 | 0.83 | 26.7 | 56.7 | 5.33 | 399.92 |
-| no_rag | 6.7 | 6.7 | 14.67 | 0.72 | 0.0 | 0.0 | 0.00 | 322.06 |
+| no_rag | 14.9 | 14.9 | 13.96 | 0.26 | 0.0 | 0.0 | 0.00 | 29.50 |
 
 
-**RAG lift (testmate − no_rag) (matched-N=30 (files run by both testmate and no_rag; testmate original N=80)):** Δline_cov = **-2.99%**, Δbranch_cov = **+0.11%**, Δpass@1 = **+6.7 pts**
+_(need both `testmate` and `no_rag` for the RAG-lift delta)_
 
 
 ## HumanEval — universal sanity point

@@ -324,7 +324,7 @@ def repair_loop(
         passed2, _ = run_tests(test_file, cwd=work_dir)
         if passed2:
             patched_code = source_file.read_text(encoding="utf-8")
-            attempts_log.append({"n": attempt, "status": "success", "patch": patched_code, "result": "All tests passed OK"})
+            attempts_log.append({"n": attempt, "status": "success", "patch": patched_code, "patched": patched_code, "result": "All tests passed OK"})
             if log_callback:
                 log_callback("attempt_complete", {"n": attempt, "status": "success",
                                                    "patched": patched_code, "sbfl": last_suspicious})

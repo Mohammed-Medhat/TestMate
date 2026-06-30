@@ -29,7 +29,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 _HERE = Path(__file__).parent
-_ROOT = _HERE.parent
+# Dev layout:      unified_app/server.py  → PartB is at _HERE.parent/PartB
+# Packaged layout: resources/server.py    → PartB is at _HERE/PartB (sibling)
+_ROOT = _HERE if (_HERE / "PartB").exists() else _HERE.parent
 _PART_A_README = _ROOT / "PartA" / "readme_extractor"
 
 sys.path.insert(0, str(_ROOT / "PartA" / "srs_pipeline"))
@@ -37,8 +39,27 @@ sys.path.insert(0, str(_ROOT / "PartA" / "readme_extractor"))
 sys.path.insert(0, str(_ROOT / "PartB" / "testgen"))
 sys.path.insert(0, str(_HERE))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# ── File logging (survives process crash — always written to Desktop) ───────
+_LOG_PATH = Path.home() / "Desktop" / "testmate_server.log"
+_CRASH_LOG_PATH = Path.home() / "Desktop" / "testmate_crash.log"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(str(_LOG_PATH), encoding="utf-8"),
+    ],
+)
 logger = logging.getLogger("unified_server")
+
+# faulthandler writes the Python C-level stack trace to a file on segfault/abort.
+# This is the only way to capture crashes that bypass try/except entirely.
+import faulthandler as _fh
+_crash_fh = open(str(_CRASH_LOG_PATH), "w", encoding="utf-8")
+_fh.enable(file=_crash_fh)
+logger.info("Server starting — log: %s  crash: %s", _LOG_PATH, _CRASH_LOG_PATH)
+logger.info("_ROOT=%s  _HERE=%s", _ROOT, _HERE)
+logger.info("sys.path=%s", sys.path[:6])
 
 # ── App ────────────────────────────────────────────────────────────────────
 app = FastAPI(title="TestMate Unified", version="1.0.0")
@@ -193,7 +214,12 @@ async def parta_readme_run(request: Request):
     try:
         # Free any keep-alive PartB model first — PartA's model cannot coexist.
         from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
-        PARTB_RESIDENT.force_release()
+        if not PARTB_RESIDENT.force_release():
+            return JSONResponse(
+                {"status": "error",
+                 "message": "GPU is still releasing memory from the previous model — please retry in a few seconds."},
+                status_code=503,
+            )
         result = _run_readme_extractor(
             content=content,
             repo_name=body.get("repo_name", "upload"),
@@ -235,7 +261,12 @@ async def parta_both_run(
         if readme_content.strip():
             # README extractor needs the GPU — release the keep-alive PartB model.
             from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
-            PARTB_RESIDENT.force_release()
+            if not PARTB_RESIDENT.force_release():
+                return JSONResponse(
+                    {"status": "error",
+                     "message": "GPU is still releasing memory from the previous model — please retry in a few seconds."},
+                    status_code=503,
+                )
             readme_result = _run_readme_extractor(
                 content=readme_content, repo_name=repo_name
             )
@@ -287,7 +318,8 @@ async def partb_discover(request: Request):
                 url = "https://github.com/" + url
             repo_dir, repo_name = clone_repo(url, branch or None)
 
-        files = auto_discover_files(repo_dir)
+        include_tests = bool(body.get("include_tests", False))
+        files = auto_discover_files(repo_dir, include_tests=include_tests)
         return JSONResponse({"files": files, "repo_name": repo_name, "repo_dir": repo_dir})
     except Exception as exc:
         logger.exception("partb_discover failed")
@@ -509,12 +541,22 @@ async def combined_run(
     _srs_path_capture = srs_path
 
     def _worker():
+        logger.info("[worker] combined_run thread started (job=%s)", job_id)
         log_cb = _make_log_callback(q, loop)
         try:
-            # Release any keep-alive PartB model — the combined pipeline loads
-            # PartA (GPU) and its own PartB session, which cannot coexist with it.
+            logger.info("[worker] importing PARTB_RESIDENT")
             from model_lifecycle import PARTB_RESIDENT  # type: ignore[import]
-            PARTB_RESIDENT.force_release()
+            logger.info("[worker] calling force_release")
+            released = PARTB_RESIDENT.force_release()
+            if not released:
+                # Warn but don't abort — let the model load attempt proceed.
+                # If VRAM is truly exhausted the load will raise OOM with a clear
+                # message; blocking here just hides the real error from the user.
+                logger.warning("force_release: GPU memory low — proceeding anyway (may OOM)")
+                loop.call_soon_threadsafe(q.put_nowait, {
+                    "type": "log", "level": "warning",
+                    "message": "⚠️ GPU memory still clearing — loading model anyway (may be slow)",
+                })
             from orchestrator import execute_combined  # type: ignore[import]
             result = execute_combined(
                 srs_path=_srs_path_capture,
@@ -534,9 +576,11 @@ async def combined_run(
             loop.call_soon_threadsafe(q.put_nowait, {"type": "result", "data": result})
             loop.call_soon_threadsafe(q.put_nowait, {"type": "complete"})
         except Exception as exc:
+            import traceback as _tb
+            full = _tb.format_exc()
             logger.exception("combined_run worker failed")
             loop.call_soon_threadsafe(q.put_nowait, {
-                "type": "error", "message": str(exc)
+                "type": "error", "message": f"{exc}\n\n{full}"
             })
         finally:
             if _srs_path_capture:
@@ -598,7 +642,12 @@ async def partc_run(request: Request):
             from model_lifecycle import part_c_model, PARTB_RESIDENT  # type: ignore[import]
 
             # Standalone PartC loads its own session — drop the keep-alive model.
-            PARTB_RESIDENT.force_release()
+            if not PARTB_RESIDENT.force_release():
+                loop.call_soon_threadsafe(q.put_nowait, {
+                    "type": "error",
+                    "message": "GPU is still releasing memory from the previous model — please retry in a few seconds.",
+                })
+                return
             with part_c_model() as (model, tokenizer):
                 result = execute_part_c(
                     source_file=source_file,
@@ -630,10 +679,307 @@ async def partc_stream(job_id: str):
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# PART C — Coverage & Mutation analysis endpoints
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/partc/coverage")
+async def partc_coverage(request: Request):
+    """
+    Body: { "source_file": "/abs/path/source.py", "test_file": "/abs/path/test_source.py" }
+    Returns line coverage data using coverage.py (pytest --cov).
+    """
+    import subprocess as _sp
+    import json as _json
+    import tempfile as _tmp
+    body = await request.json()
+    source_file = body.get("source_file", "")
+    test_file   = body.get("test_file", "")
+    if not source_file or not test_file:
+        return JSONResponse({"error": "source_file and test_file are required"}, status_code=400)
+
+    src_path  = Path(source_file)
+    test_path = Path(test_file)
+    if not src_path.is_file():
+        return JSONResponse({"error": f"source_file not found: {source_file}"}, status_code=400)
+    if not test_path.is_file():
+        return JSONResponse({"error": f"test_file not found: {test_file}"}, status_code=400)
+
+    work_dir  = src_path.parent
+    cov_json  = work_dir / "coverage_testmate.json"
+    stem      = src_path.stem
+    try:
+        r = _sp.run(
+            [
+                sys.executable, "-m", "pytest", str(test_path),
+                f"--cov={stem}",
+                "--cov-report=json:coverage_testmate.json",
+                "--cov-report=term-missing",
+                "-q", "--no-header",
+            ],
+            capture_output=True, text=True, cwd=str(work_dir), timeout=120
+        )
+        if not cov_json.exists():
+            return JSONResponse({
+                "error": "coverage.json not generated",
+                "raw": (r.stdout + r.stderr)[-2000:]
+            }, status_code=500)
+
+        data = _json.loads(cov_json.read_text(encoding="utf-8"))
+        file_data = {}
+        for fname, finfo in data.get("files", {}).items():
+            if Path(fname).stem == stem or fname == source_file:
+                file_data = finfo
+                break
+        if not file_data:
+            # fallback: first entry
+            items = list(data.get("files", {}).values())
+            file_data = items[0] if items else {}
+
+        summary   = file_data.get("summary", {})
+        functions = file_data.get("functions", {})
+
+        fn_results = []
+        for fn_name, fn_info in functions.items():
+            s = fn_info.get("summary", {})
+            fn_results.append({
+                "name":    fn_name,
+                "covered": s.get("covered_lines", 0),
+                "total":   s.get("num_statements", 0),
+                "pct":     round(s.get("percent_covered", 0), 1),
+                "missing": fn_info.get("missing_lines", []),
+            })
+
+        overall_pct = round(summary.get("percent_covered", 0), 1)
+
+        # Also build coverage_map format for the CoverageView component
+        covered_lines   = sorted(file_data.get("executed_lines", []))
+        missing_lines   = sorted(file_data.get("missing_lines", []))
+        uncovered_lines = missing_lines
+
+        source_text = ""
+        try:
+            source_text = src_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+
+        cov_json.unlink(missing_ok=True)
+        return JSONResponse({
+            "overall_pct":   overall_pct,
+            "covered_lines": summary.get("covered_lines", 0),
+            "total_lines":   summary.get("num_statements", 0),
+            "missing_lines": missing_lines,
+            "functions":     fn_results,
+            # coverage_map format for CoverageView component
+            "coverage_map": {
+                src_path.name: {
+                    "source":             source_text,
+                    "covered_lines":      covered_lines,
+                    "uncovered_lines":    uncovered_lines,
+                    "line_coverage_pct":  overall_pct,
+                    "num_statements":     summary.get("num_statements", 0),
+                }
+            },
+            # scalar for RightSidebar gauge
+            "line_coverage": overall_pct,
+            "raw": (r.stdout)[-1000:],
+        })
+    except _sp.TimeoutExpired:
+        return JSONResponse({"error": "Coverage run timed out"}, status_code=500)
+    except Exception as exc:
+        import traceback
+        return JSONResponse({"error": str(exc), "trace": traceback.format_exc()}, status_code=500)
+
+
+# ── AST Mutation engine (Windows-compatible, no mutmut needed) ─────────────
+def _ast_mutation_score(source_file: str, test_file: str) -> dict:
+    """
+    AST-based mutation testing. Mutates operators/comparators/arithmetic in
+    source_file, runs test_file against each mutant, and returns kill stats.
+    """
+    import ast as _ast
+    import copy as _copy
+    import subprocess as _sp
+
+    src_path  = Path(source_file)
+    test_path = Path(test_file)
+    original  = src_path.read_text(encoding="utf-8")
+
+    BINOP_MAP = {
+        _ast.Add:      [_ast.Sub, _ast.Mult],
+        _ast.Sub:      [_ast.Add, _ast.Mult],
+        _ast.Mult:     [_ast.Add, _ast.Sub],
+        _ast.Div:      [_ast.FloorDiv, _ast.Mult],
+        _ast.FloorDiv: [_ast.Div, _ast.Add],
+        _ast.Mod:      [_ast.Add, _ast.Mult],
+    }
+    CMP_MAP = {
+        _ast.Lt:    [_ast.LtE, _ast.Gt,  _ast.GtE, _ast.Eq],
+        _ast.LtE:   [_ast.Lt,  _ast.Gt,  _ast.GtE, _ast.Eq],
+        _ast.Gt:    [_ast.GtE, _ast.Lt,  _ast.LtE, _ast.Eq],
+        _ast.GtE:   [_ast.Gt,  _ast.Lt,  _ast.LtE, _ast.Eq],
+        _ast.Eq:    [_ast.NotEq, _ast.Lt, _ast.Gt],
+        _ast.NotEq: [_ast.Eq,   _ast.Lt,  _ast.Gt],
+    }
+
+    src_lines = original.splitlines()
+    orig_tree = _ast.parse(original)
+    mutants   = []
+
+    def _make_mutant(orig_node, mutated_tree, label):
+        try:
+            src = _ast.unparse(mutated_tree)
+            ln  = getattr(orig_node, "lineno", "?")
+            orig_line = src_lines[ln - 1].strip() if isinstance(ln, int) and 0 < ln <= len(src_lines) else ""
+            mutants.append({"label": label, "line": ln, "orig": orig_line, "source": src})
+        except Exception:
+            pass
+
+    for node in _ast.walk(orig_tree):
+        # BinOp mutations
+        if isinstance(node, _ast.BinOp):
+            for orig_t, reps in BINOP_MAP.items():
+                if isinstance(node.op, orig_t):
+                    for rep in reps:
+                        tc = _copy.deepcopy(orig_tree)
+                        for n in _ast.walk(tc):
+                            if (isinstance(n, _ast.BinOp) and isinstance(n.op, orig_t)
+                                    and getattr(n, "lineno", None) == getattr(node, "lineno", None)
+                                    and getattr(n, "col_offset", None) == getattr(node, "col_offset", None)):
+                                n.op = rep()
+                                break
+                        _make_mutant(node, tc, f"BinOp {orig_t.__name__}→{rep.__name__} (line {node.lineno})")
+        # Compare mutations
+        if isinstance(node, _ast.Compare):
+            for op in node.ops:
+                for orig_t, reps in CMP_MAP.items():
+                    if isinstance(op, orig_t):
+                        for rep in reps:
+                            tc = _copy.deepcopy(orig_tree)
+                            for n in _ast.walk(tc):
+                                if (isinstance(n, _ast.Compare)
+                                        and getattr(n, "lineno", None) == getattr(node, "lineno", None)
+                                        and getattr(n, "col_offset", None) == getattr(node, "col_offset", None)):
+                                    n.ops = [rep() if type(o) is orig_t else o for o in n.ops]
+                                    break
+                            _make_mutant(node, tc, f"Cmp {orig_t.__name__}→{rep.__name__} (line {node.lineno})")
+
+    results_list = []
+    killed = 0
+    for i, m in enumerate(mutants):
+        try:
+            src_path.write_text(m["source"], encoding="utf-8")
+            r = _sp.run(
+                [sys.executable, "-m", "pytest", str(test_path), "-x", "-q", "--no-header", "--tb=no"],
+                capture_output=True, text=True, cwd=str(src_path.parent), timeout=30
+            )
+            is_killed = (r.returncode != 0)
+        except _sp.TimeoutExpired:
+            is_killed = True
+        except Exception:
+            is_killed = False
+        finally:
+            src_path.write_text(original, encoding="utf-8")
+
+        if is_killed:
+            killed += 1
+        results_list.append({
+            "id":     i + 1,
+            "label":  m["label"],
+            "line":   m["line"],
+            "orig":   m["orig"],
+            "status": "killed" if is_killed else "survived",
+        })
+
+    total    = len(results_list)
+    survived = total - killed
+    score    = round((killed / total) * 100, 1) if total > 0 else 0.0
+
+    return {
+        "score":    score,
+        "killed":   killed,
+        "survived": survived,
+        "total":    total,
+        "mutants":  results_list,
+        # scalar for RightSidebar gauge
+        "mutation_score": score,
+    }
+
+
+@app.post("/api/partc/mutation")
+async def partc_mutation(request: Request):
+    """
+    Body: { "source_file": "/abs/path/source.py", "test_file": "/abs/path/test_source.py" }
+    Runs AST-based mutation testing. May take 30-120 seconds.
+    """
+    body = await request.json()
+    source_file = body.get("source_file", "")
+    test_file   = body.get("test_file", "")
+    if not source_file or not test_file:
+        return JSONResponse({"error": "source_file and test_file are required"}, status_code=400)
+    if not Path(source_file).is_file():
+        return JSONResponse({"error": f"source_file not found: {source_file}"}, status_code=400)
+    if not Path(test_file).is_file():
+        return JSONResponse({"error": f"test_file not found: {test_file}"}, status_code=400)
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, _ast_mutation_score, source_file, test_file
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        import traceback
+        return JSONResponse({"error": str(exc), "trace": traceback.format_exc()}, status_code=500)
+
+
 # ── Health check (polled by Electron main process) ────────────────────────
 @app.get("/api/status")
 async def status():
     return {"status": "ok"}
+
+
+# ── Import smoke-test (call before first run to surface missing packages) ──
+@app.get("/api/debug/imports")
+async def debug_imports():
+    """Test every package the pipeline needs. Returns pass/fail per package."""
+    import importlib
+    results = {}
+    packages = [
+        ("torch",              "import torch; results['torch_cuda'] = torch.cuda.is_available()"),
+        ("transformers",       None),
+        ("peft",               None),
+        ("bitsandbytes",       None),
+        ("accelerate",         None),
+        ("sentence_transformers", None),
+        ("spacy",              "import spacy; results['spacy_model'] = bool(spacy.util.is_package('en_core_web_sm'))"),
+        ("networkx",           None),
+        ("fastapi",            None),
+        ("pytest",             None),
+        ("pytest_cov",         "import pytest_cov"),
+    ]
+    for pkg, extra in packages:
+        try:
+            importlib.import_module(pkg)
+            results[pkg] = "ok"
+            if extra:
+                try:
+                    exec(extra, {"results": results})  # noqa: S102
+                except Exception as e:
+                    results[f"{pkg}_extra"] = str(e)
+        except Exception as exc:
+            results[pkg] = f"MISSING — {exc}"
+
+    # Check model paths
+    import main as _m  # type: ignore
+    results["base_model_path"] = str(_m.BASE_MODEL)
+    results["base_model_exists"] = Path(_m.BASE_MODEL).exists()
+    from model_lifecycle import _PARTB_LORA_PATH  # type: ignore
+    results["lora_path"] = str(_PARTB_LORA_PATH)
+    results["lora_exists"] = _PARTB_LORA_PATH.exists()
+    results["python_exe"] = sys.executable
+    results["log_file"] = str(_LOG_PATH)
+
+    logger.info("/api/debug/imports result: %s", results)
+    return results
 
 
 # ══════════════════════════════════════════════════════════════════════════

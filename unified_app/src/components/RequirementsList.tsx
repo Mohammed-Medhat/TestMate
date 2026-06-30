@@ -5,7 +5,7 @@ interface Props { requirements: Requirement[] }
 const LABEL: Record<number, { text: string; cls: string }> = {
   1:  { text: 'REQ',     cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
   0:  { text: 'NON-REQ', cls: 'bg-red-500/15 text-red-400 border border-red-500/30' },
-  [-1]: { text: '?',     cls: 'bg-zinc-700/50 text-zinc-400 border border-zinc-700' }
+  [-1]: { text: 'NON-REQ', cls: 'bg-red-500/15 text-red-400 border border-red-500/30' }
 }
 
 export default function RequirementsList({ requirements }: Props) {

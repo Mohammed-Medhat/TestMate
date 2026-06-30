@@ -58,6 +58,25 @@
         "to": "model_lifecycle.py"
       },
       {
+        "from": "requirement_matcher.py",
+        "to": "requirement_matcher.py"
+      },
+      {
+        "from": "coverage_analyzer.py",
+        "to": "coverage_analyzer.py"
+      },
+      {
+        "from": "../PartB/value_reasoning_model",
+        "to": "PartB/value_reasoning_model",
+        "filter": [
+          "adapter_config.json",
+          "adapter_model.safetensors",
+          "tokenizer.json",
+          "tokenizer_config.json",
+          "chat_template.jinja"
+        ]
+      },
+      {
         "from": "../PartA/srs_pipeline",
         "to": "PartA/srs_pipeline",
         "filter": [
@@ -102,8 +121,10 @@
     ],
     "win": {
       "target": [
-        "nsis"
-      ]
+        "portable"
+      ],
+      "signingHashAlgorithms": null,
+      "sign": null
     }
   }
 }

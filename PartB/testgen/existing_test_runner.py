@@ -208,6 +208,29 @@ def find_uncovered_functions(target_file: str, test_files: list[str], cwd: str) 
 # PHASE 3 — Triage: fresh test vs existing test
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _doctest_confirms_bug(func_name: str, target_file: str) -> bool:
+    """
+    Run `python -m doctest <target_file>`.  If the output mentions func_name
+    in a failure section, the function's own spec examples contradict the
+    current implementation — this is definitively a real bug.
+    Fast, no-LLM shortcut for triage.
+    """
+    try:
+        r = subprocess.run(
+            [sys.executable, "-m", "doctest", target_file],
+            capture_output=True, text=True, timeout=20,
+            cwd=str(Path(target_file).parent),
+        )
+        if r.returncode != 0:
+            combined = r.stdout + r.stderr
+            # doctest output names the function in "Failed example" lines
+            if func_name in combined:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def triage_failing_test(
     func_name: str,
     target_file: str,
@@ -229,6 +252,13 @@ def triage_failing_test(
         logger.debug(msg)
         if log_callback:
             log_callback("log", "debug", msg)
+
+    # Fast path: doctest spec contradiction check (no LLM needed)
+    # If the function's own docstring examples fail against the current code,
+    # the test is testing the spec — the code has a real bug.
+    if _doctest_confirms_bug(func_name, target_file):
+        _log(f"  Triage: docstring examples contradict code for {func_name} → real_bug (doctest shortcut)")
+        return "real_bug"
 
     _log(f"  Triage: generating fresh test for {func_name}…")
 
@@ -414,6 +444,7 @@ def run_existing_test_prepass(
     real_bugs = 0
     stale_fixed = 0
     stale_details: list[dict] = []
+    buggy_funcs: list[str] = []
 
     if run_result["all_pass"]:
         _log(f"  Existing tests: all pass ✅")
@@ -457,6 +488,7 @@ def run_existing_test_prepass(
                 failure_output=run_result["raw_output"],
             )
             real_bugs += 1
+            buggy_funcs.append(func_name)
 
         elif verdict == "stale_test":
             _log(f"  {func_name}: STALE TEST — API changed, updating test with .testmate.bak backup")
@@ -485,6 +517,7 @@ def run_existing_test_prepass(
         "all_pass":           False,
         "uncovered_funcs":    uncovered,
         "real_bugs_found":    real_bugs,
+        "buggy_funcs":        buggy_funcs,
         "stale_tests_fixed":  stale_fixed,
         "stale_details":      stale_details,
         "skip_generation":    False,

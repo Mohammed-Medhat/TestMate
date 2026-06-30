@@ -45,6 +45,7 @@ def execute_part_c(
     max_attempts: int = 3,
     log_callback: Optional[Callable] = None,
     workspace_dir: Optional[str] = None,
+    extra_test_files: Optional[list] = None,
 ) -> dict:
     """
     Run the SBFL-guided APR loop for a single (source, test) pair.
@@ -53,14 +54,16 @@ def execute_part_c(
     temp workspace, repair there, and return the patched text.
 
     Args:
-        source_file:   Absolute path to the buggy Python file.
-        test_file:     Absolute path to the pytest test suite.
-        model:         Pre-loaded Qwen model (loads from disk if None).
-        tokenizer:     Pre-loaded tokenizer (loads from disk if None).
-        max_attempts:  Max repair iterations (default 3).
-        log_callback:  Optional callback(event_type, *args) for SSE streaming.
-        workspace_dir: Where to set up the temp workspace. Auto-created in
-                       PartC/workspaces/<timestamp>/ if None.
+        source_file:      Absolute path to the buggy Python file.
+        test_file:        Absolute path to the pytest test suite.
+        model:            Pre-loaded Qwen model (loads from disk if None).
+        tokenizer:        Pre-loaded tokenizer (loads from disk if None).
+        max_attempts:     Max repair iterations (default 3).
+        log_callback:     Optional callback(event_type, *args) for SSE streaming.
+        workspace_dir:    Where to set up the temp workspace. Auto-created in
+                          PartC/workspaces/<timestamp>/ if None.
+        extra_test_files: Additional test files to copy into the workspace.
+                          pytest discovers them automatically alongside the primary test.
 
     Returns:
         {
@@ -103,6 +106,12 @@ def execute_part_c(
 
     shutil.copy2(src_path, ws_source)
     shutil.copy2(test_path, ws_test)
+
+    # Copy extra test files so pytest discovers them in the workspace
+    for etf in (extra_test_files or []):
+        _etf_path = Path(etf)
+        if _etf_path.is_file():
+            shutil.copy2(_etf_path, ws / _etf_path.name)
 
     _log(f"  Workspace: {ws}")
     _log(f"  Source:    {ws_source.name}")

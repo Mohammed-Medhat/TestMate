@@ -19,7 +19,7 @@ const API = (window as any).api?.baseUrl ?? 'http://127.0.0.1:8080'
 
 const DEFAULT_SETTINGS: RunSettings = {
   docker: false, deepScan: false, maxRetries: 3, hitl: false, intense: false,
-  planMode: false, useBaseOnly: false, qualityMode: 'fast', autoRepair: false,
+  planMode: false, useBaseOnly: false, qualityMode: 'fast', autoRepair: true,
 }
 
 export default function App() {
@@ -150,14 +150,14 @@ export default function App() {
   }
   const goHome = () => { setView('landing'); refreshHistory() }
 
-  // ── Part B: discover ─────────────────────────────────────────────────────
+  // ── Part B / Part C: discover ─────────────────────────────────────────────
   const discover = useCallback(async () => {
     if (!repoUrl.trim()) return
     setDisc(true)
     try {
       const res = await fetch(`${API}/api/partb/discover`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: repoUrl, branch }),
+        body: JSON.stringify({ url: repoUrl, branch, include_tests: mode === 'partc' }),
       })
       const data = await res.json()
       if (data.error) { addLog('❌ ' + data.error) }
@@ -169,7 +169,7 @@ export default function App() {
       }
     } catch (e: any) { addLog('❌ ' + e.message) }
     setDisc(false)
-  }, [repoUrl, branch])
+  }, [repoUrl, branch, mode])
 
   const toggleFile = (i: number) => {
     setSelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })
@@ -203,7 +203,11 @@ export default function App() {
       try {
         const msg = JSON.parse(e.data)
         if (msg.type === 'complete') { es.close(); onDone(true) }
-        else if (msg.type === 'error') { es.close(); onDone(false) }
+        else if (msg.type === 'error') {
+          // Surface the full Python traceback into the trace log before closing
+          if (msg.message) addLog('❌ ' + msg.message)
+          es.close(); onDone(false)
+        }
         else onMsg(msg)
       } catch {}
     }
@@ -336,16 +340,50 @@ export default function App() {
           if (msg.type === 'code_clear')  setStream('')
           if (msg.type === 'review_request') setReview(msg as ReviewRequest)
           if (msg.type === 'plan_request')   setPlan(msg as PlanRequest)
-          // per-file result — append to part_b array
+          // per-file result — append to part_b array AND bubble coverage/mutation up to top level
           if (msg.type === 'file_result') {
             setResults((prev: any) => {
               const existing: any[] = Array.isArray(prev?.part_b) ? prev.part_b : []
-              return { ...prev, part_b: [...existing, msg.data] }
+              const updated = [...existing, msg.data]
+              // Aggregate line_coverage (average across files), mutation_score (average),
+              // coverage_map (merged), and bug_reports (all survivors)
+              const totalFiles = updated.length
+              const avgCov = totalFiles > 0
+                ? updated.reduce((s: number, f: any) => s + (f.line_coverage ?? 0), 0) / totalFiles
+                : 0
+              const avgMut = totalFiles > 0
+                ? updated.reduce((s: number, f: any) => s + (f.mutation_score ?? 0), 0) / totalFiles
+                : 0
+              const mergedCovMap = updated.reduce((acc: any, f: any) => ({
+                ...acc, ...(f.coverage_map ?? {})
+              }), {})
+              const allBugReports = updated.flatMap((f: any) => f.bug_reports ?? [])
+              return {
+                ...prev,
+                part_b: updated,
+                // Top-level fields read by RightSidebar & Coverage/Mutations tabs
+                line_coverage:  Math.round(avgCov * 10) / 10,
+                mutation_score: Math.round(avgMut * 10) / 10,
+                coverage_map:   mergedCovMap,
+                bug_reports:    allBugReports,
+              }
             })
-            setActiveTab('mutations')  // switch to Test Code tab
+            // Switch to coverage tab so user sees real data immediately
+            const hasCovMap = (msg.data as any)?.coverage_map
+            if (hasCovMap) {
+              setSelectedCovFile(Object.keys(hasCovMap)[0] ?? '')
+              setActiveTab('coverage')
+            } else {
+              setActiveTab('bugs')
+            }
           }
           if (msg.type === 'result') {
-            setResults(msg.data)
+            setResults((prev: any) => {
+              // Keep part_c from repair_complete events (has patched/original for diff)
+              // The server result's part_c uses a different schema (no patched field)
+              const live = Array.isArray(prev?.part_c) && prev.part_c.length > 0
+              return { ...msg.data, part_c: live ? prev.part_c : (msg.data?.part_c ?? []) }
+            })
             const cov = (msg.data as any)?.coverage_map
             if (cov) setSelectedCovFile(Object.keys(cov)[0] ?? '')
           }
@@ -493,7 +531,7 @@ export default function App() {
         fd.append('plan_mode', String(settings.planMode))
         fd.append('use_base_only', String(settings.useBaseOnly))
         fd.append('quality_mode', settings.qualityMode ?? 'fast')
-        fd.append('auto_repair', String(settings.autoRepair))
+        fd.append('auto_repair', 'true')  // always on in combined pipeline
         fd.append('use_docker', String(settings.docker))
 
         const res = await fetch(`${API}/api/combined/run`, { method: 'POST', body: fd })
@@ -512,12 +550,18 @@ export default function App() {
               setActiveTab('requirements')
             }
             if (d?.part_a?.scenarios?.length) setScenarios(d.part_a.scenarios)
-            setResults((prev: any) => ({
-              ...d,
-              part_b: Array.isArray(d.part_b) && d.part_b.length
-                ? d.part_b
-                : (Array.isArray(prev?.part_b) ? prev.part_b : [])
-            }))
+            setResults((prev: any) => {
+              // Keep repair_complete data (has patched/original for diff view);
+              // the orchestrator's part_c only has success flag without source code.
+              const liveC = Array.isArray(prev?.part_c) && prev.part_c.length > 0
+              return {
+                ...d,
+                part_b: Array.isArray(d.part_b) && d.part_b.length
+                  ? d.part_b
+                  : (Array.isArray(prev?.part_b) ? prev.part_b : []),
+                part_c: liveC ? prev.part_c : (d.part_c ?? []),
+              }
+            })
           }
 
           // ── Per-file Part B result ────────────────────────────────────────
@@ -714,9 +758,9 @@ export default function App() {
               />
             </motion.div>
 
-            {/* Main content rises from below */}
+            {/* Main content rises from below — min-h-0 lets the inner body scroll */}
             <motion.div
-              className="flex-1 min-w-0 flex flex-col"
+              className="flex-1 min-w-0 flex flex-col min-h-0"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: 0.14, ease: [0.22, 0, 0.1, 1] }}

@@ -5,7 +5,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 
 # ── Model paths ───────────────────────────────────────────────────────
-MODEL_NAME   = str(BASE_DIR / "models" / "Qwen_Model")   # base model weights
+MODEL_NAME   = r"D:\donwloader\Qwen2.5-Coder-7B-Instruct"  # shared with PartB
 CACHE_DIR    = str(BASE_DIR / "models" / "cache")        # HuggingFace cache
 ADAPTER_PATH = str(BASE_DIR / "models" / "adapter")      # LoRA adapter 
 # ── Training output ───────────────────────────────────────────────────

@@ -44,12 +44,15 @@ from typing import Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 # ── Paths ──────────────────────────────────────────────────────────────────
-_ROOT        = Path(__file__).parent.parent
+# Dev layout:      model_lifecycle.py lives in unified_app/ → parent.parent is repo root
+# Packaged layout: model_lifecycle.py lives in resources/   → parent is resources (PartB/ is there)
+_HERE        = Path(__file__).parent
+_ROOT        = _HERE if (_HERE / "PartB").exists() else _HERE.parent
 _PART_A_README  = _ROOT / "PartA" / "readme_extractor"
 _PART_B_TESTGEN = _ROOT / "PartB" / "testgen"
 _PART_C_ROOT    = _ROOT / "PartC"
 
-# LoRA adapter paths (relative to repo root — same absolute paths as main.py)
+# LoRA adapter paths
 _PARTB_LORA_PATH = _ROOT / "PartB" / "value_reasoning_model"
 _PARTC_LORA_PATH = _ROOT / "PartC" / "models" / "adapter"
 
@@ -63,12 +66,29 @@ def flush_gpu() -> None:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
             torch.cuda.synchronize()
+            # Second pass: finalizers run during the first collect/empty_cache
+            # (e.g. accelerate hook objects, bnb Params4bit buffers) can leave
+            # behind newly-unreferenced blocks that only become collectible —
+            # and only get returned to the driver — on a follow-up pass.
+            gc.collect()
+            torch.cuda.empty_cache()
             logger.info(
                 "GPU flushed — %.1fGB free",
                 torch.cuda.mem_get_info()[0] / 1e9,
             )
     except ImportError:
         gc.collect()
+
+
+def _free_vram_gb() -> float:
+    """Free GPU memory in GB, or +inf if CUDA isn't available (nothing to wait for)."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return torch.cuda.mem_get_info()[0] / 1e9
+    except Exception:
+        pass
+    return float("inf")
 
 
 # ── Part A ─────────────────────────────────────────────────────────────────
@@ -137,26 +157,45 @@ def _load_qwen_with_adapters(
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     from peft import PeftModel
 
-    # Re-use PartB's main.py BASE_MODEL path (absolute, matches the installed model)
-    sys.path.insert(0, str(_PART_B_TESTGEN))
-    import main as _partb_main
-    BASE_MODEL = _partb_main.BASE_MODEL
+    # Extract BASE_MODEL from main.py by text search — avoids executing main.py's
+    # module-level code (torch.cuda.set_device, rag_store init_db, etc.) which
+    # segfaults when run from a background worker thread on Windows.
+    import re as _re
+    _main_src = (_PART_B_TESTGEN / "main.py").read_text(encoding="utf-8", errors="ignore")
+    _bm = _re.search(r'^BASE_MODEL\s*=\s*[rR]?"([^"]+)"', _main_src, _re.MULTILINE)
+    BASE_MODEL = _bm.group(1) if _bm else r"D:\donwloader\Qwen2.5-Coder-7B-Instruct"
+    logger.info("BASE_MODEL resolved to: %s", BASE_MODEL)
 
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = (
         "expandable_segments:True,garbage_collection_threshold:0.6"
     )
 
-    logger.info("Loading Qwen2.5-Coder-7B base (4-bit)...")
+    logger.info("Loading Qwen2.5-Coder-7B base (4-bit) from %s ...", BASE_MODEL)
+    logger.info("PartB LoRA: %s (exists=%s)", partb_lora, partb_lora.exists())
     gc.collect()
     if torch.cuda.is_available():
+        # Explicitly initialize the CUDA context from this thread before BitsAndBytes
+        # tries to load its native CUDA kernels — avoids a Windows SEH crash when the
+        # context is first created from a non-main thread inside a native DLL.
+        logger.info("Initializing CUDA context...")
+        torch.cuda.init()
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.cuda.set_device(0)
+        free_gb = torch.cuda.mem_get_info()[0] / 1e9
+        total_gb = torch.cuda.mem_get_info()[1] / 1e9
+        logger.info("VRAM before load: %.1f GB free / %.1f GB total", free_gb, total_gb)
         torch.cuda.empty_cache()
 
+    logger.info("Loading tokenizer from %s ...", BASE_MODEL)
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True, use_fast=True)
     tokenizer.truncation_side = "left"
     tokenizer.pad_token = tokenizer.eos_token
+    logger.info("Tokenizer loaded.")
 
     total_vram = torch.cuda.mem_get_info()[1] / 1e9 if torch.cuda.is_available() else 0
     compute_dtype = torch.float16 if total_vram <= 10 else torch.bfloat16
+    logger.info("compute_dtype=%s  total_vram=%.1f GB", compute_dtype, total_vram)
     bnb = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -175,6 +214,7 @@ def _load_qwen_with_adapters(
         low_cpu_mem_usage=True,
         torch_dtype=compute_dtype,
     )
+    logger.info("Calling AutoModelForCausalLM.from_pretrained (4-bit BnB)...")
     try:
         base = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
@@ -186,7 +226,11 @@ def _load_qwen_with_adapters(
         base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, **_load_kwargs)
     base.config.use_cache = True
     base.eval()
-    logger.info("Base model loaded.")
+    if torch.cuda.is_available():
+        used_gb = (torch.cuda.mem_get_info()[1] - torch.cuda.mem_get_info()[0]) / 1e9
+        logger.info("Base model loaded — VRAM used: %.1f GB", used_gb)
+    else:
+        logger.info("Base model loaded.")
 
     adapters_loaded: set = set()
 
@@ -370,11 +414,46 @@ class _PartBResident:
             if self.model is not None:
                 self._last_used = time.monotonic()
 
-    def force_release(self) -> None:
+    def force_release(self, min_free_gb: Optional[float] = None, timeout_s: float = 20.0) -> bool:
         """Immediately unload + flush. Call from any PartA/PartC path before it
-        loads its own model (VRAM-coexistence rule)."""
+        loads its own model (VRAM-coexistence rule).
+
+        `del` + `empty_cache()` doesn't always hand memory back to the driver
+        on the first try (see `_flush_locked`/`flush_gpu`), and a PartA load
+        that starts while VRAM is still pinned can crash the whole process
+        (a 4-bit BnB load failing OOM has been observed to take down the
+        parent server, not just raise). So after flushing, poll
+        `mem_get_info()` and retry the flush for up to `timeout_s` until at
+        least `min_free_gb` is free. Returns True if it's safe to proceed,
+        False if the caller should back off (e.g. respond 503) instead of
+        starting a load that's likely to crash.
+
+        If CUDA isn't available there's nothing to wait for — always True.
+        """
+        if min_free_gb is None:
+            try:
+                min_free_gb = float(os.environ.get("TESTMATE_PARTA_MIN_FREE_GB", "4.0"))
+            except ValueError:
+                min_free_gb = 4.0
+
         with self._lock:
             self._flush_locked()
+            free = _free_vram_gb()
+            if free == float("inf"):
+                return True
+            deadline = time.monotonic() + timeout_s
+            while free < min_free_gb and time.monotonic() < deadline:
+                time.sleep(1.0)
+                flush_gpu()
+                free = _free_vram_gb()
+            if free < min_free_gb:
+                logger.warning(
+                    "force_release: only %.1fGB free after flush (wanted %.1fGB) — "
+                    "a PartA/PartC load now may fail or crash",
+                    free, min_free_gb,
+                )
+                return False
+            return True
 
     @property
     def is_resident(self) -> bool:
@@ -384,15 +463,28 @@ class _PartBResident:
     def _flush_locked(self) -> None:
         if self.model is None:
             return
-        logger.info("PartBResident: releasing model → flushing GPU…")
+        before = _free_vram_gb()
+        logger.info(
+            "PartBResident: releasing model → flushing GPU (%.1fGB free before)…",
+            before,
+        )
         try:
             del self.model
+        except Exception:
+            pass
+        try:
+            del self.tokenizer
         except Exception:
             pass
         self.model = None
         self.tokenizer = None
         self._adapters = set()
         flush_gpu()
+        after = _free_vram_gb()
+        logger.info(
+            "PartBResident: released — %.1fGB free after (was %.1fGB)",
+            after, before,
+        )
 
     def _start_reaper_locked(self) -> None:
         if self._reaper is not None and self._reaper.is_alive():

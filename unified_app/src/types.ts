@@ -110,6 +110,7 @@ export interface PrepassSummary {
   all_pass: boolean
   uncovered_funcs: string[]
   real_bugs_found: number
+  buggy_funcs?: string[]
   stale_tests_fixed: number
   stale_details: StaleDetail[]
   skip_generation: boolean

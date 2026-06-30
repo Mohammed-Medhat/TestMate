@@ -1183,6 +1183,11 @@
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
       </button>
+      <button class="nav-btn" onclick="setNav('covmut',this)" title="Coverage &amp; Mutation">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+      </button>
       <div class="nav-spacer"></div>
       <button class="nav-btn" title="Settings">
         <svg viewBox="0 0 24 24">
@@ -1464,6 +1469,91 @@
 
         </div><!-- /page-wrap -->
 
+          <!-- ── COVERAGE & MUTATION nav section ── -->
+          <div id="nav-covmut" style="display:none">
+            <div class="tabs">
+              <div class="tab active" onclick="setCovTab('coverage',this)">Code Coverage</div>
+              <div class="tab" onclick="setCovTab('mutation',this)">Mutation Testing</div>
+            </div>
+
+            <!-- Coverage tab -->
+            <div class="page active" id="covtab-coverage">
+              <div class="ph">
+                <div class="ph-left">
+                  <h2>Code Coverage</h2>
+                  <p>Statement coverage per function — measured by coverage.py</p>
+                </div>
+                <div class="ph-right">
+                  <button class="btn btn-g" id="covRunBtn" onclick="runCoverage()">▶ Run Coverage</button>
+                </div>
+              </div>
+
+              <div class="stats-row" id="covSummaryRow" style="display:none">
+                <div class="stat-card">
+                  <div class="stat-val" id="covPct" style="color:var(--accent)">—</div>
+                  <div class="stat-lbl">Overall %</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-val" id="covCovered">—</div>
+                  <div class="stat-lbl">Lines Covered</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-val" style="color:var(--red)" id="covMissing">—</div>
+                  <div class="stat-lbl">Lines Missing</div>
+                </div>
+              </div>
+
+              <div class="table-box" id="covFnList">
+                <div class="empty">
+                  <div class="empty-icon">📊</div>
+                  <div class="empty-text">Click "Run Coverage" to measure statement coverage</div>
+                </div>
+              </div>
+
+              <div id="covMissingBox" style="display:none" class="sbfl-card" style="margin-top:0">
+                <div class="sbfl-title">Uncovered Lines</div>
+                <div id="covMissingList"></div>
+              </div>
+            </div>
+
+            <!-- Mutation tab -->
+            <div class="page" id="covtab-mutation">
+              <div class="ph">
+                <div class="ph-left">
+                  <h2>Mutation Testing</h2>
+                  <p>AST-based mutation engine — operators, comparators, arithmetic</p>
+                </div>
+                <div class="ph-right">
+                  <button class="btn btn-g" id="mutRunBtn" onclick="runMutation()">▶ Run Mutations</button>
+                </div>
+              </div>
+
+              <div class="stats-row" id="mutSummaryRow" style="display:none">
+                <div class="stat-card">
+                  <div class="stat-val" id="mutScore" style="color:var(--accent)">—</div>
+                  <div class="stat-lbl">Mutation Score</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-val" style="color:var(--accent)" id="mutKilled">—</div>
+                  <div class="stat-lbl">Killed</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-val" style="color:var(--red)" id="mutSurvived">—</div>
+                  <div class="stat-lbl">Survived</div>
+                </div>
+              </div>
+
+              <div class="table-box" id="mutList">
+                <div class="empty">
+                  <div class="empty-icon">🧬</div>
+                  <div class="empty-text">Click "Run Mutations" to execute mutation analysis<br><span style="font-size:10px;color:var(--text3)">This may take 30–90 seconds depending on the number of mutants</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /page-wrap -->
+
         <!-- ══ Right metrics sidebar ════════════════════════════════ -->
         <aside class="metrics">
           <div class="metrics-title">Global Metrics</div>
@@ -1535,6 +1625,38 @@
               </svg>
             </div>
           </div>
+
+          <!-- Code Coverage -->
+          <div class="metric-card">
+            <div class="metric-label">Code Coverage</div>
+            <div class="gauge-wrap">
+              <svg class="gauge" width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#1a2230" stroke-width="6" />
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#fbbf24" stroke-width="6" stroke-dasharray="188.5"
+                  stroke-dashoffset="188.5" stroke-linecap="round" transform="rotate(-90 40 40)" id="g-cov-ring"
+                  style="transition:.5s" />
+                <text x="40" y="44" text-anchor="middle" font-family="Syne,sans-serif" font-size="13" font-weight="700"
+                  fill="#e8f0f8" id="g-cov-txt">—</text>
+              </svg>
+            </div>
+            <div class="gauge-sub" style="text-align:center;color:var(--text3);font-size:9px;font-family:var(--mono)" id="g-cov-sub">Not run</div>
+          </div>
+
+          <!-- Mutation Score -->
+          <div class="metric-card" style="border-bottom:none">
+            <div class="metric-label">Mutation Score</div>
+            <div class="gauge-wrap">
+              <svg class="gauge" width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#1a2230" stroke-width="6" />
+                <circle cx="40" cy="40" r="30" fill="none" stroke="#a78bfa" stroke-width="6" stroke-dasharray="188.5"
+                  stroke-dashoffset="188.5" stroke-linecap="round" transform="rotate(-90 40 40)" id="g-mut-ring"
+                  style="transition:.5s" />
+                <text x="40" y="44" text-anchor="middle" font-family="Syne,sans-serif" font-size="13" font-weight="700"
+                  fill="#e8f0f8" id="g-mut-txt">—</text>
+              </svg>
+            </div>
+            <div class="gauge-sub" style="text-align:center;color:var(--text3);font-size:9px;font-family:var(--mono)" id="g-mut-sub">Not run</div>
+          </div>
         </aside>
       </div><!-- /content-row -->
     </div><!-- /main -->
@@ -1549,12 +1671,12 @@
 
     // ── Nav & Tab routing ──────────────────────────────────────────────────
     function setNav(id, btn) {
-      ['pipeline', 'upload', 'tests'].forEach(n => {
+      ['pipeline', 'upload', 'tests', 'covmut'].forEach(n => {
         document.getElementById('nav-' + n).style.display = n === id ? '' : 'none';
       });
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
-      const labels = { pipeline: 'repair_loop', upload: 'upload_project', tests: 'test_results' };
+      const labels = { pipeline: 'repair_loop', upload: 'upload_project', tests: 'test_results', covmut: 'coverage_mutation' };
       document.getElementById('bc-section').textContent = id;
       document.getElementById('bc-page').textContent = labels[id] || id;
     }
@@ -1848,6 +1970,152 @@
         const tr = document.getElementById('testTrace');
         if (d.trace) { tr.innerHTML = d.trace.split('\n').map(l => `<div><span class="le">${esc(l)}</span></div>`).join(''); }
         else { tr.innerHTML = '<span class="lm">// All tests passing — no errors</span>'; }
+      });
+    }
+
+    // ── Coverage & Mutation tab switch ────────────────────────────────────
+    function setCovTab(id, el) {
+      document.querySelectorAll('#nav-covmut .tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      ['coverage', 'mutation'].forEach(t => {
+        const el2 = document.getElementById('covtab-' + t);
+        if (el2) el2.classList.toggle('active', t === id);
+      });
+    }
+
+    // ── Coverage runner ────────────────────────────────────────────────────
+    function runCoverage() {
+      const btn = document.getElementById('covRunBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span> Running…';
+      document.getElementById('covFnList').innerHTML =
+        '<div class="empty"><div class="empty-icon"><span class="spin" style="width:22px;height:22px;border-width:3px"></span></div><div class="empty-text">Measuring coverage…</div></div>';
+      document.getElementById('covSummaryRow').style.display = 'none';
+      document.getElementById('covMissingBox').style.display = 'none';
+
+      fetch('/api/coverage').then(r => r.json()).then(d => {
+        btn.disabled = false;
+        btn.innerHTML = '↻ Re-run Coverage';
+        if (d.error) {
+          document.getElementById('covFnList').innerHTML =
+            `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">${esc(d.error)}</div></div>`;
+          return;
+        }
+        const pct = d.overall_pct || 0;
+        document.getElementById('covPct').textContent = pct + '%';
+        document.getElementById('covCovered').textContent = d.covered_lines || 0;
+        document.getElementById('covMissing').textContent = (d.total_lines || 0) - (d.covered_lines || 0);
+        document.getElementById('covSummaryRow').style.display = '';
+
+        // Update sidebar gauge
+        updateGauge('cov', pct, null, pct + '%', null);
+        document.getElementById('g-cov-sub').textContent = d.covered_lines + '/' + d.total_lines + ' lines';
+
+        // Per-function table
+        const fns = d.functions || [];
+        if (!fns.length) {
+          document.getElementById('covFnList').innerHTML =
+            '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No function-level data available</div></div>';
+        } else {
+          const color = p => p >= 90 ? 'var(--accent)' : p >= 60 ? 'var(--amber)' : 'var(--red)';
+          document.getElementById('covFnList').innerHTML = `
+            <div class="table-head">
+              <div class="th" style="flex:1">Function</div>
+              <div class="th" style="flex:0 0 80px;text-align:right">Coverage</div>
+              <div class="th" style="flex:0 0 50px;text-align:right">Lines</div>
+            </div>` +
+            fns.map(f => `
+            <div class="trow">
+              <div class="tname" style="flex:1">${esc(f.name)}</div>
+              <div style="flex:0 0 80px;text-align:right">
+                <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+                  <div style="width:50px;height:4px;background:var(--s3);border-radius:99px;overflow:hidden">
+                    <div style="height:4px;width:${f.pct}%;background:${color(f.pct)};border-radius:99px;transition:.4s"></div>
+                  </div>
+                  <span style="font-family:var(--mono);font-size:10px;color:${color(f.pct)};min-width:34px">${f.pct}%</span>
+                </div>
+              </div>
+              <div style="flex:0 0 50px;text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2)">${f.covered}/${f.total}</div>
+            </div>`).join('');
+        }
+
+        // Uncovered lines
+        const missing = d.missing_lines || [];
+        if (missing.length) {
+          document.getElementById('covMissingBox').style.display = '';
+          document.getElementById('covMissingList').innerHTML = missing.map(ln =>
+            `<div class="heatrow-code" style="margin-bottom:4px"><span style="color:var(--text3);margin-right:8px">Line ${ln}</span></div>`
+          ).join('');
+        }
+      }).catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = '▶ Run Coverage';
+        document.getElementById('covFnList').innerHTML =
+          `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Request failed: ${e}</div></div>`;
+      });
+    }
+
+    // ── Mutation runner ────────────────────────────────────────────────────
+    function runMutation() {
+      const btn = document.getElementById('mutRunBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span> Mutating…';
+      document.getElementById('mutList').innerHTML =
+        '<div class="empty"><div class="empty-icon"><span class="spin" style="width:22px;height:22px;border-width:3px"></span></div><div class="empty-text">Generating &amp; testing mutants — please wait…</div></div>';
+      document.getElementById('mutSummaryRow').style.display = 'none';
+
+      fetch('/api/mutation').then(r => r.json()).then(d => {
+        btn.disabled = false;
+        btn.innerHTML = '↻ Re-run Mutations';
+        if (d.error) {
+          document.getElementById('mutList').innerHTML =
+            `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">${esc(d.error)}</div></div>`;
+          return;
+        }
+        const score = d.score || 0;
+        document.getElementById('mutScore').textContent = score + '%';
+        document.getElementById('mutKilled').textContent = d.killed || 0;
+        document.getElementById('mutSurvived').textContent = d.survived || 0;
+        document.getElementById('mutSummaryRow').style.display = '';
+
+        // Update sidebar gauge
+        updateGauge('mut', score, null, score + '%', null);
+        document.getElementById('g-mut-sub').textContent = d.killed + '/' + d.total + ' killed';
+
+        const mutants = d.mutants || [];
+        if (!mutants.length) {
+          document.getElementById('mutList').innerHTML =
+            '<div class="empty"><div class="empty-icon">🧬</div><div class="empty-text">No mutable operators found in source</div></div>';
+          return;
+        }
+        document.getElementById('mutList').innerHTML = `
+          <div class="table-head">
+            <div class="th" style="flex:0 0 30px">#</div>
+            <div class="th" style="flex:1">Mutation</div>
+            <div class="th" style="flex:0 0 40px">Line</div>
+            <div class="th" style="flex:0 0 70px;text-align:right">Status</div>
+          </div>` +
+          mutants.map(m => {
+            const isKilled = m.status === 'killed';
+            const badge = isKilled
+              ? `<span class="tbadge tbp">KILLED</span>`
+              : `<span class="tbadge tbf">SURVIVED</span>`;
+            return `
+          <div class="trow">
+            <div style="flex:0 0 30px;font-family:var(--mono);font-size:10px;color:var(--text3)">${m.id}</div>
+            <div style="flex:1;min-width:0">
+              <div class="tname" style="font-size:10px">${esc(m.label)}</div>
+              ${m.orig ? `<div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.orig)}</div>` : ''}
+            </div>
+            <div style="flex:0 0 40px;font-family:var(--mono);font-size:10px;color:var(--text2)">${m.line}</div>
+            <div style="flex:0 0 70px;text-align:right">${badge}</div>
+          </div>`;
+          }).join('');
+      }).catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = '▶ Run Mutations';
+        document.getElementById('mutList').innerHTML =
+          `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Request failed: ${e}</div></div>`;
       });
     }
 

@@ -87,7 +87,7 @@ MAX_FILE_LINES = 400
 MIN_FILE_LINES = 10
 
 
-def auto_discover_files(repo_dir: str, max_files: int = 15) -> list[dict]:
+def auto_discover_files(repo_dir: str, max_files: int = 15, include_tests: bool = False) -> list[dict]:
     discovered = []
     package_name = None
     package_root = repo_dir  # directory containing the package
@@ -119,7 +119,7 @@ def auto_discover_files(repo_dir: str, max_files: int = 15) -> list[dict]:
         for fname in sorted(files):
             if not fname.endswith(".py") or fname in SKIP_FILES:
                 continue
-            if fname.startswith("test_") or fname.endswith("_test.py"):
+            if not include_tests and (fname.startswith("test_") or fname.endswith("_test.py")):
                 continue
             fpath = os.path.join(root, fname)
             rel_path = os.path.relpath(fpath, repo_dir).replace("\\", "/")

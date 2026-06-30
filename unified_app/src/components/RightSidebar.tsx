@@ -55,16 +55,25 @@ function MetricCard({ label, value, subValue, percentage, color, hero = false }:
       layout
       className={`bg-zinc-900 rounded-lg flex flex-col items-center ${hero ? 'p-5' : 'p-4'}`}
     >
-      <div className="relative">
-        <CircularProgress percentage={percentage} color={color} size={hero ? 72 : 60} />
-        <div className="absolute inset-0 flex items-center justify-center">
-          {percentage !== undefined && (
+      {percentage !== undefined ? (
+        <div className="relative">
+          <CircularProgress percentage={percentage} color={color} size={hero ? 72 : 60} />
+          <div className="absolute inset-0 flex items-center justify-center">
             <span className={`font-medium ${hero ? 'text-sm' : 'text-xs'}`} style={{ color }}>
               <AnimatedNumber value={percentage} suffix="%" />
             </span>
-          )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div
+          className={`flex items-center justify-center rounded-full border-2 border-zinc-700 ${hero ? 'w-[72px] h-[72px]' : 'w-[60px] h-[60px]'}`}
+          style={{ borderColor: color + '55' }}
+        >
+          <span className={`font-bold ${hero ? 'text-xl' : 'text-base'}`} style={{ color }}>
+            {isNumeric ? Math.round(numericVal) : '—'}
+          </span>
+        </div>
+      )}
       <p className="text-xs text-zinc-400 mt-3">{label}</p>
       {value && (
         <p className={`font-semibold text-zinc-100 mt-1 ${hero ? 'text-2xl' : 'text-lg'}`}>
@@ -81,15 +90,17 @@ function MetricCard({ label, value, subValue, percentage, color, hero = false }:
 /* ── Log filter input ───────────────────────────────────────── */
 function AgentTrace({ logs }: { logs: string[] }) {
   const [filter, setFilter] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const filtered = logs
     .filter(l => l && !l.startsWith('─') && !l.startsWith('═'))
     .filter(l => !filter || l.toLowerCase().includes(filter.toLowerCase()))
     .slice(-30)
 
+  // Scroll the overflow container itself — never scrollIntoView (which scrolls the whole page)
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [filtered.length])
 
   if (logs.length === 0) return null
@@ -104,7 +115,7 @@ function AgentTrace({ logs }: { logs: string[] }) {
           className="w-20 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 text-[10px] text-zinc-300 placeholder-zinc-600 outline-none focus:border-emerald-500/50"
         />
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
         {filtered.map((log, i) => (
           <div key={i} className={`text-[0.6rem] truncate transition-colors ${
             log.startsWith('❌') ? 'text-red-400'
@@ -115,7 +126,6 @@ function AgentTrace({ logs }: { logs: string[] }) {
             {log}
           </div>
         ))}
-        <div ref={endRef} />
       </div>
     </div>
   )
@@ -164,22 +174,41 @@ export default function RightSidebar({ mode, results, logs, partAStats, prepassR
       ]
     }
     // combined
-    const req       = results?.part_a?.stats?.requirements ?? 0
-    const scen      = (results?.part_a?.scenarios ?? []).length
+    const req        = results?.part_a?.stats?.requirements ?? 0
+    const scen       = (results?.part_a?.scenarios ?? []).length
     const partBFiles: any[] = Array.isArray(results?.part_b) ? results.part_b : []
-    const covTotal  = partBFiles.reduce((s: number, f: any) => s + (f.srs_coverage?.total   ?? 0), 0)
-    const covCovered= partBFiles.reduce((s: number, f: any) => s + (f.srs_coverage?.covered ?? 0), 0)
-    const srsCovPct = covTotal > 0 ? Math.round(covCovered / covTotal * 100) : 0
-    const filesOk   = partBFiles.filter((f: any) => f.success).length
-    const filesTotal= partBFiles.length
+    const covTotal   = partBFiles.reduce((s: number, f: any) => s + (f.srs_coverage?.total   ?? 0), 0)
+    const covCovered = partBFiles.reduce((s: number, f: any) => s + (f.srs_coverage?.covered ?? 0), 0)
+    const srsCovPct  = covTotal > 0 ? Math.round(covCovered / covTotal * 100) : 0
+    const filesOk    = partBFiles.filter((f: any) => f.success).length
+    const filesTotal = partBFiles.length
+    const partCItems: any[] = Array.isArray(results?.part_c) ? results.part_c : []
+    const repairsOk  = partCItems.filter((r: any) => r.repair_success || r.success).length
+    const totalRealBugs = prepassResults.reduce((s, p) => s + p.real_bugs_found, 0)
+    // full circle always: red = bugs found, green = clean, undefined = not run yet
+    const bugPct = filesTotal > 0 ? 100 : undefined
     return [
-      { label: 'Requirements', value: String(req), percentage: 0, color: '#10b981', hero: true },
-      { label: 'SRS Coverage', value: covTotal > 0 ? `${covCovered}/${covTotal}` : '—',
-        subValue: covTotal > 0 ? `${srsCovPct}% covered` : 'Run pipeline first',
-        percentage: srsCovPct, color: '#f59e0b' },
-      { label: 'Test Files',   value: filesTotal > 0 ? `${filesOk}/${filesTotal}` : '—',
-        percentage: filesTotal > 0 ? Math.round(filesOk/filesTotal*100) : 0, color: '#6366f1' },
-      { label: 'Scenarios',    value: String(scen), color: '#a855f7' },
+      // Hero gauge: SRS coverage when available, else Test Files success rate
+      covTotal > 0
+        ? { label: 'SRS Coverage', value: `${covCovered}/${covTotal}`,
+            subValue: `${srsCovPct}% covered`, percentage: srsCovPct, color: '#f59e0b', hero: true }
+        : { label: 'Test Files', value: filesTotal > 0 ? `${filesOk}/${filesTotal}` : '—',
+            subValue: filesTotal > 0 ? `${Math.round(filesOk/filesTotal*100)}% succeeded` : 'Run pipeline first',
+            percentage: filesTotal > 0 ? Math.round(filesOk/filesTotal*100) : 0, color: '#6366f1', hero: true },
+      { label: 'Requirements', value: req > 0 ? String(req) : '—', color: '#10b981',
+        subValue: req > 0 ? (scen > 0 ? `${scen} scenarios` : 'extracted') : 'No SRS uploaded' },
+      ...(covTotal > 0 ? [{ label: 'Test Files', value: `${filesOk}/${filesTotal}`,
+        percentage: filesTotal > 0 ? Math.round(filesOk/filesTotal*100) : 0, color: '#6366f1' }] : []),
+      { label: 'Bugs Detected',
+        value: totalRealBugs > 0 ? `${totalRealBugs} Found` : filesTotal > 0 ? 'None' : '—',
+        percentage: bugPct, color: totalRealBugs > 0 ? '#ef4444' : '#22c55e',
+        subValue: totalRealBugs > 0 ? 'Pre-pass confirmed' : filesTotal > 0 ? 'Code looks clean' : '' },
+      ...(partCItems.length > 0 ? [{
+        label: 'Auto-Repaired', value: `${repairsOk}/${partCItems.length}`,
+        subValue: repairsOk === partCItems.length ? 'All patched ✅' : 'Partial fix',
+        percentage: partCItems.length > 0 ? Math.round(repairsOk / partCItems.length * 100) : 0,
+        color: '#10b981', hero: false,
+      }] : []),
     ]
   })()
 

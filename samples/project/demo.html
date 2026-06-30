@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TestMate — HumanEval Benchmark Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+  header {
+    background: linear-gradient(135deg, #1a1f35 0%, #0f1117 100%);
+    border-bottom: 1px solid #2d3748;
+    padding: 18px 32px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  header .logo { font-size: 26px; font-weight: 800; background: linear-gradient(90deg,#6366f1,#8b5cf6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  header .badge { background: #6366f1; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  header .subtitle { color: #94a3b8; font-size: 14px; margin-left: auto; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+  h2 { font-size: 20px; font-weight: 700; color: #c7d2fe; margin-bottom: 6px; }
+  .section-desc { color: #64748b; font-size: 13px; margin-bottom: 18px; }
+  .samples-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .sample-card {
+    background: #1e2232; border: 1px solid #2d3748; border-radius: 10px;
+    padding: 16px; cursor: pointer; transition: all .2s;
+  }
+  .sample-card:hover { border-color: #6366f1; box-shadow: 0 0 0 2px #6366f120; }
+  .sample-card.selected { border-color: #6366f1; background: #1e2232; box-shadow: 0 0 0 2px #6366f140; }
+  .sample-card .id { font-size: 11px; color: #6366f1; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+  .sample-card .fn-name { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-bottom: 6px; }
+  .sample-card .bug-label { font-size: 11px; color: #f59e0b; background: #f59e0b15; padding: 2px 8px; border-radius: 8px; display: inline-block; margin-bottom: 8px; }
+  .sample-card pre { font-size: 11px; color: #94a3b8; background: #0f1117; padding: 10px; border-radius: 6px; overflow: auto; max-height: 110px; font-family: 'Consolas', monospace; }
+  .run-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; }
+  .btn-run {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff; border: none; padding: 11px 28px;
+    border-radius: 8px; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: opacity .2s;
+  }
+  .btn-run:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-run:not(:disabled):hover { opacity: .88; }
+  .status { color: #94a3b8; font-size: 13px; }
+  .results-panel { background: #1e2232; border: 1px solid #2d3748; border-radius: 12px; padding: 20px; min-height: 160px; }
+  .result-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .result-header .fn { font-size: 16px; font-weight: 700; color: #a5b4fc; }
+  .pass-badge { background: #10b98120; color: #34d399; border: 1px solid #10b98140; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+  .fail-badge { background: #ef444420; color: #f87171; border: 1px solid #ef444440; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+  .metric-row { display: flex; gap: 20px; margin-bottom: 14px; flex-wrap: wrap; }
+  .metric { background: #0f1117; border-radius: 8px; padding: 10px 16px; text-align: center; }
+  .metric .val { font-size: 22px; font-weight: 800; color: #818cf8; }
+  .metric .lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .code-out { font-size: 12px; color: #94a3b8; background: #0f1117; padding: 14px; border-radius: 8px; font-family: 'Consolas', monospace; overflow: auto; max-height: 260px; white-space: pre; }
+  .log-line { font-size: 12px; color: #64748b; border-left: 2px solid #2d3748; padding-left: 10px; margin: 4px 0; }
+  .log-line.info { color: #6366f1; border-color: #6366f1; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #6366f130; border-top-color: #6366f1; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .placeholder { color: #334155; font-size: 14px; text-align: center; padding: 40px; }
+  .empty-sel { color: #475569; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TestMate</div>
+  <div class="badge">HumanEval Benchmark</div>
+  <div class="subtitle">AI-powered Test Generation · Real Evaluation</div>
+</header>
+
+<div class="container">
+  <h2>Select a HumanEval Problem</h2>
+  <p class="section-desc">Each card shows a real buggy function from the HumanEvalFix benchmark. Select one and click <strong>Generate Tests</strong>.</p>
+
+  <div class="samples-grid" id="grid"></div>
+
+  <div class="run-bar">
+    <button class="btn-run" id="btnRun" disabled onclick="runGeneration()">⚡ Generate Tests with TestMate</button>
+    <span class="status" id="statusText">← Select a problem above</span>
+  </div>
+
+  <h2 style="margin-bottom:12px">Results</h2>
+  <div class="results-panel" id="resultsPanel">
+    <div class="placeholder">Results will appear here after generation runs.</div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8080';
+
+const SAMPLES = [
+  {
+    id: 'HumanEvalFix_000', fn: 'has_close_elements',
+    bug: 'Uses abs() wrong — checks raw difference not absolute',
+    path: String.raw`D:\TestMate\TestMate\samples\humaneval_demo\HumanEvalFix_000_buggy.py`,
+    code: `def has_close_elements(numbers, threshold):
+    for idx, elem in enumerate(numbers):
+        for idx2, elem2 in enumerate(numbers):
+            if idx != idx2:
+                distance = elem - elem2   # BUG: should be abs(elem - elem2)
+                if distance < threshold:
+                    return True
+    return False`
+  },
+  {
+    id: 'HumanEvalFix_002', fn: 'truncate_number',
+    bug: 'Returns number % 1.0 + 1.0 instead of just number % 1.0',
+    path: String.raw`D:\TestMate\TestMate\samples\humaneval_demo\HumanEvalFix_002_buggy.py`,
+    code: `def truncate_number(number: float) -> float:
+    return number % 1.0 + 1.0   # BUG: extra + 1.0`
+  },
+  {
+    id: 'HumanEvalFix_003', fn: 'below_zero',
+    bug: 'Returns True when balance == 0 instead of balance < 0',
+    path: String.raw`D:\TestMate\TestMate\samples\humaneval_demo\HumanEvalFix_003_buggy.py`,
+    code: `def below_zero(operations):
+    balance = 0
+    for op in operations:
+        balance += op
+        if balance == 0:    # BUG: should be < 0
+            return True
+    return False`
+  },
+  {
+    id: 'HumanEvalFix_030', fn: 'get_positive',
+    bug: 'Filters e < 0 (negatives) instead of e > 0 (positives)',
+    path: String.raw`D:\TestMate\TestMate\samples\humaneval_demo\HumanEvalFix_030_buggy.py`,
+    code: `def get_positive(l: list):
+    return [e for e in l if e < 0]  # BUG: should be e > 0`
+  },
+  {
+    id: 'HumanEvalFix_053', fn: 'add',
+    bug: 'Returns x + y + y + x (doubles input) instead of x + y',
+    path: String.raw`D:\TestMate\TestMate\samples\humaneval_demo\HumanEvalFix_053_buggy.py`,
+    code: `def add(x: int, y: int):
+    return x + y + y + x   # BUG: should be x + y`
+  },
+];
+
+let selected = null;
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = SAMPLES.map((s, i) => `
+    <div class="sample-card" id="card${i}" onclick="select(${i})">
+      <div class="id">${s.id}</div>
+      <div class="fn-name">${s.fn}()</div>
+      <div class="bug-label">🐛 ${s.bug}</div>
+      <pre>${s.code}</pre>
+    </div>
+  `).join('');
+}
+
+function select(i) {
+  selected = i;
+  document.querySelectorAll('.sample-card').forEach((c,j) => c.classList.toggle('selected', j===i));
+  document.getElementById('btnRun').disabled = false;
+  document.getElementById('statusText').textContent = `Selected: ${SAMPLES[i].fn}() — ready to generate tests`;
+}
+
+async function runGeneration() {
+  if (selected === null) return;
+  const s = SAMPLES[selected];
+  const btn = document.getElementById('btnRun');
+  const statusEl = document.getElementById('statusText');
+  const panel = document.getElementById('resultsPanel');
+
+  btn.disabled = true;
+  statusEl.innerHTML = '<span class="spinner"></span>Submitting to TestMate...';
+  panel.innerHTML = '<div class="placeholder"><span class="spinner"></span> Running AI test generation on HumanEval sample…</div>';
+
+  const logs = [];
+  function addLog(msg, cls='') {
+    logs.push(`<div class="log-line ${cls}">${msg}</div>`);
+  }
+
+  try {
+    // 1. Submit job
+    const runRes = await fetch(`${API}/api/partb/run`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        files: [{path: s.path.split('\\').pop(), abs_path: s.path, import_path: null}],
+        deep_scan: false, max_retries: 2, plan_mode: false,
+        use_base_only: false, quality_mode: 'fast',
+        auto_repair: false, use_docker: false
+      })
+    });
+    const {job_id} = await runRes.json();
+    statusEl.innerHTML = `<span class="spinner"></span>Job <code>${job_id}</code> running…`;
+    addLog(`Job submitted: ${job_id}`, 'info');
+
+    // 2. Stream events
+    const evtSource = new EventSource(`${API}/api/partb/stream?job_id=${job_id}`);
+    let result = null;
+
+    evtSource.onmessage = e => {
+      const ev = JSON.parse(e.data);
+      if (ev.type === 'log') addLog(`[${ev.level||'info'}] ${ev.message}`);
+      if (ev.type === 'ai_status') { statusEl.innerHTML = `<span class="spinner"></span>${ev.status}: ${ev.detail}`; addLog(`AI: ${ev.status} — ${ev.detail}`, 'info'); }
+      if (ev.type === 'file_result') result = ev.data;
+      if (ev.type === 'complete') { evtSource.close(); showResult(s, result, logs); btn.disabled = false; statusEl.textContent = '✅ Done'; }
+      if (ev.type === 'error') { evtSource.close(); showError(ev.message, logs); btn.disabled = false; statusEl.textContent = '❌ Error'; }
+      if (ev.type === 'ping') return;
+      // live update logs
+      panel.innerHTML = `<div style="color:#64748b;font-size:13px;margin-bottom:10px">Streaming logs…</div>` + logs.join('');
+    };
+    evtSource.onerror = () => { evtSource.close(); showError('Stream disconnected', logs); btn.disabled = false; };
+  } catch(err) {
+    showError(String(err), logs);
+    btn.disabled = false;
+    statusEl.textContent = '❌ Error';
+  }
+}
+
+function showResult(s, r, logs) {
+  if (!r) { showError('No result returned — model may still be loading. Try again.', logs); return; }
+  const passed = r.tests_passed ?? r.pass_count ?? '?';
+  const total  = r.tests_total ?? r.total_count ?? '?';
+  const cov    = r.line_coverage != null ? r.line_coverage.toFixed(1) + '%' : (r.coverage ?? '—');
+  const code   = r.test_code || r.generated_tests || '# No test code returned';
+  document.getElementById('resultsPanel').innerHTML = `
+    <div class="result-header">
+      <div class="fn">${s.fn}()</div>
+      <span class="${passed > 0 ? 'pass-badge' : 'fail-badge'}">${passed > 0 ? '✅ Tests Generated' : '⚠ Check Logs'}</span>
+      <span style="color:#64748b;font-size:12px;margin-left:auto">${s.id}</span>
+    </div>
+    <div class="metric-row">
+      <div class="metric"><div class="val">${passed}</div><div class="lbl">Passing Tests</div></div>
+      <div class="metric"><div class="val">${total}</div><div class="lbl">Total Tests</div></div>
+      <div class="metric"><div class="val">${cov}</div><div class="lbl">Line Coverage</div></div>
+    </div>
+    <div style="color:#94a3b8;font-size:12px;margin-bottom:6px;font-weight:600">Generated Test Suite:</div>
+    <div class="code-out">${escHtml(code)}</div>
+    <div style="margin-top:14px;color:#64748b;font-size:12px;font-weight:600">Execution Log:</div>
+    <div style="margin-top:6px">${logs.join('')}</div>
+  `;
+}
+
+function showError(msg, logs) {
+  document.getElementById('resultsPanel').innerHTML = `
+    <div style="color:#f87171;margin-bottom:12px">❌ ${escHtml(msg)}</div>
+    ${logs.join('')}
+  `;
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+renderGrid();
+</script>
+</body>
+</html>

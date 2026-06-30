@@ -20,7 +20,8 @@ from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-_ROOT = Path(__file__).parent.parent
+_HERE = Path(__file__).parent
+_ROOT = _HERE if (_HERE / "PartB").exists() else _HERE.parent
 _PART_A_SRS = _ROOT / "PartA" / "srs_pipeline"
 _PART_A_README = _ROOT / "PartA" / "readme_extractor"
 _PART_B_TESTGEN = _ROOT / "PartB" / "testgen"
@@ -70,8 +71,11 @@ def execute_combined(
           "summary": { "total_files": N, "succeeded": M, ... },
         }
     """
-    from model_lifecycle import part_a_model, part_b_model  # type: ignore[import]
+    logger.info("[orchestrator] execute_combined entered")
+    from model_lifecycle import part_a_model  # type: ignore[import]
+    logger.info("[orchestrator] model_lifecycle imported")
     from requirement_matcher import match_requirements_to_file
+    logger.info("[orchestrator] requirement_matcher imported")
 
     sys.path.insert(0, str(_PART_A_SRS))
     sys.path.insert(0, str(_PART_A_README))
@@ -83,6 +87,7 @@ def execute_combined(
     a_result: dict = {"requirements": [], "stats": {}, "scenarios": [], "features": {}}
 
     # ── Phase 1: Part A (runs once for the whole project) ────────────────
+    logger.info("[orchestrator] entering Phase 1 (PartA)")
     _log("=== Phase 1: Part A — Requirement Extraction ===", log_callback)
 
     # 1b. README extractor — start FIRST as a background subprocess so SRS (CPU)
@@ -120,9 +125,12 @@ def execute_combined(
 
     # 1a. SRS pipeline (no GPU needed) — runs concurrently with the README subprocess above
     if srs_path:
+        logger.info("[orchestrator] importing srs_api")
         _log(f"  SRS extraction: {Path(srs_path).name}", log_callback)
         from srs_api import execute_part_a_srs  # type: ignore[import]
+        logger.info("[orchestrator] srs_api imported — calling execute_part_a_srs")
         srs_result = execute_part_a_srs(srs_path)
+        logger.info("[orchestrator] execute_part_a_srs returned")
         a_result.update(srs_result)
         _log(
             f"  SRS done — {srs_result['stats'].get('requirements', 0)} requirements found",
@@ -191,6 +199,7 @@ def execute_combined(
         }
 
     # ── Phase 2: Part B (per-file, hybrid-matched requirements) ──────────
+    logger.info("[orchestrator] entering Phase 2 (PartB model load)")
     total = len(target_files)
     _log(f"=== Phase 2: Part B — Test Generation ({total} files) ===", log_callback)
     _log(
@@ -214,7 +223,10 @@ def execute_combined(
 
     per_file_results: list[dict] = []
 
-    with part_b_model(use_lora=not use_base_only) as (model, tokenizer):
+    from model_lifecycle import qwen_session  # type: ignore[import]
+
+    with qwen_session(use_lora=not use_base_only) as sess:
+        sess.use("partb")
         from testgen_api import execute_part_b  # type: ignore[import]
 
         for i, file_info in enumerate(target_files, 1):
@@ -257,9 +269,9 @@ def execute_combined(
                     plan_mode         = False,
                     use_base_only     = use_base_only,
                     priming_examples  = priming_examples,
-                    model             = model,
-                    tokenizer         = tokenizer,
-                    auto_repair       = auto_repair,
+                    model             = sess.model,
+                    tokenizer         = sess.tokenizer,
+                    auto_repair       = False,     # repair in Phase 5 via adapter swap
                     use_docker        = use_docker,
                 )
                 b_result["file"] = rel_path
@@ -267,7 +279,6 @@ def execute_combined(
                 per_file_results.append(b_result)
                 status_str = "success" if b_result.get("success") else "finished with warnings"
                 _log(f"     ✓ {status_str}", log_callback)
-                # Stream this file's result immediately to the frontend
                 if log_callback:
                     log_callback("file_result", {**b_result, "file": rel_path})
             except Exception as exc:
@@ -311,8 +322,8 @@ def execute_combined(
                 target_files=target_files,
                 use_base_only=use_base_only,
                 log_callback=log_callback,
-                preloaded_model=model,
-                preloaded_tokenizer=tokenizer,
+                preloaded_model=sess.model,
+                preloaded_tokenizer=sess.tokenizer,
                 use_docker=use_docker,
             )
             if gap_results:
@@ -322,15 +333,108 @@ def execute_combined(
                     if log_callback:
                         log_callback("file_result", gr)
 
-    # ── Phase 5: Bug repair happens INSIDE each PartB execute_part_b() call ──
-    # When auto_repair=True, bug_to_partc.repair_pending_bugs() is called
-    # automatically after post_run_audit() within autonomous_loop().
-    # Repair results are embedded in each per_file_result["repairs"] list.
-    # No separate phase needed here — collect them from the per-file results.
-    repair_results = [
-        r for fr in per_file_results
-        for r in (fr.get("repairs") or [])
-    ]
+    # ── Phase 5: Auto-repair via adapter swap (same model, no reload) ─────
+    repair_results: list[dict] = []
+    if auto_repair:
+        try:
+            import os as _os, time as _time
+            _partc_api = str(_ROOT / "PartC" / "api")
+            _partc_root = str(_ROOT / "PartC")
+            for _p in [_partc_api, _partc_root]:
+                if _p not in sys.path:
+                    sys.path.insert(0, _p)
+            from partc_api import execute_part_c  # type: ignore[import]
+            from bug_to_partc import (  # type: ignore[import]
+                _read_bug_reports, _group_by_source_file,
+                _find_source_abs_path, _rewrite_bug_reports,
+                _write_patched_file,
+            )
+
+            # Find bug reports (same path logic as pre-pass)
+            _target0 = target_files[0] if target_files else {}
+            _tgt_dir = Path(_target0.get("abs_path", "")).parent
+            _bug_path = _tgt_dir / "bug_reports.jsonl"
+            if not _bug_path.exists():
+                _bug_path = _ROOT / "PartB" / "testgen" / "generated_tests" / "bug_reports.jsonl"
+
+            if _bug_path.exists():
+                all_reports = _read_bug_reports(str(_bug_path))
+                groups = _group_by_source_file(all_reports)
+
+                if groups:
+                    _log(f"=== Phase 5: Auto-Repair ({len(groups)} file(s)) — adapter swap, no reload ===",
+                         log_callback)
+                    if log_callback:
+                        log_callback("repair_start", {"total_files": len(groups)})
+
+                    # Swap to PartC adapter (milliseconds, zero VRAM change)
+                    sess.use("partc")
+
+                    outputs_dir = _ROOT / "PartB" / "testgen" / "outputs" / "patched"
+                    for src_name, bugs in groups.items():
+                        repo_dir = str(_tgt_dir)
+                        src_abs = _find_source_abs_path(src_name, repo_dir)
+                        if not src_abs:
+                            continue
+                        tf_list = list({b["test_file"] for b in bugs
+                                       if b.get("test_file") and _os.path.isfile(b["test_file"])})
+                        if not tf_list:
+                            continue
+
+                        # Find generated test too
+                        _stem = _os.path.splitext(src_name)[0]
+                        _extra = []
+                        for _gd in [_ROOT / "PartB" / "testgen" / "generated_tests",
+                                    Path(src_abs).parent]:
+                            _gc = _gd / f"test_{_stem}_testmate.py"
+                            if _gc.is_file() and str(_gc) not in tf_list:
+                                _extra.append(str(_gc))
+
+                        _log(f"  Repairing {src_name} with {_os.path.basename(tf_list[0])}", log_callback)
+                        t0 = _time.time()
+                        repair_result = execute_part_c(
+                            source_file=src_abs,
+                            test_file=tf_list[0],
+                            extra_test_files=_extra,
+                            model=sess.model,
+                            tokenizer=sess.tokenizer,
+                            max_attempts=3,
+                            log_callback=log_callback,
+                        )
+                        elapsed = round(_time.time() - t0, 1)
+                        ok = repair_result.get("success", False)
+                        patched = repair_result.get("patched", "")
+                        p_path = None
+                        if ok and patched:
+                            p_path = _write_patched_file(src_abs, patched, outputs_dir)
+
+                        for bug in bugs:
+                            old_v = bug.get("verdict", "suspected")
+                            bug["verdict"] = "confirmed" if ok else (
+                                "suspected" if old_v == "confirmed" else "discarded")
+                            bug["repair"] = {"attempted": True, "success": ok,
+                                             "elapsed_sec": elapsed, "patched_path": p_path}
+                        _rewrite_bug_reports(str(_bug_path), all_reports)
+
+                        file_result = {
+                            "source_file": src_name, "repair_success": ok,
+                            "patched_path": p_path, "elapsed_sec": elapsed,
+                            "bugs_repaired": len(bugs),
+                            "attempts": repair_result.get("attempts", []),
+                            "suspicious": repair_result.get("suspicious", []),
+                            "original": repair_result.get("original", ""),
+                            "patched": repair_result.get("patched", ""),
+                        }
+                        repair_results.append(file_result)
+                        if log_callback:
+                            log_callback("repair_complete", file_result)
+                        _log(f"  {'Fixed' if ok else 'Failed'}: {src_name} ({elapsed}s)", log_callback)
+
+                    # Swap back to PartB (for any subsequent work)
+                    sess.use("partb")
+        except Exception as _re:
+            logger.warning("Phase 5 auto-repair failed: %s", _re)
+            _log(f"  Auto-repair error: {_re}", log_callback, "warning")
 
     summary = {
         "total_files": total,

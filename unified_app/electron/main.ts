@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import http from 'http'
@@ -13,7 +13,11 @@ let mainWindow: BrowserWindow | null = null
 let pythonProcess: ChildProcess | null = null
 
 function getUnifiedAppDir(): string {
-  // dev: __dirname is out/main/ → go up to unified_app/
+  // Packaged: server.py is in process.resourcesPath (win-unpacked/resources/)
+  // Dev: __dirname is out/main/ → go up two levels to unified_app/
+  if (app.isPackaged) {
+    return process.resourcesPath
+  }
   return join(__dirname, '..', '..')
 }
 
@@ -97,6 +101,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
+    mainWindow?.maximize()
     mainWindow?.show()
     mainWindow?.focus()
   })
@@ -120,6 +125,11 @@ app.whenReady().then(async () => {
 
   ipcMain.on('open-settings', () => {
     BrowserWindow.getFocusedWindow()?.webContents.send('toggle-settings-modal')
+  })
+
+  // Ctrl+Shift+I opens DevTools in both dev and packaged builds (for backend log inspection)
+  globalShortcut.register('Control+Shift+I', () => {
+    BrowserWindow.getFocusedWindow()?.webContents.openDevTools()
   })
 
   startBackend()

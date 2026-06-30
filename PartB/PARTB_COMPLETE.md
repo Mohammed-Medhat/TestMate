@@ -64,6 +64,34 @@ Two execution modes:
   BES gate, one coverage-feedback round — optimizes *coverage* (the TestEval
   protocol). Implemented in the harness as `generate_suite_mode()`.
 
+### 2.1 Interactive chat refinement (`refine_test_file`)
+
+After a run, the unified app keeps the Qwen+LoRA model warm (see §5) so the
+user can ask for follow-up edits to a generated test file via a chat bubble —
+`testgen/testgen_api.py :: refine_test_file(target_file, test_path, test_code,
+instruction, model, tokenizer, history, max_retries, ...)`.
+
+```
+1. PROMPT    _REFINE_SYSTEM ("edit an EXISTING pytest file… output the COMPLETE
+             file in <test>…</test>… if the message is a QUESTION, do NOT
+             output <test>") + module source + current test file + history + instruction
+2. GENERATE  generate_test(model, tokenizer, messages, temperature=0.2)
+3. GATE      if no <test> block → treat as Q&A/refusal: file is left untouched
+             and the reply is ALWAYS the canonical
+             "I only edit tests — tell me what to change." (never the model's
+             own free-form answer — see §9 item 13)
+4. VALIDATE  quick_quality_check() + run_pytest() on the candidate
+5. REPAIR    on failure, feed the error back for up to max_retries rounds
+             (same pattern as the autonomous loop's error-feedback)
+6. COMMIT    on pass, overwrite test_path and return {edited:true, ...}; on
+             total failure, restore the original file ({edited:false, ...})
+```
+
+This is **edits-only by design**: a local 7B answering open-ended testing
+questions reads as hallucination, so any message that doesn't produce a valid
+`<test>` block is redirected with a fixed string rather than whatever the
+model said.
+
 ---
 
 ## 3. Directory map (what each thing is)
@@ -137,6 +165,24 @@ The README extractor runs in a **subprocess** because 4-bit BitsAndBytes models 
 Windows don't release VRAM cleanly with `del + empty_cache` in-process. (Detail
 lives in `unified_app/`, but it constrains how Part B is invoked in the combined
 pipeline.)
+
+### `PARTB_RESIDENT` keep-alive singleton
+
+For chat refinement (§2.1), `unified_app/model_lifecycle.py :: _PartBResident`
+keeps the Qwen+LoRA model resident for `TESTMATE_KEEPALIVE_SEC` (default 600s)
+after the last use, so chat turns don't pay a ~30–45s reload. `acquire()` /
+`touch()` / `force_release()` are the public surface; a 30s reaper thread
+auto-unloads on idle.
+
+`force_release()` is what every PartA/PartC entrypoint calls before loading its
+own model. It flushes (`_flush_locked()` → `del` model/tokenizer → `flush_gpu()`,
+two `gc.collect()`+`empty_cache()` passes, before/after `mem_get_info()` logged),
+then **polls free VRAM and retries the flush** for up to 20s until at least
+`TESTMATE_PARTA_MIN_FREE_GB` (default 4.0) is free. It returns `False` if that
+budget still isn't met — callers must treat `False` as "back off" (the unified
+server returns HTTP 503 for `/api/parta/readme/run` and `/api/parta/both/run`,
+and emits an `error` SSE event for the combined/PartC job workers) **instead of**
+starting a load that can crash the process. See §9 items 11–12.
 
 ---
 
@@ -255,6 +301,29 @@ These are the non-obvious lessons — preserve them, they cost real debugging ti
     "complete" regardless of count; this can wrongly skip a variant. Use `--force`
     /`--fresh`, or run a single variant, to control it (this is why the matched-N
     testgenevallite comparison needs care — see `PARTB_RESULTS.md`).
+11. **Chat-refinement coexistence segfault (server-killing).** `unified_app/server.py`'s
+    `/api/parta/readme/run` and `/api/parta/both/run` called `readme_api.execute_part_a_readme`
+    **in-process** after `PARTB_RESIDENT.force_release()`. On Windows, `del+empty_cache()`
+    does not fully release a previously-loaded BnB 4-bit model, so the second
+    in-process BnB `from_pretrained` segfaulted (exit 139) and killed the **entire
+    FastAPI server** — not just the request. Fixed by adding `_run_readme_extractor()`,
+    which runs `PartA/readme_extractor/extractor_subprocess.py` via `subprocess.run`
+    (mirrors `orchestrator.py`'s combined-pipeline pattern), used by both endpoints.
+12. **`force_release()` insufficient-VRAM crash.** Even after the fix in #11, if
+    `PARTB_RESIDENT`'s flush hadn't actually freed enough VRAM yet, the README
+    extraction *subprocess* itself could crash with a GPU access violation
+    (exit `0xC0000005`) — and on an 8GB GPU that fault was observed to cascade and
+    take down the **parent** server too. Fixed by making `force_release()` poll
+    `torch.cuda.mem_get_info()` and retry the flush (up to `TESTMATE_PARTA_MIN_FREE_GB`,
+    20s budget); callers now get a `bool` and respond with HTTP 503 / an `error`
+    SSE event instead of starting a load that's likely to crash (see §5).
+13. **Chat "edits-only" reply leak.** When a chat message was a pure question (no
+    `<test>` block produced), `refine_test_file()` correctly left the file
+    untouched (`success=false, edited=false`) but surfaced the **model's own
+    free-form answer** as `chat_reply` — i.e. a local 7B directly answering a
+    testing question, which can be wrong and undermines the "edits only, no Q&A"
+    guarantee. Fixed: that branch now always returns the fixed string
+    `"I only edit tests — tell me what to change."` regardless of what the model said.
 
 ---
 
@@ -302,6 +371,8 @@ tests need version-matched dependencies.
 | Re-run reuses old numbers after a code edit | skip-if-complete served the old result. Use `--fresh`. |
 | Windows `UnicodeEncodeError` writing tests | Ensure `encoding="utf-8"` on all `open(...,'w')` and `PYTHONIOENCODING=utf-8`. |
 | VRAM not freed between Part A and Part B | Run the VRAM-heavy step in a subprocess (see §5). |
+| `/api/parta/readme/run` (or `both/run`) returns 503 "GPU is still releasing memory" | `force_release()` couldn't confirm `TESTMATE_PARTA_MIN_FREE_GB` free within 20s — wait a moment and retry, or lower the threshold via env (§5, §9.12). |
+| Chat reply answers a testing question instead of refusing | Should not happen post-fix (§9.13) — `refine_test_file()` always returns the fixed "I only edit tests…" string when no `<test>` block is produced. |
 
 ---
 

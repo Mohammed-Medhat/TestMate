@@ -42,6 +42,21 @@ npm run build:win    # package as Windows installer
 python server.py     # or run the Python backend standalone on port 8080
 ```
 
+**`unified_app` is THE main GUI** — the primary, user-facing product. CLI/standalone
+entrypoints (PartB `api_server.py`, the training harness) are for dev/eval only.
+
+**Packaging goal (`npm run build:win`):** the Windows installer must be
+**fully self-contained** — it bundles the Python backend, the Qwen base model +
+LoRA adapters (`PartB/models/graphrag_lora_clean/final`, fallback `graphrag_lora/final`),
+and all runtime deps so the `.exe` runs with **no separate download or setup**.
+Ship model/adapter weights via electron-builder `extraResources` (they are
+gitignored, so packaging must copy them from disk, not rely on the repo).
+
+**Layout convention (`src/App.tsx`):** three-column shell — LeftSidebar and
+RightSidebar are **fixed** (non-scrolling); only the **center MainContent**
+scrolls when results overflow. Keep the outer shell `h-screen overflow-hidden`
+and put `overflow-y-auto` on the center column only.
+
 **API routes (port 8080):**
 - `POST /api/combined/run` — Full pipeline (PartA → PartB), SSE-streamed via job_id
 - `GET  /api/combined/stream?job_id=<id>` — SSE event stream for combined runs
@@ -113,9 +128,14 @@ PartB/
 │   ├── training/           # Kaggle training + evaluation scripts (T4 GPU)
 │   └── generated_tests/    # Output: test_<name>.py files
 ├── models/
-│   └── graphrag_lora/final/    # LoRA adapter (applied on top of Qwen2.5-Coder-7B)
-└── value_reasoning_model/      # Second LoRA adapter
+│   ├── graphrag_lora_clean/final/  # PREFERRED LoRA (MBPP-only, decontaminated, Instruct base)
+│   └── graphrag_lora/final/        # OLD LoRA — automatic fallback
+└── value_reasoning_model/          # Second LoRA adapter
 ```
+
+> Adapters are loaded on top of Qwen2.5-Coder-7B. Entrypoints auto-prefer
+> `graphrag_lora_clean/final` and fall back to `graphrag_lora/final`. **Model
+> weights are gitignored** (download/place manually).
 
 **PartB standalone commands:**
 ```bash
@@ -139,6 +159,46 @@ python testgen/training/kaggle_eval_testgen.py
 4. Execute tests, capture errors, feed back to LLM
 5. Store good tests in SQLite RAG memory; tag bad patterns for learning
 
+### PartB: Evaluation & training harness (`testgen/training/`)
+
+Where the research numbers come from — **separate from the production path**
+(`main.py` / `testgen_api.py`). The three modules that matter:
+
+- **`_ablation_common.py`** — the eval engine. `AblationConfig` holds
+  per-component toggles (`enable_layer2_graph`, `enable_layer2_vector`,
+  `enable_rag_memory`, `enable_self_correction_loop`, `enable_lora`,
+  `suite_mode`, `dataset`, `sample_size`, …). `run_ablation(cfg, out)` writes
+  per-file metrics + a `summary`, checkpointing to `*.partial.json` (resume-safe).
+  Also: `run_mutation_pass()` (bug-detection), the dataset loaders, and the
+  testgenevallite **version-venv routing** + **identity restoration** (synthetic
+  targets written back to their real module path so imports resolve).
+- **`run_comparisons.py`** — sweeps variants → `results/compare_<dataset>{,_suite}/`.
+  Variants: `testmate` (full stack), `no_rag`, `graph_only`, `no_graph`,
+  `no_lora` (base model). Flags: `--dataset {testeval,humaneval,testgenevallite}`,
+  `--sample N` (0 = all; **otherwise a random seed-42 sample, not first-N**),
+  `--suite`, `--mutation`, `--force`, `--fresh` (wipe checkpoints after a code edit).
+  Skip-if-complete: finished variants are reused.
+- **`make_paper_tables.py`** — stitches `results/` → `paper_tables/*.md`
+  (competitor numbers in `_TESTEVAL_PAPER`).
+
+**Three-axis evaluation** (the project's framing): coverage (line/branch %),
+correctness (pass@1), bug-detection (mutation kill %). Two generation modes:
+**quality** (per-target + BES gate → correctness) and **suite** (`--suite`:
+comprehensive suite, no BES → coverage, the TestEval protocol).
+
+**Datasets:** **TestEval** (210 LeetCode, fetched+cached) = recognized benchmark;
+**HumanEval** (164) = internal sanity (system vs base — it is *test* gen, not the
+code-gen leaderboard); **testgenevallite** (101 real framework files) = RAG-lift,
+**local only** (needs version-matched venvs from `setup_version_venvs.py`).
+Clean LoRA is produced by `kaggle_train_clean.py` (+ `decontaminate_mbpp.py`).
+
+Common eval commands (from `PartB/testgen/training/`, see `PartB/RUN_ME.md`):
+```bash
+python run_comparisons.py --dataset testeval --variants testmate no_lora --suite --mutation --sample 0
+python run_comparisons.py --dataset testgenevallite --variants testmate no_rag --sample 0 --mutation
+python make_paper_tables.py
+```
+
 ## Key Architectural Decisions
 
 - **Subprocess isolation for VRAM**: README extractor runs in a child process so GPU memory is fully freed before PartB loads its model.
@@ -152,3 +212,20 @@ python testgen/training/kaggle_eval_testgen.py
 - PartA's labeled requirements (`label=1`) are passed into PartB's `autonomous_loop()` as `srs_requirements`.
 - `requirement_matcher.py` does hybrid keyword + semantic matching to pick the top-k most relevant requirements for each target file (avoids flooding LLM context with all project requirements).
 - SRS coverage is measured post-generation by checking whether requirement keywords appear in the test code.
+
+## Working in this repo (gotchas)
+
+- **Offline + Windows execution.** Inference/eval run fully offline — they set
+  `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` and load Qwen from a local
+  snapshot (`D:\donwloader\Qwen2.5-Coder-7B-Instruct`). On Windows always export
+  `PYTHONIOENCODING=utf-8` before runs: status output uses emoji/arrows and
+  crashes on cp1252 otherwise. The shell is **PowerShell** — no `&&`; chain with
+  `;` (the Bash tool is also available for POSIX scripts).
+- **testgenevallite is local-only.** Its tests import real framework code at
+  specific versions; `setup_version_venvs.py` builds per-version venvs and the
+  harness routes each file to the right one. Without them, tests hit version
+  walls and the numbers collapse — so this track does not run on Kaggle as-is.
+- **Part B reference docs** (read before changing the eval/claims):
+  `PartB/PARTB_COMPLETE.md` (full architecture + the historical bugs that shaped
+  it), `PartB/PARTB_RESULTS.md` (final numbers + conclusion), `PartB/PAPER_README.md`
+  (what to claim / not claim), `PartB/RUN_ME.md` (turnkey run order).

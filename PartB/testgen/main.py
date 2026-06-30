@@ -4739,6 +4739,11 @@ def autonomous_loop(model, tokenizer, target_file: str, import_path: str = None,
         else:
             _test_dir_pre = os.path.dirname(os.path.abspath(target_file))
         _bug_reports_path = os.path.join(_test_dir_pre, "bug_reports.jsonl")
+        # Truncate stale reports from previous runs so repair only sees THIS run's bugs
+        try:
+            open(_bug_reports_path, "w").close()
+        except OSError:
+            pass
         _repo_dir = os.path.dirname(os.path.abspath(target_file))
         _prepass_result = run_existing_test_prepass(
             target_file=target_file,
@@ -5168,6 +5173,12 @@ RULES — EXECUTE THE PLAN
     # O7: per-target start times — recorded once per iteration so we can later
     # compute (next_start - this_start) for the duration of each target.
     _target_start_times: list[tuple[str, float]] = []
+    # Fix: file-level consecutive import-failure counter.
+    # If N targets in a row all bail with import_error, the whole file has a
+    # structural import wall (wrong Django venv, missing deps) that the LLM
+    # cannot fix by retrying — abort early to save hours of wasted computation.
+    _consecutive_import_failures = 0
+    _MAX_CONSECUTIVE_IMPORT_FAILURES = 3
     # Write initial empty test file to get baseline
     with open(test_file, "w", encoding="utf-8") as f:
         f.write(accumulated_code)
@@ -5176,6 +5187,12 @@ RULES — EXECUTE THE PLAN
         # Per-file deadline: skip remaining targets if budget exhausted
         if file_deadline is not None and time.time() > file_deadline:
             print(f"\n⏱️  File deadline reached — skipping remaining {len(targets) - idx + 1} targets")
+            break
+        # Fix: abort if we've hit too many consecutive import failures at the file level
+        if _consecutive_import_failures >= _MAX_CONSECUTIVE_IMPORT_FAILURES:
+            print(f"\n⚠️  {_consecutive_import_failures} consecutive import-error bails — "
+                  f"file has a structural import wall. Aborting remaining "
+                  f"{len(targets) - idx + 1} targets to save retry budget.")
             break
         if cls_name:
             target_label = f"{cls_name}.{method_name}"
@@ -5800,7 +5817,8 @@ RULES — EXECUTE THE PLAN
                         f.write(accumulated_code)
                     continue
 
-                # Accept the test
+                # Accept the test — reset file-level import-failure counter
+                _consecutive_import_failures = 0
                 accumulated_code = candidate
                 covered_lines_so_far = lines_after
                 accumulated_tests += 1
@@ -5946,6 +5964,7 @@ RULES — EXECUTE THE PLAN
                 if category == "import_error" and _last_category == "import_error":
                     print(f"   ⏭️  Repeated import_error category — bailing on {target_label}")
                     _last_category = category
+                    _consecutive_import_failures += 1
                     break
                 _last_category = category
 
@@ -6029,8 +6048,10 @@ RULES — EXECUTE THE PLAN
     if n_total_funcs == 0:
         print(f"   No tests generated — running auto_repair on pre-pass bugs if available")
         print(f"{'='*60}")
-        # bug_report_path not yet defined here — compute from test_file which is available
-        _early_bug_report_path = os.path.join(os.path.dirname(os.path.abspath(test_file)), "bug_reports.jsonl")
+        # Use the same dir logic as the pre-pass: source dir when no import_path, else generated_tests/
+        _early_bug_dir = (os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_tests")
+                          if import_path else os.path.dirname(os.path.abspath(target_file)))
+        _early_bug_report_path = os.path.join(_early_bug_dir, "bug_reports.jsonl")
         # Before returning, still attempt auto_repair on any pre-pass confirmed bugs
         if auto_repair and os.path.exists(_early_bug_report_path):
             bug_report_path = _early_bug_report_path
@@ -6229,15 +6250,20 @@ RULES — EXECUTE THE PLAN
     print("-" * 40)
 
     # ── PHASE 2 & 3: POST-RUN AUDIT ──
-    if suspicious_tests:
+    # Skip if we are already past the per-file deadline — prevents indefinite hangs
+    # when every target failed and the audit would re-invoke the LLM for each one.
+    _audit_deadline_ok = (file_deadline is None or time.time() < file_deadline)
+    if suspicious_tests and _audit_deadline_ok:
         print(f"\n🔄 Executing Post-Run Batch Audit on {len(suspicious_tests)} suspicious tests...")
         post_run_audit(model, tokenizer, suspicious_tests, test_file)
+    elif suspicious_tests and not _audit_deadline_ok:
+        print(f"\n⏭️  Post-Run Audit skipped (file deadline reached) — {len(suspicious_tests)} suspicious test(s) logged")
 
     # ── PHASE 4 (opt-in): AUTO-REPAIR via PartC ──────────────────────────
-    bug_report_path = os.path.join(
-        os.path.dirname(os.path.abspath(test_file)),
-        "bug_reports.jsonl"
-    )
+    # Mirror the pre-pass path logic: source dir when no import_path, else generated_tests/
+    _repair_bug_dir = (os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_tests")
+                       if import_path else os.path.dirname(os.path.abspath(target_file)))
+    bug_report_path = os.path.join(_repair_bug_dir, "bug_reports.jsonl")
     if auto_repair and os.path.exists(bug_report_path):
         try:
             from bug_to_partc import repair_pending_bugs  # type: ignore[import]

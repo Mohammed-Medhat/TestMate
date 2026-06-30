@@ -1,6 +1,6 @@
 """
 app.py — TestMate APR Flask Web UI
-SSE-streaming pipeline with live logs, SBFL viewer, and code diff panel.
+SSE-streaming pipeline with live logs, SBFL viewer, code diff, coverage, and mutation panels.
 """
 import sys
 import os
@@ -10,6 +10,8 @@ import threading
 import subprocess
 import ast
 import re
+import copy
+import tempfile
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 
@@ -370,6 +372,232 @@ def _apply_ast_patch(new_code: str) -> bool:
         emit("error", f"❌ Patch error: {e}")
         BUGGY_FILE.write_text(original, encoding="utf-8")
         return False
+
+
+# ── API: code coverage ───────────────────────────────────────────────
+@app.route("/api/coverage")
+def api_coverage():
+    """Run pytest with coverage.py and return per-function + overall stats."""
+    cov_json = PROJECT_ROOT / "coverage.json"
+    try:
+        r = subprocess.run(
+            [
+                sys.executable, "-m", "pytest", str(TEST_FILE),
+                f"--cov={BUGGY_FILE.stem}",
+                "--cov-report=json",
+                "--cov-report=term-missing",
+                "-q", "--no-header",
+                f"--rootdir={PROJECT_ROOT}",
+            ],
+            capture_output=True, text=True, cwd=str(PROJECT_ROOT)
+        )
+        if not cov_json.exists():
+            return jsonify({"error": "coverage.json not generated", "raw": r.stdout + r.stderr}), 500
+
+        data = json.loads(cov_json.read_text(encoding="utf-8"))
+        file_data = data.get("files", {}).get("buggy_code.py", {})
+        summary   = file_data.get("summary", {})
+        functions = file_data.get("functions", {})
+
+        fn_results = []
+        for fn_name, fn_info in functions.items():
+            s = fn_info.get("summary", {})
+            fn_results.append({
+                "name":    fn_name,
+                "covered": s.get("covered_lines", 0),
+                "total":   s.get("num_statements", 0),
+                "pct":     round(s.get("percent_covered", 0), 1),
+                "missing": fn_info.get("missing_lines", []),
+            })
+
+        return jsonify({
+            "overall_pct":   round(summary.get("percent_covered", 0), 1),
+            "covered_lines": summary.get("covered_lines", 0),
+            "total_lines":   summary.get("num_statements", 0),
+            "missing_lines": file_data.get("missing_lines", []),
+            "functions":     fn_results,
+            "raw":           r.stdout,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+# ── Mutation testing (AST-based, Windows-compatible) ──────────────────
+class _MutantCollector(ast.NodeTransformer):
+    """Collect all mutation opportunities without applying them."""
+    BINOP_MUTATIONS = {
+        ast.Add:      [ast.Sub, ast.Mult],
+        ast.Sub:      [ast.Add, ast.Mult],
+        ast.Mult:     [ast.Add, ast.Sub],
+        ast.Div:      [ast.FloorDiv, ast.Mult],
+        ast.FloorDiv: [ast.Div, ast.Add],
+        ast.Mod:      [ast.Add, ast.Mult],
+    }
+    CMP_MUTATIONS = {
+        ast.Lt:    [ast.LtE, ast.Gt,  ast.GtE, ast.Eq],
+        ast.LtE:   [ast.Lt,  ast.Gt,  ast.GtE, ast.Eq],
+        ast.Gt:    [ast.GtE, ast.Lt,  ast.LtE, ast.Eq],
+        ast.GtE:   [ast.Gt,  ast.Lt,  ast.LtE, ast.Eq],
+        ast.Eq:    [ast.NotEq, ast.Lt, ast.Gt],
+        ast.NotEq: [ast.Eq,   ast.Lt, ast.Gt],
+    }
+
+    def __init__(self):
+        self.mutations = []  # list of (node_id, description, mutated_source)
+        self._src_lines = []
+        self._orig_tree = None
+
+    def collect(self, source: str):
+        self._src_lines = source.splitlines()
+        self._orig_tree = ast.parse(source)
+        self.visit(self._orig_tree)
+
+    def _make_mutant(self, orig_node, replacement_node, label: str):
+        """Clone the tree, swap node, unparse to source."""
+        try:
+            tree_copy = copy.deepcopy(self._orig_tree)
+            # Walk copy to find matching node by position
+            for node in ast.walk(tree_copy):
+                if (
+                    type(node) is type(orig_node)
+                    and getattr(node, 'lineno', None) == getattr(orig_node, 'lineno', None)
+                    and getattr(node, 'col_offset', None) == getattr(orig_node, 'col_offset', None)
+                ):
+                    if isinstance(node, ast.BinOp) and isinstance(orig_node, ast.BinOp):
+                        node.op = replacement_node()
+                        break
+                    elif isinstance(node, ast.Compare) and isinstance(orig_node, ast.Compare):
+                        node.ops = [type(replacement_node)() if type(o) is type(replacement_node) else o
+                                    for o in node.ops]
+                        # Simpler: replace first matching op type
+                        for idx, op in enumerate(node.ops):
+                            if type(op) is type(orig_node.ops[0]) if hasattr(orig_node, 'ops') else False:
+                                node.ops[idx] = replacement_node()
+                                break
+                        else:
+                            # Replace all ops
+                            node.ops = [replacement_node() if type(o).__name__ == type(orig_node.ops[0] if hasattr(orig_node, 'ops') else op).__name__ else o for o in node.ops]
+                        break
+            mutant_src = ast.unparse(tree_copy)
+            ln = getattr(orig_node, 'lineno', '?')
+            orig_line = self._src_lines[ln - 1].strip() if isinstance(ln, int) and 0 < ln <= len(self._src_lines) else ''
+            self.mutations.append({
+                "label":     label,
+                "line":      ln,
+                "orig_line": orig_line,
+                "source":    mutant_src,
+            })
+        except Exception:
+            pass
+
+    def visit_BinOp(self, node):
+        self.generic_visit(node)
+        for orig_type, replacements in self.BINOP_MUTATIONS.items():
+            if isinstance(node.op, orig_type):
+                for rep in replacements:
+                    self._make_mutant(node, rep, f"BinOp {orig_type.__name__}→{rep.__name__} (line {node.lineno})")
+        return node
+
+    def visit_Compare(self, node):
+        self.generic_visit(node)
+        for op in node.ops:
+            for orig_type, replacements in self.CMP_MUTATIONS.items():
+                if isinstance(op, orig_type):
+                    for rep in replacements:
+                        self._make_mutant(node, rep(), f"Cmp {orig_type.__name__}→{rep.__name__} (line {node.lineno})")
+        return node
+
+    def visit_UnaryOp(self, node):
+        self.generic_visit(node)
+        if isinstance(node.op, ast.USub):
+            try:
+                tree_copy = copy.deepcopy(self._orig_tree)
+                for n in ast.walk(tree_copy):
+                    if (
+                        isinstance(n, ast.UnaryOp)
+                        and isinstance(n.op, ast.USub)
+                        and getattr(n, 'lineno', None) == getattr(node, 'lineno', None)
+                        and getattr(n, 'col_offset', None) == getattr(node, 'col_offset', None)
+                    ):
+                        # Replace -x with x
+                        parent_info = [(p, f) for p in ast.walk(tree_copy)
+                                       for f, v in ast.iter_fields(p)
+                                       if v is n]
+                        break
+                mutant_src = ast.unparse(tree_copy)
+                ln = getattr(node, 'lineno', '?')
+                orig_line = self._src_lines[ln-1].strip() if isinstance(ln, int) and 0 < ln <= len(self._src_lines) else ''
+                self.mutations.append({
+                    "label":     f"UnaryOp USub→UAdd (line {ln})",
+                    "line":      ln,
+                    "orig_line": orig_line,
+                    "source":    mutant_src,
+                })
+            except Exception:
+                pass
+        return node
+
+
+def _run_mutation_tests(mutant_src: str) -> bool:
+    """Write mutant to a temp file replacing buggy_code.py, run tests, restore."""
+    original = BUGGY_FILE.read_text(encoding="utf-8")
+    try:
+        BUGGY_FILE.write_text(mutant_src, encoding="utf-8")
+        r = subprocess.run(
+            [sys.executable, "-m", "pytest", str(TEST_FILE), "-x", "-q", "--no-header", "--tb=no"],
+            capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=30
+        )
+        return r.returncode != 0  # True = mutant was KILLED (tests caught it)
+    except subprocess.TimeoutExpired:
+        return True  # timeout = consider killed
+    finally:
+        BUGGY_FILE.write_text(original, encoding="utf-8")
+
+
+@app.route("/api/mutation")
+def api_mutation():
+    """AST-based mutation testing. Returns mutation score and per-mutant results."""
+    if not BUGGY_FILE.exists():
+        return jsonify({"error": "buggy_code.py not found"}), 404
+    try:
+        source = BUGGY_FILE.read_text(encoding="utf-8")
+        collector = _MutantCollector()
+        collector.collect(source)
+        mutants = collector.mutations
+
+        if not mutants:
+            return jsonify({"score": 100.0, "killed": 0, "survived": 0, "total": 0, "mutants": []})
+
+        results = []
+        killed = 0
+        for i, m in enumerate(mutants):
+            is_killed = _run_mutation_tests(m["source"])
+            status = "killed" if is_killed else "survived"
+            if is_killed:
+                killed += 1
+            results.append({
+                "id":       i + 1,
+                "label":    m["label"],
+                "line":     m["line"],
+                "orig":     m["orig_line"],
+                "status":   status,
+            })
+
+        total    = len(results)
+        survived = total - killed
+        score    = round((killed / total) * 100, 1) if total > 0 else 0.0
+
+        return jsonify({
+            "score":    score,
+            "killed":   killed,
+            "survived": survived,
+            "total":    total,
+            "mutants":  results,
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
 # ── Main page ─────────────────────────────────────────────────────────

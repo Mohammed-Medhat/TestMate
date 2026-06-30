@@ -164,3 +164,40 @@ run_tgel_full*
 # ========================
 .claude/scheduled_tasks.lock
 .claude/*.lock
+
+# ========================
+# LaTeX / research paper build artifacts
+# ========================
+*.tex
+*.aux
+*.out
+*.bib
+testmate_paper*
+paper_v3*
+testmate_research_paper*
+section4_9_clean.txt
+
+# ========================
+# Paper figure images (root-level only)
+# ========================
+/fig*.png
+/fig*.svg
+
+# ========================
+# Office / documentation files at root (not in samples/)
+# ========================
+/*.pdf
+/*.docx
+/*.doc
+/*.html
+
+# ========================
+# PartB — training scratch & analysis scripts
+# ========================
+PartB/testgen/training/_*.py
+
+# ========================
+# Flywheel & runtime data (all locations)
+# ========================
+**/flywheel_data.jsonl
+**/bug_reports.jsonl

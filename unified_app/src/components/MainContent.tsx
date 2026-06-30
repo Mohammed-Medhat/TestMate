@@ -295,12 +295,14 @@ function PlanReviewPanel({ plan, onDecision }: { plan: PlanRequest; onDecision: 
 }
 
 /* ── Combined Test Code view (per-file picker + code viewer) ─────────── */
-function CombinedTestCodeView({ results, onSaveTest }: {
+function CombinedTestCodeView({ results, prepassResults = [], onSaveTest }: {
   results: any
+  prepassResults?: PrepassSummary[]
   onSaveTest?: (testPath: string, code: string) => Promise<void> | void
 }) {
   const partB = results?.part_b
-  const partC: any[] = Array.isArray(results?.part_c) ? results.part_c : []
+  const partC: any[] = (Array.isArray(results?.part_c) ? results.part_c : [])
+    .map((r: any) => ({ ...r, repair_success: r.repair_success ?? r.success ?? false }))
   const files: any[] = Array.isArray(partB)
     ? partB
     : (partB && typeof partB === 'object' && partB.test_code)
@@ -318,14 +320,40 @@ function CombinedTestCodeView({ results, onSaveTest }: {
   const cur = files[Math.min(selectedIdx, files.length - 1)]
 
   // Find repair result for current file
-  const curRepair = partC.find((r: any) =>
-    r.source_file && cur?.target && r.source_file === cur.target.split('/').pop()
-  )
+  const curRepair = partC.find((r: any) => {
+    if (!r.source_file || !cur?.target) return false
+    const targetBase = cur.target.replace(/\\/g, '/').split('/').pop()
+    return r.source_file === targetBase
+  })
 
   const repairsOk = partC.filter((r: any) => r.repair_success).length
+  const totalPrepassBugs = prepassResults.reduce((s, p) => s + p.real_bugs_found, 0)
 
   return (
     <div className="flex flex-col h-full">
+
+      {/* Pre-pass bug detection banner — shown when bugs found but repair not yet done */}
+      {totalPrepassBugs > 0 && partC.length === 0 && (
+        <div className="px-4 py-2 flex flex-col gap-1.5 text-xs shrink-0 border-b bg-red-500/10 border-red-500/20 text-red-400">
+          <div className="flex items-center gap-3">
+            <span className="text-base">🐛</span>
+            <span className="font-semibold text-red-300">{totalPrepassBugs} real bug{totalPrepassBugs !== 1 ? 's' : ''} confirmed</span>
+            {prepassResults.filter(p => p.real_bugs_found > 0).map((p, i) => (
+              <div key={i} className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded-full border text-[10px] bg-red-500/15 border-red-500/30 text-red-300 font-medium">
+                  {p.source_file}
+                </span>
+                {p.buggy_funcs?.map((fn, j) => (
+                  <span key={j} className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-amber-400 font-mono">
+                    {fn}()
+                  </span>
+                ))}
+              </div>
+            ))}
+            <span className="ml-auto text-zinc-500 shrink-0">🔧 Auto-Repair running…</span>
+          </div>
+        </div>
+      )}
 
       {/* Auto-repair summary banner — shown if any repairs ran */}
       {partC.length > 0 && (
@@ -356,7 +384,7 @@ function CombinedTestCodeView({ results, onSaveTest }: {
           {files.length} test file{files.length !== 1 ? 's' : ''}
         </span>
         {files.map((f, i) => {
-          const repair = partC.find((r: any) => r.source_file === f.target?.split('/').pop())
+          const repair = partC.find((r: any) => r.source_file === f.target?.replace(/\\/g, '/').split('/').pop())
           return (
             <button key={i} onClick={() => setSelectedIdx(i)}
               className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
@@ -402,11 +430,15 @@ function CombinedTestCodeView({ results, onSaveTest }: {
       {/* Patched code (if repaired) or generated test code */}
       <div className="flex-1 overflow-auto">
         {curRepair?.repair_success && curRepair.patched ? (
-          <div>
-            <div className="px-4 py-1.5 bg-emerald-500/5 border-b border-emerald-500/20 text-[11px] text-emerald-400">
-              Showing: PartC repaired source code
+          <div className="flex flex-col gap-3 p-3">
+            <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium">
+              <span>🔧</span>
+              <span>Auto-Repair diff — {curRepair.source_file}</span>
             </div>
-            <CodeViewer code={curRepair.patched} filename={curRepair.source_file ?? 'source.py'} />
+            {curRepair.original
+              ? <InlineDiff original={curRepair.original} patched={curRepair.patched} filename={curRepair.source_file} />
+              : <CodeViewer code={curRepair.patched} filename={curRepair.source_file ?? 'source.py'} />
+            }
           </div>
         ) : cur?.test_code ? (
           <CodeViewer
@@ -473,7 +505,7 @@ export default function MainContent({
   const mc = MODE_COLORS[mode]
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 min-w-0">
+    <div className="flex-1 flex flex-col bg-zinc-950 min-w-0 min-h-0">
       {/* Top bar */}
       <div className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center px-4 gap-2 shrink-0">
         {/* Breadcrumb */}
@@ -536,8 +568,8 @@ export default function MainContent({
         elapsedSec={status === 'running' || status === 'done' ? elapsedSec : undefined}
       />
 
-      {/* Body */}
-      <div className="flex-1 overflow-auto flex flex-col">
+      {/* Body — scrolls when results overflow; top bar + stepper stay pinned */}
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
         {streamedCode && !reviewRequest && (
           <div className="p-4 pb-0"><StreamedCodeBlock code={streamedCode} isRunning={status === 'running'} /></div>
         )}
@@ -641,10 +673,10 @@ export default function MainContent({
             {/* Combined tabs */}
             {mode === 'combined' && activeTab === 'requirements' && <RequirementsList requirements={requirements} />}
             {mode === 'combined' && activeTab === 'scenarios'    && <ScenariosList scenarios={scenarios} />}
-            {mode === 'combined' && activeTab === 'testcode'     && <CombinedTestCodeView results={results} onSaveTest={onSaveTest} />}
+            {mode === 'combined' && activeTab === 'testcode'     && <CombinedTestCodeView results={results} prepassResults={prepassResults} onSaveTest={onSaveTest} />}
 
             {/* Part C tabs */}
-            {mode === 'partc' && activeTab === 'sbfl' && <SbflView result={partcResult} />}
+            {mode === 'partc' && activeTab === 'sbfl'    && <SbflView result={partcResult} />}
             {mode === 'partc' && activeTab === 'patches' && <PatchesView result={partcResult} />}
 
             {/* Idle welcome */}
@@ -812,6 +844,12 @@ function PatchesView({ result }: { result: PartCResult | null }) {
   const [showDiff, setShowDiff] = useState<number | null>(null)
   const attempts = result?.attempts ?? []
 
+  // Auto-expand the first successful attempt's diff when result arrives
+  useEffect(() => {
+    const idx = attempts.findIndex(a => a.status === 'success' && (a as any).patched)
+    if (idx >= 0) setShowDiff(idx)
+  }, [attempts.length, result?.success])
+
   if (!attempts.length) return (
     <EmptyState
       icon={<Pencil size={32} className="text-zinc-600" />}
@@ -890,6 +928,177 @@ function PatchesView({ result }: { result: PartCResult | null }) {
           </pre>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── Part C: on-demand Coverage view ──────────────────────── */
+const API_BASE = (window as any).api?.baseUrl ?? 'http://127.0.0.1:8080'
+
+function PartCCoverageView({ sourceFile, testFile }: { sourceFile: string; testFile: string }) {
+  const [state, setState] = useState<'idle'|'loading'|'done'|'error'>('idle')
+  const [data, setData]   = useState<any>(null)
+  const [err,  setErr]    = useState('')
+
+  const run = async () => {
+    if (!sourceFile || !testFile) { setErr('Select a source file and test file first'); setState('error'); return }
+    setState('loading'); setErr('')
+    try {
+      const r = await fetch(`${API_BASE}/api/partc/coverage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_file: sourceFile, test_file: testFile }),
+      })
+      const d = await r.json()
+      if (d.error) { setErr(d.error); setState('error'); return }
+      setData(d); setState('done')
+    } catch (e: any) { setErr(String(e)); setState('error') }
+  }
+
+  if (state === 'idle' || state === 'error') return (
+    <div className="p-8 flex flex-col items-center gap-4">
+      {!sourceFile || !testFile
+        ? <p className="text-sm text-zinc-500">Select a source file and test file in the sidebar, then click Run Repair first (or run coverage standalone below).</p>
+        : <p className="text-sm text-zinc-500">Click to measure statement coverage using coverage.py.</p>
+      }
+      {err && <p className="text-xs text-red-400">{err}</p>}
+      <button onClick={run}
+        className="px-4 py-2 text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors flex items-center gap-2">
+        <Shield size={14} /> Run Coverage Analysis
+      </button>
+    </div>
+  )
+
+  if (state === 'loading') return (
+    <div className="p-8 flex flex-col items-center gap-3 text-zinc-500">
+      <div className="w-6 h-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+      <p className="text-sm">Running coverage.py…</p>
+    </div>
+  )
+
+  const fns: any[] = data?.functions ?? []
+  const colorCls = (p: number) => p >= 90 ? 'text-emerald-400' : p >= 60 ? 'text-amber-400' : 'text-red-400'
+  return (
+    <div className="p-4 space-y-4">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Overall Coverage', value: `${data.overall_pct}%`, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+          { label: 'Lines Covered',    value: String(data.covered_lines), color: 'text-zinc-200',   bg: 'bg-zinc-800 border-zinc-700' },
+          { label: 'Lines Missing',    value: String(data.total_lines - data.covered_lines), color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+        ].map(m => (
+          <div key={m.label} className={`rounded-lg border p-3 text-center ${m.bg}`}>
+            <p className={`text-2xl font-bold ${m.color}`}>{m.value}</p>
+            <p className="text-xs text-zinc-500 mt-1">{m.label}</p>
+          </div>
+        ))}
+      </div>
+      {/* Per-function */}
+      {fns.length > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+          <div className="px-4 py-2 border-b border-zinc-800 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+            Per-function Coverage
+          </div>
+          {fns.map((f, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+              <span className="text-xs font-mono text-zinc-300 flex-1 truncate">{f.name}()</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${f.pct}%`, background: f.pct >= 90 ? '#10b981' : f.pct >= 60 ? '#f59e0b' : '#ef4444' }} />
+                </div>
+                <span className={`text-xs font-mono w-10 text-right ${colorCls(f.pct)}`}>{f.pct}%</span>
+                <span className="text-xs text-zinc-600 font-mono">{f.covered}/{f.total}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <button onClick={run} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">↻ Re-run</button>
+    </div>
+  )
+}
+
+/* ── Part C: on-demand Mutations view ─────────────────────── */
+function PartCMutationsView({ sourceFile, testFile }: { sourceFile: string; testFile: string }) {
+  const [state, setState] = useState<'idle'|'loading'|'done'|'error'>('idle')
+  const [data, setData]   = useState<any>(null)
+  const [err,  setErr]    = useState('')
+
+  const run = async () => {
+    if (!sourceFile || !testFile) { setErr('Select a source file and test file first'); setState('error'); return }
+    setState('loading'); setErr('')
+    try {
+      const r = await fetch(`${API_BASE}/api/partc/mutation`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_file: sourceFile, test_file: testFile }),
+      })
+      const d = await r.json()
+      if (d.error) { setErr(d.error); setState('error'); return }
+      setData(d); setState('done')
+    } catch (e: any) { setErr(String(e)); setState('error') }
+  }
+
+  if (state === 'idle' || state === 'error') return (
+    <div className="p-8 flex flex-col items-center gap-4">
+      <FlaskConical size={32} className="text-amber-400/60" />
+      <p className="text-sm text-zinc-500 text-center">
+        AST-based mutation engine — injects arithmetic, comparison, and operator mutations.<br/>
+        <span className="text-xs text-zinc-600">May take 30–120 seconds depending on code size.</span>
+      </p>
+      {err && <p className="text-xs text-red-400">{err}</p>}
+      <button onClick={run}
+        className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors flex items-center gap-2">
+        <FlaskConical size={14} /> Run Mutation Analysis
+      </button>
+    </div>
+  )
+
+  if (state === 'loading') return (
+    <div className="p-8 flex flex-col items-center gap-3 text-zinc-500">
+      <div className="w-6 h-6 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+      <p className="text-sm">Generating & testing mutants — please wait…</p>
+    </div>
+  )
+
+  const mutants: any[] = data?.mutants ?? []
+  const score = data?.score ?? 0
+  return (
+    <div className="p-4 space-y-4">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Mutation Score', value: `${score}%`,         color: score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-red-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+          { label: 'Killed',         value: String(data.killed),   color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+          { label: 'Survived',       value: String(data.survived), color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/20' },
+        ].map(m => (
+          <div key={m.label} className={`rounded-lg border p-3 text-center ${m.bg}`}>
+            <p className={`text-2xl font-bold ${m.color}`}>{m.value}</p>
+            <p className="text-xs text-zinc-500 mt-1">{m.label}</p>
+          </div>
+        ))}
+      </div>
+      {/* Mutant table */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+        <div className="grid grid-cols-[30px_1fr_50px_80px] px-4 py-2 border-b border-zinc-800 text-[10px] uppercase tracking-wider text-zinc-500">
+          <span>#</span><span>Mutation</span><span>Line</span><span className="text-right">Status</span>
+        </div>
+        {mutants.map((m, i) => (
+          <div key={i} className={`grid grid-cols-[30px_1fr_50px_80px] px-4 py-2 border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${i % 2 === 0 ? '' : 'bg-zinc-900/50'}`}>
+            <span className="text-[10px] text-zinc-600 font-mono">{m.id}</span>
+            <div className="min-w-0">
+              <p className="text-xs text-zinc-300 truncate">{m.label}</p>
+              {m.orig && <p className="text-[9px] font-mono text-zinc-600 truncate">{m.orig}</p>}
+            </div>
+            <span className="text-[10px] font-mono text-zinc-500">{m.line}</span>
+            <div className="text-right">
+              {m.status === 'killed'
+                ? <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">KILLED</span>
+                : <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-red-500/20 text-red-400 border border-red-500/30">SURVIVED</span>
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={run} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">↻ Re-run</button>
     </div>
   )
 }

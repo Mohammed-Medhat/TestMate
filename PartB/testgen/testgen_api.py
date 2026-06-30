@@ -77,6 +77,8 @@ def execute_part_b(
     tokenizer: Any = None,
     auto_repair: bool = False,
     use_docker: bool = False,
+    skip_bes_gate: bool = False,   # keep gate active; threshold is calibrated in main.py
+    max_seconds: float = 300.0,    # hard 5-min per-file timeout prevents audit hangs
 ) -> dict:
     """
     Run the self-correcting test generation loop for a single target file.
@@ -148,26 +150,28 @@ def execute_part_b(
             plan_mode=plan_mode,
             srs_requirements=requirements,
             priming_examples=priming_examples,
-            auto_repair=auto_repair,
+            auto_repair=False,  # repair handled by orchestrator via adapter swap
             docker_image=docker_image,
+            skip_bes_gate=skip_bes_gate,
+            max_seconds=max_seconds,
         )
 
         # Locate generated test file.
-        # Prefer the _testmate.py naming (PartB's new convention) then fall
-        # back to the legacy test_<stem>.py name for backward compatibility.
         basename = Path(target_file).stem
         candidates = [
-            GEN_TESTS_DIR / f"test_{basename}_testmate.py",  # new
+            GEN_TESTS_DIR / f"test_{basename}_testmate.py",
             Path(target_file).parent / f"test_{basename}_testmate.py",
-            GEN_TESTS_DIR / f"test_{basename}.py",           # legacy
+            GEN_TESTS_DIR / f"test_{basename}.py",
             Path(target_file).parent / f"test_{basename}.py",
         ]
         test_path = next((p for p in candidates if p.exists()), None)
         test_filename = test_path.name if test_path else f"test_{basename}_testmate.py"
         test_code = test_path.read_text(encoding="utf-8") if test_path else ""
 
-        # Read bug reports produced during this run
-        bug_report_path = GEN_TESTS_DIR / "bug_reports.jsonl"
+        # Read bug reports (repair is handled by the orchestrator after adapter swap)
+        _bug_report_path_gen = GEN_TESTS_DIR / "bug_reports.jsonl"
+        _bug_report_path_src = Path(target_file).parent / "bug_reports.jsonl"
+        bug_report_path = _bug_report_path_src if _bug_report_path_src.exists() else _bug_report_path_gen
         bug_reports: list[dict] = []
         if bug_report_path.exists():
             for line in bug_report_path.read_text(encoding="utf-8").splitlines():
@@ -182,15 +186,164 @@ def execute_part_b(
         logger.info("[B] SRS coverage: %d/%d (%.0f%%)",
                     coverage["covered"], coverage["total"], coverage["pct"])
 
+        # ── Real line coverage via coverage.py ──────────────────────────────
+        line_coverage: float = 0.0
+        coverage_map: dict = {}
+        if test_path and test_path.exists():
+            try:
+                import subprocess as _sp, json as _json, os as _os
+                src_path = Path(target_file)
+                work_dir = src_path.parent          # always run from source dir
+                cov_out  = work_dir / "_testmate_cov.json"
+                # Make source dir importable so the test can find the module
+                _env = _os.environ.copy()
+                _env["PYTHONPATH"] = str(work_dir) + _os.pathsep + _env.get("PYTHONPATH", "")
+                r = _sp.run(
+                    [
+                        sys.executable, "-m", "pytest", str(test_path),
+                        f"--cov={src_path.stem}",
+                        f"--cov-report=json:{cov_out}",
+                        "-q", "--no-header", "--tb=no",
+                    ],
+                    capture_output=True, text=True,
+                    cwd=str(work_dir), env=_env, timeout=60
+                )
+                logger.debug("[B] coverage stdout: %s", r.stdout[-500:] if r.stdout else "")
+                logger.debug("[B] coverage stderr: %s", r.stderr[-300:] if r.stderr else "")
+                if cov_out.exists():
+                    data     = _json.loads(cov_out.read_text(encoding="utf-8"))
+                    # Find our file's entry
+                    fdata: dict = {}
+                    for fname, finfo in data.get("files", {}).items():
+                        if Path(fname).stem == src_path.stem:
+                            fdata = finfo; break
+                    if not fdata and data.get("files"):
+                        fdata = next(iter(data["files"].values()))
+                    if fdata:
+                        summ          = fdata.get("summary", {})
+                        line_coverage = round(summ.get("percent_covered", 0.0), 1)
+                        source_text   = ""
+                        try: source_text = src_path.read_text(encoding="utf-8")
+                        except Exception: pass
+                        coverage_map[src_path.name] = {
+                            "source":            source_text,
+                            "covered_lines":     sorted(fdata.get("executed_lines", [])),
+                            "uncovered_lines":   sorted(fdata.get("missing_lines", [])),
+                            "line_coverage_pct": line_coverage,
+                            "num_statements":    summ.get("num_statements", 0),
+                        }
+                    cov_out.unlink(missing_ok=True)
+            except Exception as _cov_err:
+                logger.warning("[B] Coverage measurement failed: %s", _cov_err)
+
+        # ── AST mutation score ───────────────────────────────────────────────
+        mutation_score: float = 0.0
+        mutation_survivors: list[dict] = []
+        if test_path and test_path.exists():
+            try:
+                import ast as _ast, copy as _copy, subprocess as _sp
+                src_path   = Path(target_file)
+                original   = src_path.read_text(encoding="utf-8")
+                BINOP_MAP  = {
+                    _ast.Add: [_ast.Sub, _ast.Mult], _ast.Sub: [_ast.Add, _ast.Mult],
+                    _ast.Mult: [_ast.Add, _ast.Sub], _ast.Div: [_ast.FloorDiv, _ast.Mult],
+                    _ast.FloorDiv: [_ast.Div, _ast.Add], _ast.Mod: [_ast.Add, _ast.Mult],
+                }
+                CMP_MAP = {
+                    _ast.Lt: [_ast.LtE, _ast.Gt], _ast.LtE: [_ast.Lt, _ast.GtE],
+                    _ast.Gt: [_ast.GtE, _ast.Lt], _ast.GtE: [_ast.Gt, _ast.LtE],
+                    _ast.Eq: [_ast.NotEq, _ast.Lt], _ast.NotEq: [_ast.Eq, _ast.Gt],
+                }
+                src_lines = original.splitlines()
+                orig_tree = _ast.parse(original)
+                mutants: list[dict] = []
+
+                def _collect(orig_node, tc, label):
+                    try:
+                        ln = getattr(orig_node, "lineno", "?")
+                        orig_line = src_lines[ln - 1].strip() if isinstance(ln, int) and 0 < ln <= len(src_lines) else ""
+                        mutants.append({"source": _ast.unparse(tc), "line": ln,
+                                        "label": label, "orig": orig_line})
+                    except Exception: pass
+
+                for node in _ast.walk(orig_tree):
+                    if isinstance(node, _ast.BinOp):
+                        for ot, reps in BINOP_MAP.items():
+                            if isinstance(node.op, ot):
+                                for rep in reps:
+                                    tc = _copy.deepcopy(orig_tree)
+                                    for n in _ast.walk(tc):
+                                        if (isinstance(n, _ast.BinOp) and isinstance(n.op, ot)
+                                                and getattr(n, "lineno", None) == getattr(node, "lineno", None)
+                                                and getattr(n, "col_offset", None) == getattr(node, "col_offset", None)):
+                                            n.op = rep(); break
+                                    _collect(node, tc, f"BinOp {ot.__name__}→{rep.__name__} (line {node.lineno})")
+                    if isinstance(node, _ast.Compare):
+                        for op in node.ops:
+                            for ot, reps in CMP_MAP.items():
+                                if isinstance(op, ot):
+                                    for rep in reps:
+                                        tc = _copy.deepcopy(orig_tree)
+                                        for n in _ast.walk(tc):
+                                            if (isinstance(n, _ast.Compare)
+                                                    and getattr(n, "lineno", None) == getattr(node, "lineno", None)
+                                                    and getattr(n, "col_offset", None) == getattr(node, "col_offset", None)):
+                                                n.ops = [rep() if type(o) is ot else o for o in n.ops]; break
+                                        _collect(node, tc, f"Cmp {ot.__name__}→{rep.__name__} (line {node.lineno})")
+
+                import os as _os
+                _mut_env = _os.environ.copy()
+                _mut_env["PYTHONPATH"] = str(src_path.parent) + _os.pathsep + _mut_env.get("PYTHONPATH", "")
+                killed = 0
+                for m in mutants:
+                    try:
+                        src_path.write_text(m["source"], encoding="utf-8")
+                        r = _sp.run(
+                            [sys.executable, "-m", "pytest", str(test_path),
+                             "-x", "-q", "--no-header", "--tb=no"],
+                            capture_output=True, text=True,
+                            cwd=str(src_path.parent), env=_mut_env, timeout=30
+                        )
+                        is_killed = (r.returncode != 0)
+                    except _sp.TimeoutExpired:
+                        is_killed = True
+                    except Exception:
+                        is_killed = False
+                    finally:
+                        src_path.write_text(original, encoding="utf-8")
+
+                    if is_killed:
+                        killed += 1
+                    elif m not in mutation_survivors:
+                        # Record surviving mutants as bug-report entries for MutationsView
+                        mutation_survivors.append({
+                            "bug_type":    "mutation_survivor",
+                            "target":      f"line {m['line']}",
+                            "description": m["label"],
+                            "evidence":    m["orig"],
+                            "confidence":  "Medium",
+                            "source_file": src_path.name,
+                        })
+
+                total         = len(mutants)
+                mutation_score = round((killed / total) * 100, 1) if total > 0 else 0.0
+                logger.info("[B] Mutation score: %.1f%% (%d/%d killed)", mutation_score, killed, total)
+            except Exception as _mut_err:
+                logger.warning("[B] Mutation testing failed: %s", _mut_err)
+
         return {
-            "success":      success,
-            "test_file":    test_filename,
-            "test_code":    test_code,
-            "test_path":    str(test_path) if test_path else "",
-            "target":       target_file,
-            "srs_coverage": coverage,
-            "bug_reports":  bug_reports,
-            "repairs":      [b.get("repair", {}) for b in bug_reports if b.get("repair")],
+            "success":        success,
+            "test_file":      test_filename,
+            "test_code":      test_code,
+            "test_path":      str(test_path) if test_path else "",
+            "target":         target_file,
+            "srs_coverage":   coverage,
+            "bug_reports":    bug_reports + mutation_survivors,
+            "repairs":        [b.get("repair", {}) for b in bug_reports if b.get("repair")],
+            # ── New: real line coverage & mutation score ──
+            "line_coverage":  line_coverage,
+            "coverage_map":   coverage_map,
+            "mutation_score": mutation_score,
         }
 
     finally:
@@ -311,9 +464,12 @@ def refine_test_file(
     reply = (raw.split("<test>")[0].strip() if "<test>" in raw else raw.strip())[:300]
 
     # No edit produced — treat as a question/refusal, leave the file untouched.
+    # Don't surface the model's free-form reply here: a local 7B answering a
+    # testing question directly reads as hallucination (it may be wrong) and
+    # breaks the "edits only, no Q&A" guarantee. Always redirect instead.
     if "<test>" not in raw:
         return _result(False, False, test_code,
-                       reply or "I only edit tests — tell me what to change.")
+                       "I only edit tests — tell me what to change.")
 
     candidate = extract_test_code(raw)
     original = test_code

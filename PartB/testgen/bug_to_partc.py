@@ -93,6 +93,38 @@ def _find_source_abs_path(source_filename: str, repo_dir: str) -> Optional[str]:
     return None
 
 
+def _merge_test_files(test_paths: list[str], out_dir: str) -> str:
+    """Merge multiple test files into one combined file for SBFL.
+
+    Deduplicates import lines, concatenates all test functions.
+    Returns the path to the merged file.
+    """
+    imports: list[str] = []
+    seen_imports: set[str] = set()
+    body_lines: list[str] = []
+
+    for tp in test_paths:
+        try:
+            lines = Path(tp).read_text(encoding="utf-8").splitlines()
+        except Exception:
+            continue
+        for line in lines:
+            stripped = line.strip()
+            if (stripped.startswith("import ")
+                    or stripped.startswith("from ")
+                    or stripped.startswith("#")):
+                if stripped not in seen_imports:
+                    seen_imports.add(stripped)
+                    imports.append(line)
+            elif stripped:
+                body_lines.append(line)
+
+    merged = "\n".join(imports) + "\n\n" + "\n".join(body_lines) + "\n"
+    out = Path(out_dir) / "_combined_test.py"
+    out.write_text(merged, encoding="utf-8")
+    return str(out)
+
+
 def _verify_tests(test_files: list[str], cwd: str, timeout: int = _VERIFY_TIMEOUT) -> tuple[bool, str]:
     """Run pytest on test_files, return (passed, output)."""
     if not test_files:
@@ -141,8 +173,18 @@ def _try_git_branch(repo_dir: str, patch_path: str, source_abs: str, timestamp: 
         if status.returncode != 0:
             return None
 
-        # Save original content BEFORE overwriting — git checkout will delete
-        # the file when switching back if it was untracked on the original branch.
+        # Only operate on files already tracked by git.  If the file is untracked,
+        # committing it on the repair branch and then checking back out WILL delete it
+        # (git removes files that exist on the branch but not on HEAD).
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", source_abs],
+            capture_output=True, cwd=str(git_dir), timeout=10,
+        )
+        if tracked.returncode != 0:
+            logger.info("Skipping git branch: %s is untracked in %s", Path(source_abs).name, git_dir)
+            return None
+
+        # Save original content before we overwrite it
         original_content = Path(source_abs).read_bytes() if Path(source_abs).exists() else None
 
         subprocess.run(["git", "checkout", "-b", branch],
@@ -158,7 +200,7 @@ def _try_git_branch(repo_dir: str, patch_path: str, source_abs: str, timestamp: 
         subprocess.run(["git", "checkout", "-"],
                        capture_output=True, cwd=str(git_dir), timeout=10)
 
-        # Restore original file — git checkout removes untracked files added on the branch
+        # Restore original file in case git removed it on branch switch
         if original_content is not None and not Path(source_abs).exists():
             Path(source_abs).write_bytes(original_content)
             logger.info("Restored original %s after git branch switch", Path(source_abs).name)
@@ -259,14 +301,15 @@ def repair_pending_bugs(
     _emit("repair_start", {"total_files": total_files}, log_callback)
 
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    outputs_dir = Path(bug_reports_path).parent / "patched"
+    # Write patches to testgen/outputs/patched — NOT inside the source repo
+    # to avoid polluting project walks with a fixed copy of the source.
+    outputs_dir = Path(__file__).parent / "outputs" / "patched"
     all_repair_results: list[dict] = []
 
-    # ── Swap to PartC adapter ────────────────────────────────────────────
+    # ── Swap to PartC adapter (fall back to current adapter if not found) ──
     swapped = _swap_adapter(model, "partc")
     if not swapped:
-        _log("  Could not swap to PartC adapter — repair skipped.", log_callback, "warning")
-        return []
+        _log("  PartC adapter not found — proceeding with current adapter (PartB fallback)", log_callback)
 
     try:
         for source_filename, bugs in groups.items():
@@ -294,15 +337,35 @@ def repair_pending_bugs(
                 _log(f"    No valid test files for {source_filename} — skipping", log_callback, "warning")
                 continue
 
-            # Use the first (primary) test file; SBFL will benefit from all failing tests in it
+            # Also collect the generated test file (test_<stem>_testmate.py)
+            _stem = os.path.splitext(source_filename)[0]
+            _gen_dirs = [
+                Path(__file__).parent / "generated_tests",
+                Path(source_abs).parent,
+            ]
+            extra_test_files: list[str] = []
+            for _gd in _gen_dirs:
+                _gen_candidate = _gd / f"test_{_stem}_testmate.py"
+                if _gen_candidate.is_file() and str(_gen_candidate) not in test_files:
+                    extra_test_files.append(str(_gen_candidate))
+
+            # Use the pre-existing test (from bug report) as the primary SBFL target.
+            # Extra test files are copied to the workspace so pytest discovers them too.
             primary_test = test_files[0]
             cwd = os.path.dirname(source_abs)
+            if extra_test_files:
+                _log(f"    Primary test: {os.path.basename(primary_test)} + {len(extra_test_files)} extra", log_callback)
 
             # ── Run PartC repair ────────────────────────────────────────
+            _log(f"    source: {source_abs}", log_callback)
+            _log(f"    test:   {primary_test} (exists={os.path.isfile(primary_test)})", log_callback)
+            _log(f"    model:  {type(model).__name__ if model else 'None (PartC loads own)'}", log_callback)
+
             t0 = time.time()
             repair_result = execute_part_c(
                 source_file=source_abs,
                 test_file=primary_test,
+                extra_test_files=extra_test_files,
                 model=model,
                 tokenizer=tokenizer,
                 max_attempts=3,
@@ -313,6 +376,10 @@ def repair_pending_bugs(
             repair_success = repair_result.get("success", False)
             patched_content = repair_result.get("patched", "")
 
+            if not repair_success:
+                _err = repair_result.get("error", "")
+                _nattempts = len(repair_result.get("attempts", []))
+                _log(f"    REPAIR FAILED: {_nattempts} attempt(s), error={_err or 'all attempts exhausted'}", log_callback)
             _log(
                 f"    PartC: {'patched in' if repair_success else 'failed after'} {elapsed}s",
                 log_callback,
@@ -397,6 +464,9 @@ def repair_pending_bugs(
                 "verdicts_updated": verdicts_updated,
                 "attempts":         repair_result.get("attempts", []),
                 "suspicious":       repair_result.get("suspicious", []),
+                # Include original + patched source so the frontend can render a diff
+                "original":         repair_result.get("original", ""),
+                "patched":          repair_result.get("patched", ""),
             }
             all_repair_results.append(file_result)
 
@@ -405,8 +475,9 @@ def repair_pending_bugs(
             _log(f"    {icon}: {source_filename}", log_callback)
 
     finally:
-        # Always swap back to PartB adapter
-        _swap_adapter(model, "partb")
+        # Swap back to PartB adapter only if we successfully swapped away from it
+        if swapped:
+            _swap_adapter(model, "partb")
 
     succeeded = sum(1 for r in all_repair_results if r["repair_success"])
     _log(

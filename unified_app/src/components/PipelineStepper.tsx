@@ -20,6 +20,7 @@ const COMBINED_STAGES_FAST: Stage[] = [
   { id: 'readme',   label: 'README Extract', status: 'pending' },
   { id: 'discover', label: 'Discover Files', status: 'pending' },
   { id: 'partb',    label: 'Test Gen',       status: 'pending' },
+  { id: 'repair',   label: 'Bug Fix',        status: 'pending' },
   { id: 'done',     label: 'Done',           status: 'pending' },
 ]
 const COMBINED_STAGES_BALANCED: Stage[] = [
@@ -115,6 +116,8 @@ export function detectStageFromLog(mode: Mode, message: string): string | null {
 }
 
 // ── Promote stages: when stage X activates, all prior stages → done ─────
+// The active stage shows as 'active' (spinner); all stages before it → 'done'.
+// When 'done' fires, any skipped pending stages (e.g. repair if no bugs) → 'done'.
 export function advanceStages(stages: Stage[], activeId: string): Stage[] {
   let hit = false
   return stages.map(s => {
@@ -122,8 +125,8 @@ export function advanceStages(stages: Stage[], activeId: string): Stage[] {
       hit = true
       return { ...s, status: s.id === 'done' ? 'done' : 'active' }
     }
-    if (!hit) return { ...s, status: 'done' }
-    return { ...s, status: 'pending' }
+    if (!hit) return { ...s, status: 'done' }  // stages before active → done
+    return { ...s, status: 'pending' }          // stages after active → remain pending
   })
 }
 
