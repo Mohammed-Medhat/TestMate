@@ -229,6 +229,32 @@ Expected output: `6/6 tests passed` — verifies Oracle 4, BES scoring, bug grou
 
 ---
 
+## Results
+
+All numbers trace to JSONs in `PartB/testgen/training/results/`. Model: Qwen2.5-Coder-7B-Instruct (4-bit NF4) + LoRA trained on decontaminated MBPP only. Fully local, no external API. Baseline = same base model without the adapter.
+
+### TestEval (210 LeetCode programs, suite mode)
+| System | Line cov % | Pass rate % | Mutation kill % | Programs with passing tests |
+|---|---|---|---|---|
+| **TestMate** | **93.8** | **97.6** | 81.5 | 205 / 210 |
+| Base (no LoRA) | 78.9 | 79.8 | 89.8 | 168 / 210 |
+
+Coverage is at the top of the open-source 7B models reported in the TestEval paper. TestMate produces bug-catching tests on ~22% more programs; the base model has a higher per-file kill rate but handles fewer programs. Computed with a re-implementation of the official harness.
+
+### HumanEval (164, test generation, system vs base)
+| System | Pass@1 % | Line cov % |
+|---|---|---|
+| **TestMate** | **60.4** | 67.6 |
+| Base | 33.5 | 34.1 |
+
+### Coverage is a misleading metric
+The same system scores 93.8% coverage in suite mode but 42.5% coverage and 16.7% pass@1 in quality mode. TestMate therefore evaluates three axes: coverage, correctness (pass@1), and bug detection (mutation).
+
+### RAG on real framework code (testgenevallite, N=30, directional)
+RAG on: 13.3% pass@1 vs RAG off: 6.7%. No coverage lift. Larger run in progress.
+
+**Limitations:** single run at temperature 0.3, TestEval is a re-implementation, RAG result is small-N, ablations are system-level.
+---
 ## References
 
 - **KGCompass** (arXiv 2025) — multi-hop graph traversal for code navigation
